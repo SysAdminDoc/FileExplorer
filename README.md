@@ -9,8 +9,6 @@
 
 > Full-featured Android file manager with root access, archive support, network protocols, cloud storage, built-in editor, and app manager. OLED dark theme. Zero-config.
 
-![Screenshot](screenshot.png)
-<!-- Add screenshot.png to repo root showing the main browser screen -->
 
 ## Quick Start
 
