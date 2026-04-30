@@ -36,6 +36,8 @@ dependencies {
     // FTP
     implementation(libs.commons.net)
 
-    // WebDAV
-    implementation(libs.sardine.android)
+    // WebDAV — exclude xpp3; Android already provides XmlPullParser natively
+    implementation(libs.sardine.android) {
+        exclude(group = "xpp3", module = "xpp3")
+    }
 }
