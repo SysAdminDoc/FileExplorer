@@ -18,10 +18,20 @@ android {
         versionName = "1.1.1"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("${rootProject.projectDir}/fileexplorer.jks")
+            storePassword = "fileexplorer2025"
+            keyAlias = "fileexplorer"
+            keyPassword = "fileexplorer2025"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
-                isShrinkResources = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
