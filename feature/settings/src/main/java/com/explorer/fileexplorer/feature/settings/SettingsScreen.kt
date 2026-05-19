@@ -18,6 +18,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.explorer.fileexplorer.core.designsystem.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
@@ -36,6 +37,7 @@ object SettingsKeys {
     val SORT_FIELD = stringPreferencesKey("sort_field")
     val SORT_DIRECTION = stringPreferencesKey("sort_direction")
     val THUMBNAIL_SIZE = intPreferencesKey("thumbnail_size")
+    val THEME_MODE = stringPreferencesKey("theme_mode")
 }
 
 data class SettingsState(
@@ -46,6 +48,7 @@ data class SettingsState(
     val sortField: String = "NAME",
     val sortDirection: String = "ASCENDING",
     val thumbnailSize: Int = 48,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
 )
 
 @Singleton
@@ -63,6 +66,7 @@ class SettingsRepository @Inject constructor(
             sortField = prefs[SettingsKeys.SORT_FIELD] ?: "NAME",
             sortDirection = prefs[SettingsKeys.SORT_DIRECTION] ?: "ASCENDING",
             thumbnailSize = prefs[SettingsKeys.THUMBNAIL_SIZE] ?: 48,
+            themeMode = ThemeMode.fromKey(prefs[SettingsKeys.THEME_MODE]),
         )
     }
 
@@ -80,6 +84,7 @@ class SettingsViewModel @Inject constructor(
     fun toggleShowHidden() { viewModelScope.launch { repo.update(SettingsKeys.SHOW_HIDDEN, !state.value.showHidden) } }
     fun toggleFoldersFirst() { viewModelScope.launch { repo.update(SettingsKeys.FOLDERS_FIRST, !state.value.foldersFirst) } }
     fun toggleConfirmDelete() { viewModelScope.launch { repo.update(SettingsKeys.CONFIRM_DELETE, !state.value.confirmDelete) } }
+    fun setThemeMode(mode: ThemeMode) { viewModelScope.launch { repo.update(SettingsKeys.THEME_MODE, mode.name) } }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -107,6 +112,21 @@ fun SettingsScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState()),
         ) {
+            // Theme section
+            Text(
+                text = "THEME",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            )
+
+            ThemeSelector(
+                current = state.themeMode,
+                onSelect = viewModel::setThemeMode,
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
             // Display section
             Text(
                 text = "DISPLAY",
@@ -158,7 +178,7 @@ fun SettingsScreen(
 
             ListItem(
                 headlineContent = { Text("Version") },
-                supportingContent = { Text("1.1.0") },
+                supportingContent = { Text("1.2.0") },
             )
         }
     }
@@ -178,4 +198,33 @@ private fun SettingsToggle(
             Switch(checked = checked, onCheckedChange = { onToggle() })
         },
     )
+}
+
+@Composable
+private fun ThemeSelector(
+    current: ThemeMode,
+    onSelect: (ThemeMode) -> Unit,
+) {
+    val options = listOf(
+        ThemeMode.SYSTEM to ("System default" to "Follow device light/dark setting"),
+        ThemeMode.LIGHT to ("Light" to "Standard Material 3 light surfaces"),
+        ThemeMode.DARK to ("Dark" to "Deep dark with cyan accent (current default)"),
+        ThemeMode.OLED to ("OLED / True Black" to "Pure-black background, AMOLED power savings"),
+        ThemeMode.DYNAMIC to ("Material You" to "Wallpaper-derived colors (Android 12+)"),
+    )
+    Column {
+        options.forEach { (mode, labels) ->
+            val (title, subtitle) = labels
+            ListItem(
+                headlineContent = { Text(title) },
+                supportingContent = { Text(subtitle) },
+                trailingContent = {
+                    RadioButton(
+                        selected = current == mode,
+                        onClick = { onSelect(mode) },
+                    )
+                },
+            )
+        }
+    }
 }

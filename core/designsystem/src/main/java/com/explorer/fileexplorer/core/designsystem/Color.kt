@@ -9,6 +9,23 @@ val DarkSurfaceVariant = Color(0xFF1E1E1E)
 val DarkSurfaceElevated = Color(0xFF252525)
 val DarkBorder = Color(0xFF2A2A2A)
 
+// OLED palette — pure-black background, lifts only on surface elevations.
+// Standard Material black-mode pattern: AMOLED panels save real power on #000.
+val OledBackground = Color(0xFF000000)
+val OledSurface = Color(0xFF0A0A0A)
+val OledSurfaceVariant = Color(0xFF141414)
+val OledSurfaceElevated = Color(0xFF1F1F1F)
+val OledBorder = Color(0xFF222222)
+
+// Light palette — standard Material 3 light surfaces.
+val LightBackground = Color(0xFFFAFAFA)
+val LightSurface = Color(0xFFFFFFFF)
+val LightSurfaceVariant = Color(0xFFEEEEEE)
+val LightSurfaceElevated = Color(0xFFE0E0E0)
+val LightBorder = Color(0xFFCFCFCF)
+val LightTextPrimary = Color(0xFF121212)
+val LightTextSecondary = Color(0xFF4A4A4A)
+
 // Accent
 val AccentCyan = Color(0xFF00BCD4)
 val AccentCyanDark = Color(0xFF008C9E)
