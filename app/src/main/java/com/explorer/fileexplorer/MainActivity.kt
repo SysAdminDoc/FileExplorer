@@ -12,30 +12,43 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.explorer.fileexplorer.core.designsystem.FileExplorerTheme
+import com.explorer.fileexplorer.core.designsystem.ThemeMode
 import com.explorer.fileexplorer.core.storage.PermissionHelper
+import com.explorer.fileexplorer.feature.settings.SettingsRepository
 import com.explorer.fileexplorer.navigation.AppNavigation
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     @Inject lateinit var permissionHelper: PermissionHelper
+    @Inject lateinit var settingsRepository: SettingsRepository
+
+    // Tracked at the activity level so onResume can refresh it after the user
+    // returns from the system settings page — Compose will recompose any
+    // collector when this MutableState changes.
+    private val hasPermissionState = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        hasPermissionState.value = permissionHelper.hasFullStorageAccess()
 
         setContent {
-            FileExplorerTheme {
+            val themeMode by settingsRepository.settings
+                .map { it.themeMode }
+                .collectAsStateWithLifecycle(initialValue = ThemeMode.SYSTEM)
+
+            FileExplorerTheme(themeMode = themeMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    var hasPermission by remember { mutableStateOf(permissionHelper.hasFullStorageAccess()) }
-
-                    if (hasPermission) {
+                    if (hasPermissionState.value) {
                         AppNavigation()
                     } else {
                         PermissionScreen(
@@ -43,11 +56,6 @@ class MainActivity : ComponentActivity() {
                                 startActivity(permissionHelper.getManageStorageIntent())
                             },
                         )
-                    }
-
-                    // Re-check permission when returning from settings
-                    LaunchedEffect(Unit) {
-                        // Simple polling — will update when activity resumes
                     }
                 }
             }
@@ -56,25 +64,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Force recomposition to re-check permission
-        setContent {
-            FileExplorerTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background,
-                ) {
-                    if (permissionHelper.hasFullStorageAccess()) {
-                        AppNavigation()
-                    } else {
-                        PermissionScreen(
-                            onGrantPermission = {
-                                startActivity(permissionHelper.getManageStorageIntent())
-                            },
-                        )
-                    }
-                }
-            }
-        }
+        hasPermissionState.value = permissionHelper.hasFullStorageAccess()
     }
 }
 
