@@ -14,3 +14,7 @@ local.properties
 CLAUDE.md
 fileexplorer.jks
 *.apk
+
+# Markdown files local-only (except README)
+*.md
+!README.md
