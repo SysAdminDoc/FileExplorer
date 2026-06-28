@@ -1,9 +1,9 @@
 # FileExplorer
 
-![Version](https://img.shields.io/badge/version-1.2.0-blue)
+![Version](https://img.shields.io/badge/version-1.3.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Android%208.0+-3DDC84?logo=android&logoColor=white)
-![Kotlin](https://img.shields.io/badge/Kotlin-2.1-7F52FF?logo=kotlin&logoColor=white)
+![Kotlin](https://img.shields.io/badge/Kotlin-2.2-7F52FF?logo=kotlin&logoColor=white)
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?logo=jetpackcompose&logoColor=white)
 ![Status](https://img.shields.io/badge/status-active-success)
 
@@ -34,9 +34,9 @@ cd FileExplorer
 | Root Access | libsu 6.0.0, browse /data /system /vendor, SELinux context, chmod/chown, remount | Complete |
 | Archives | Browse ZIP/7z/TAR as virtual folders. Extract/create with AES-256 passwords | Complete |
 | SMB/CIFS | Windows network shares via smbj 0.13.0 with domain auth | Complete |
-| SFTP | SSH file transfer via sshj 0.38.0 with password + private key auth | Complete |
-| FTP/FTPS | File transfer via Apache Commons Net 3.11.1 with TLS toggle | Complete |
-| WebDAV | HTTP/HTTPS via sardine-android 0.14 with server-side copy/move | Complete |
+| SFTP | SSH file transfer via sshj 0.40.0 with password + private key auth | Complete |
+| FTP/FTPS | File transfer via Apache Commons Net 3.13.0 with TLS toggle | Complete |
+| WebDAV | HTTP/HTTPS via sardine-android 0.9 with server-side copy/move | Complete |
 | Connection Manager | Save, edit, test network connections. Remote file browser | Complete |
 | Google Drive | REST API v3. Browse, upload, download, delete, rename, quota display | Complete |
 | Dropbox | HTTP API v2. Browse, upload, download, folder operations | Complete |
@@ -84,21 +84,21 @@ cd FileExplorer
 
 | Layer | Technology | Version |
 |-------|-----------|---------|
-| Language | Kotlin | 2.1 |
-| UI | Jetpack Compose + Material 3 | BOM 2024.12 |
-| DI | Hilt | 2.53.1 |
+| Language | Kotlin | 2.2 |
+| UI | Jetpack Compose + Material 3 | BOM 2026.06 |
+| DI | Hilt | 2.58 |
 | Async | Kotlin Coroutines + Flow | 1.9.0 |
-| Persistence | Room + DataStore | 2.6.1 |
+| Persistence | Room + DataStore | 2.8.4 |
 | File I/O | java.nio.file (NIO2) | JDK 17 |
 | Root | libsu | 6.0.0 |
-| Archives | Apache Commons Compress + zip4j | 1.27.1 / 2.11.5 |
+| Archives | Apache Commons Compress + zip4j | 1.28.0 / 2.11.6 |
 | SMB | smbj | 0.13.0 |
-| SFTP | sshj + BouncyCastle | 0.38.0 / 1.78.1 |
-| FTP | Apache Commons Net | 3.11.1 |
-| WebDAV | sardine-android | 0.14 |
+| SFTP | sshj + BouncyCastle | 0.40.0 / 1.84 |
+| FTP | Apache Commons Net | 3.13.0 |
+| WebDAV | sardine-android | 0.9 |
 | HTTP | OkHttp | 4.12.0 |
 | Security | AndroidX Biometric + Security-Crypto | 1.2.0 / 1.1.0 |
-| Images | Coil | 2.7.0 |
+| Images | Coil | 3.3.0 |
 | Navigation | Jetpack Navigation Compose | 2.8.5 |
 
 ## Cloud Setup
@@ -126,7 +126,7 @@ Cloud providers require OAuth configuration. Each is optional and the app works 
 
 ## Theme
 
-Forced OLED dark mode across the entire app.
+Theme mode is selectable in Settings: System, Light, Dark, OLED / True Black, or Material You on Android 12+.
 
 | Element | Color |
 |---------|-------|
@@ -136,12 +136,12 @@ Forced OLED dark mode across the entire app.
 | Root indicators | `#FF9800` (Orange) |
 | Error | `#CF6679` |
 
-No light theme. No theme toggle.
+OLED remains available as the high-contrast AMOLED option, while System follows the device theme.
 
 ## Requirements
 
 - Android Studio Ladybug (2024.2.1+)
-- Android SDK 35, JDK 17
+- Android SDK 36, JDK 17
 - Device or emulator running Android 8.0+ (API 26)
 - Rooted device for root features (optional)
 

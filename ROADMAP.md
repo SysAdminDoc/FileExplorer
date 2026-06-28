@@ -544,7 +544,7 @@ the Material 3 icon set is sufficient and consistent. Would dilute the design la
 
 ### What FileExplorer Already Beats Them On
 
-FileExplorer v1.2.0 is the only Android file manager (OSS or commercial) that ships ALL of:
+FileExplorer v1.3.0 is the only Android file manager (OSS or commercial) that ships ALL of:
 - Jetpack Compose + Material 3 UI (modern stack)
 - Full root access via libsu
 - Archives (ZIP/7z/TAR/GZ/BZ2/XZ/Zstandard) with virtual folder browsing
