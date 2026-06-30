@@ -1,6 +1,6 @@
 # ROADMAP
 
-> FileExplorer v1.3.1 | Updated 2026-06-30 | Research-driven, 50+ sources
+> FileExplorer v1.3.2 | Updated 2026-06-30 | Research-driven, 50+ sources
 >
 > Core feature set is dense (local/root/archive/network/cloud/editor/apps/security).
 > This roadmap closes the gaps versus Solid Explorer, MiXplorer Silver, Material Files,
@@ -20,14 +20,7 @@
 
 ---
 
-## Now (v1.3.1 -- v1.4.0)
-
-### N-03: SFTP known_hosts verification
-Replace `PromiscuousVerifier()` (`SftpFileRepository.kt:37`) with proper known_hosts file support.
-First connect prompts user to accept the host key; subsequent connects verify against stored fingerprint.
-
-- **Impact:** 4/5 (security). **Effort:** 2/5.
-- **Source:** Existing TODO in code; sshj supports `OpenSSHKnownHosts` natively.
+## Now (v1.3.2 -- v1.4.0)
 
 ### N-04: Trash bin with configurable TTL
 Deletes go to `.FileExplorer-Trash/` with a 30-day auto-purge (configurable in Settings).
@@ -536,7 +529,7 @@ the Material 3 icon set is sufficient and consistent. Would dilute the design la
 
 ### What FileExplorer Already Beats Them On
 
-FileExplorer v1.3.1 is the only Android file manager (OSS or commercial) that ships ALL of:
+FileExplorer v1.3.2 is the only Android file manager (OSS or commercial) that ships ALL of:
 - Jetpack Compose + Material 3 UI (modern stack)
 - Full root access via libsu
 - Archives (ZIP/7z/TAR/GZ/BZ2/XZ/Zstandard) with virtual folder browsing

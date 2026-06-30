@@ -28,6 +28,8 @@ import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.network.ConnectionManager
 import com.explorer.fileexplorer.core.network.NetworkFileRepository
 import com.explorer.fileexplorer.core.network.Protocol
+import com.explorer.fileexplorer.core.network.sftp.SftpHostKeyChallenge
+import com.explorer.fileexplorer.core.network.sftp.sftpHostKeyChallengeOrNull
 import com.explorer.fileexplorer.core.ui.FileListItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -48,7 +50,16 @@ data class NetworkUiState(
     val remoteFiles: List<FileItem> = emptyList(),
     val isLoadingRemote: Boolean = false,
     val remoteError: String? = null,
+    val hostKeyPrompt: PendingSftpHostKeyPrompt? = null,
 )
+
+data class PendingSftpHostKeyPrompt(
+    val connection: ConnectionEntity,
+    val action: SftpHostKeyAction,
+    val challenge: SftpHostKeyChallenge,
+)
+
+enum class SftpHostKeyAction { CONNECT, TEST }
 
 @HiltViewModel
 class NetworkViewModel @Inject constructor(
@@ -84,7 +95,7 @@ class NetworkViewModel @Inject constructor(
                 _toasts.emit("Connected to ${entity.name}")
                 browseRemote(entity.id, entity.remotePath.ifEmpty { "/" })
             }.onFailure { e ->
-                _toasts.emit("Connection failed: ${e.message}")
+                handleConnectionFailure(entity, SftpHostKeyAction.CONNECT, e, "Connection failed")
             }
         }
     }
@@ -150,7 +161,29 @@ class NetworkViewModel @Inject constructor(
             val result = connectionManager.testConnection(entity)
             _state.update { it.copy(isConnecting = null) }
             result.onSuccess { _toasts.emit("Connection successful") }
-                .onFailure { e -> _toasts.emit("Test failed: ${e.message}") }
+                .onFailure { e -> handleConnectionFailure(entity, SftpHostKeyAction.TEST, e, "Test failed") }
+        }
+    }
+
+    fun trustSftpHostKey(prompt: PendingSftpHostKeyPrompt) {
+        viewModelScope.launch {
+            connectionManager.trustSftpHostKey(prompt.challenge)
+                .onSuccess {
+                    _state.update { it.copy(hostKeyPrompt = null) }
+                    _toasts.emit("SFTP host key trusted")
+                    when (prompt.action) {
+                        SftpHostKeyAction.CONNECT -> connect(prompt.connection)
+                        SftpHostKeyAction.TEST -> testConnection(prompt.connection)
+                    }
+                }
+                .onFailure { e -> _toasts.emit("Trust failed: ${e.message}") }
+        }
+    }
+
+    fun rejectSftpHostKey() {
+        viewModelScope.launch {
+            _state.update { it.copy(hostKeyPrompt = null, isConnecting = null) }
+            _toasts.emit("SFTP host key rejected")
         }
     }
 
@@ -183,6 +216,22 @@ class NetworkViewModel @Inject constructor(
     fun closeBrowser() {
         _state.update { it.copy(browsingConnectionId = null, remoteFiles = emptyList()) }
     }
+
+    private suspend fun handleConnectionFailure(
+        entity: ConnectionEntity,
+        action: SftpHostKeyAction,
+        error: Throwable,
+        fallbackPrefix: String,
+    ) {
+        val challenge = error.sftpHostKeyChallengeOrNull()
+        if (challenge != null) {
+            _state.update {
+                it.copy(hostKeyPrompt = PendingSftpHostKeyPrompt(entity, action, challenge), isConnecting = null)
+            }
+        } else {
+            _toasts.emit("$fallbackPrefix: ${error.message}")
+        }
+    }
 }
 
 // -- Screens --
@@ -198,6 +247,14 @@ fun NetworkScreen(
 
     LaunchedEffect(Unit) {
         viewModel.toasts.collect { msg -> Toast.makeText(context, msg, Toast.LENGTH_SHORT).show() }
+    }
+
+    state.hostKeyPrompt?.let { prompt ->
+        SftpHostKeyDialog(
+            prompt = prompt,
+            onTrust = { viewModel.trustSftpHostKey(prompt) },
+            onReject = viewModel::rejectSftpHostKey,
+        )
     }
 
     // If browsing remote files, show browser
@@ -264,6 +321,36 @@ fun NetworkScreen(
             }
         }
     }
+}
+
+@Composable
+private fun SftpHostKeyDialog(
+    prompt: PendingSftpHostKeyPrompt,
+    onTrust: () -> Unit,
+    onReject: () -> Unit,
+) {
+    val challenge = prompt.challenge
+    AlertDialog(
+        onDismissRequest = onReject,
+        icon = { Icon(Icons.Filled.Security, null) },
+        title = { Text(if (challenge.isChangedKey) "SFTP Host Key Changed" else "Trust SFTP Host Key?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("${challenge.hostname}:${challenge.port}", style = MaterialTheme.typography.titleSmall)
+                Text("Algorithm: ${challenge.keyAlgorithm}", style = MaterialTheme.typography.bodySmall)
+                Text("Fingerprint: ${challenge.fingerprintSha256}", style = MaterialTheme.typography.bodySmall)
+                if (challenge.isChangedKey) {
+                    Text(
+                        "The saved key for this host no longer matches.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onTrust) { Text("Trust") } },
+        dismissButton = { TextButton(onClick = onReject) { Text("Cancel") } },
+    )
 }
 
 @Composable

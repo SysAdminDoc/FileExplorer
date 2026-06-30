@@ -4,6 +4,8 @@ import com.explorer.fileexplorer.core.database.ConnectionDao
 import com.explorer.fileexplorer.core.database.ConnectionEntity
 import com.explorer.fileexplorer.core.network.ftp.FtpFileRepository
 import com.explorer.fileexplorer.core.network.sftp.SftpFileRepository
+import com.explorer.fileexplorer.core.network.sftp.SftpHostKeyChallenge
+import com.explorer.fileexplorer.core.network.sftp.SftpKnownHostsStore
 import com.explorer.fileexplorer.core.network.smb.SmbFileRepository
 import com.explorer.fileexplorer.core.network.webdav.WebDavFileRepository
 import com.explorer.fileexplorer.core.storage.CredentialCipher
@@ -20,6 +22,7 @@ import javax.inject.Singleton
 class ConnectionManager @Inject constructor(
     private val connectionDao: ConnectionDao,
     private val credentialCipher: CredentialCipher,
+    private val sftpKnownHostsStore: SftpKnownHostsStore,
 ) {
     private val _activeConnections = MutableStateFlow<Map<Long, ActiveConnection>>(emptyMap())
     val activeConnections: StateFlow<Map<Long, ActiveConnection>> = _activeConnections.asStateFlow()
@@ -88,10 +91,14 @@ class ConnectionManager @Inject constructor(
         return result
     }
 
+    fun trustSftpHostKey(challenge: SftpHostKeyChallenge): Result<Unit> = runCatching {
+        sftpKnownHostsStore.trust(challenge)
+    }
+
     private fun createRepository(protocol: Protocol): NetworkFileRepository {
         return when (protocol) {
             Protocol.SMB -> SmbFileRepository()
-            Protocol.SFTP -> SftpFileRepository()
+            Protocol.SFTP -> SftpFileRepository(sftpKnownHostsStore)
             Protocol.FTP, Protocol.FTPS -> FtpFileRepository()
             Protocol.WEBDAV -> WebDavFileRepository()
         }

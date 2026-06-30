@@ -2,11 +2,13 @@ package com.explorer.fileexplorer.core.network
 
 import com.explorer.fileexplorer.core.database.ConnectionDao
 import com.explorer.fileexplorer.core.database.ConnectionEntity
+import com.explorer.fileexplorer.core.network.sftp.SftpKnownHostsStore
 import com.explorer.fileexplorer.core.storage.CredentialCipher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -15,7 +17,7 @@ class ConnectionManagerTest {
     @Test
     fun saveConnectionEncryptsPasswordBeforePersisting() = runBlocking {
         val dao = FakeConnectionDao()
-        val manager = ConnectionManager(dao, FakeCredentialCipher())
+        val manager = connectionManager(dao)
 
         manager.saveConnection(connection(password = "secret"))
 
@@ -30,7 +32,7 @@ class ConnectionManagerTest {
                 connection(id = 2, password = "enc:saved"),
             ),
         )
-        val manager = ConnectionManager(dao, FakeCredentialCipher())
+        val manager = connectionManager(dao)
 
         val emitted = manager.savedConnections.first()
 
@@ -42,11 +44,16 @@ class ConnectionManagerTest {
     @Test
     fun deleteConnectionDeletesByIdWithoutPlaintextEntityMatch() = runBlocking {
         val dao = FakeConnectionDao(initialRows = listOf(connection(id = 7, password = "enc:secret")))
-        val manager = ConnectionManager(dao, FakeCredentialCipher())
+        val manager = connectionManager(dao)
 
         manager.deleteConnection(connection(id = 7, password = "secret"))
 
         assertTrue(dao.rows.value.isEmpty())
+    }
+
+    private fun connectionManager(dao: ConnectionDao): ConnectionManager {
+        val knownHostsFile = Files.createTempDirectory("fileexplorer-known-hosts").resolve("known_hosts").toFile()
+        return ConnectionManager(dao, FakeCredentialCipher(), SftpKnownHostsStore(knownHostsFile, testOnly = true))
     }
 
     private fun connection(

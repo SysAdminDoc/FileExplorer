@@ -1,6 +1,6 @@
 # FileExplorer
 
-![Version](https://img.shields.io/badge/version-1.3.1-blue)
+![Version](https://img.shields.io/badge/version-1.3.2-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Android%208.0+-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.2-7F52FF?logo=kotlin&logoColor=white)
@@ -34,7 +34,7 @@ cd FileExplorer
 | Root Access | libsu 6.0.0, browse /data /system /vendor, SELinux context, chmod/chown, remount | Complete |
 | Archives | Browse ZIP/7z/TAR as virtual folders. Extract/create with AES-256 passwords | Complete |
 | SMB/CIFS | Windows network shares via smbj 0.13.0 with domain auth | Complete |
-| SFTP | SSH file transfer via sshj 0.40.0 with password + private key auth | Complete |
+| SFTP | SSH file transfer via sshj 0.40.0 with known_hosts verification, password + private key auth | Complete |
 | FTP/FTPS | File transfer via Apache Commons Net 3.13.0 with TLS toggle | Complete |
 | WebDAV | HTTP/HTTPS via sardine-android 0.9 with server-side copy/move | Complete |
 | Connection Manager | Save, edit, test network connections with Android Keystore-encrypted passwords. Remote file browser | Complete |

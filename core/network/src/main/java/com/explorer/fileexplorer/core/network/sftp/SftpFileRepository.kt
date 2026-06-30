@@ -15,14 +15,15 @@ import net.schmizz.sshj.sftp.FileAttributes
 import net.schmizz.sshj.sftp.FileMode
 import net.schmizz.sshj.sftp.RemoteResourceInfo
 import net.schmizz.sshj.sftp.SFTPClient
-import net.schmizz.sshj.transport.verification.PromiscuousVerifier
 import net.schmizz.sshj.userauth.keyprovider.KeyProvider
 import net.schmizz.sshj.xfer.FileSystemFile
 import java.io.File
 import java.nio.file.attribute.PosixFilePermission
 import javax.inject.Inject
 
-class SftpFileRepository @Inject constructor() : NetworkFileRepository {
+class SftpFileRepository @Inject constructor(
+    private val knownHostsStore: SftpKnownHostsStore,
+) : NetworkFileRepository {
 
     private var ssh: SSHClient? = null
     private var sftp: SFTPClient? = null
@@ -34,7 +35,7 @@ class SftpFileRepository @Inject constructor() : NetworkFileRepository {
         try {
             disconnect()
             val client = SSHClient()
-            client.addHostKeyVerifier(PromiscuousVerifier()) // TODO: known_hosts support
+            client.addHostKeyVerifier(knownHostsStore.createVerifier())
             client.connect(connection.host, connection.port)
 
             // Auth: key first, then password
