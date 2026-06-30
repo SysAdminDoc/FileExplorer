@@ -178,7 +178,7 @@ fun SettingsScreen(
 
             ListItem(
                 headlineContent = { Text("Version") },
-                supportingContent = { Text("1.3.0") },
+                supportingContent = { Text("1.3.1") },
             )
         }
     }

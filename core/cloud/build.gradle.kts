@@ -18,6 +18,7 @@ android {
 }
 dependencies {
     implementation(project(":core:model"))
+    implementation(project(":core:storage"))
     implementation(libs.core.ktx)
     implementation(libs.coroutines.core)
     implementation(libs.hilt.android)

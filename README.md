@@ -1,6 +1,6 @@
 # FileExplorer
 
-![Version](https://img.shields.io/badge/version-1.3.0-blue)
+![Version](https://img.shields.io/badge/version-1.3.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Android%208.0+-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.2-7F52FF?logo=kotlin&logoColor=white)
@@ -37,7 +37,7 @@ cd FileExplorer
 | SFTP | SSH file transfer via sshj 0.40.0 with password + private key auth | Complete |
 | FTP/FTPS | File transfer via Apache Commons Net 3.13.0 with TLS toggle | Complete |
 | WebDAV | HTTP/HTTPS via sardine-android 0.9 with server-side copy/move | Complete |
-| Connection Manager | Save, edit, test network connections. Remote file browser | Complete |
+| Connection Manager | Save, edit, test network connections with Android Keystore-encrypted passwords. Remote file browser | Complete |
 | Google Drive | REST API v3. Browse, upload, download, delete, rename, quota display | Complete |
 | Dropbox | HTTP API v2. Browse, upload, download, folder operations | Complete |
 | OneDrive | Microsoft Graph API. Full file operations, quota tracking | Complete |
@@ -157,7 +157,7 @@ A: No. Root features are optional and auto-detected. The app works as a standard
 A: ZIP (with AES-256 encryption), 7z, TAR, GZ, BZ2, XZ, and Zstandard. Archives can be browsed as virtual folders without extracting.
 
 **Q: Are my cloud credentials stored securely?**
-A: OAuth tokens are managed in memory. For production, integrate Android Keystore encryption for persistent token storage.
+A: Network passwords are encrypted before database storage with Android Keystore-backed AES-GCM. Cloud OAuth tokens stay in memory unless you choose Stay signed in, which stores account tokens in Keystore-encrypted app preferences.
 
 ## Contributing
 

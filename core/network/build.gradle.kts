@@ -22,12 +22,14 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:data"))
     implementation(project(":core:database"))
+    implementation(project(":core:storage"))
     implementation(libs.core.ktx)
     implementation(libs.coroutines.core)
     implementation(libs.coroutines.android)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.gson)
+    testImplementation(kotlin("test"))
 
     // SMB
     implementation(libs.smbj)

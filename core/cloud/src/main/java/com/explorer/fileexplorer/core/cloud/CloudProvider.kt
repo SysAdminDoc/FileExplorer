@@ -1,6 +1,12 @@
 package com.explorer.fileexplorer.core.cloud
 
+import android.content.Context
+import android.util.Log
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.storage.CredentialCipher
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +32,7 @@ data class CloudAccount(
     val tokenExpiry: Long = 0L,
     val quotaTotal: Long = 0L,
     val quotaUsed: Long = 0L,
+    val staySignedIn: Boolean = false,
 )
 
 /** Abstract cloud storage provider contract. */
@@ -75,9 +82,16 @@ interface CloudProvider {
 
 /** Manages cloud accounts across all providers. */
 @Singleton
-class CloudAccountManager @Inject constructor() {
+class CloudAccountManager @Inject constructor(
+    @ApplicationContext context: Context,
+    private val credentialCipher: CredentialCipher,
+) {
 
-    private val _accounts = MutableStateFlow<List<CloudAccount>>(emptyList())
+    private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+    private val gson = Gson()
+    private val accountListType = object : TypeToken<List<CloudAccount>>() {}.type
+
+    private val _accounts = MutableStateFlow(loadPersistedAccounts())
     val accounts: StateFlow<List<CloudAccount>> = _accounts.asStateFlow()
 
     private val providers = mutableMapOf<CloudService, CloudProvider>()
@@ -88,12 +102,21 @@ class CloudAccountManager @Inject constructor() {
 
     fun getProvider(service: CloudService): CloudProvider? = providers[service]
 
-    fun addAccount(account: CloudAccount) {
-        _accounts.value = _accounts.value.filter { it.id != account.id } + account
+    fun addAccount(account: CloudAccount, staySignedIn: Boolean = account.staySignedIn): Result<Unit> = runCatching {
+        _accounts.value = _accounts.value.filter { it.id != account.id } + account.copy(staySignedIn = staySignedIn)
+        persistAccounts()
     }
 
-    fun removeAccount(accountId: String) {
+    fun removeAccount(accountId: String): Result<Unit> = runCatching {
         _accounts.value = _accounts.value.filter { it.id != accountId }
+        persistAccounts()
+    }
+
+    fun setStaySignedIn(accountId: String, enabled: Boolean): Result<Unit> = runCatching {
+        _accounts.value = _accounts.value.map { account ->
+            if (account.id == accountId) account.copy(staySignedIn = enabled) else account
+        }
+        persistAccounts()
     }
 
     fun getAccount(accountId: String): CloudAccount? {
@@ -102,5 +125,35 @@ class CloudAccountManager @Inject constructor() {
 
     fun getAccountsForService(service: CloudService): List<CloudAccount> {
         return _accounts.value.filter { it.service == service }
+    }
+
+    private fun persistAccounts() {
+        val persistedAccounts = _accounts.value.filter { it.staySignedIn }
+        if (persistedAccounts.isEmpty()) {
+            preferences.edit().remove(PREF_ACCOUNTS).apply()
+            return
+        }
+
+        val encryptedPayload = credentialCipher.encrypt(gson.toJson(persistedAccounts))
+        preferences.edit().putString(PREF_ACCOUNTS, encryptedPayload).apply()
+    }
+
+    private fun loadPersistedAccounts(): List<CloudAccount> {
+        val payload = preferences.getString(PREF_ACCOUNTS, null) ?: return emptyList()
+        return runCatching {
+            val json = credentialCipher.decrypt(payload)
+            gson.fromJson<List<CloudAccount>>(json, accountListType)
+                .orEmpty()
+                .map { it.copy(staySignedIn = true) }
+        }.getOrElse { error ->
+            Log.w(TAG, "Unable to read saved cloud accounts", error)
+            emptyList()
+        }
+    }
+
+    private companion object {
+        const val TAG = "CloudAccountManager"
+        const val PREFERENCES_NAME = "cloud_accounts"
+        const val PREF_ACCOUNTS = "encrypted_accounts"
     }
 }

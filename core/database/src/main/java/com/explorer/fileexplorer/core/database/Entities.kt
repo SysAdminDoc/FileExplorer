@@ -38,7 +38,7 @@ data class ConnectionEntity(
     @ColumnInfo(name = "host") val host: String,
     @ColumnInfo(name = "port") val port: Int,
     @ColumnInfo(name = "username") val username: String = "",
-    @ColumnInfo(name = "password") val password: String = "", // TODO: encrypt via Android Keystore
+    @ColumnInfo(name = "password") val password: String = "",
     @ColumnInfo(name = "share_name") val shareName: String = "", // SMB share
     @ColumnInfo(name = "remote_path") val remotePath: String = "/",
     @ColumnInfo(name = "private_key_path") val privateKeyPath: String = "", // SFTP key auth

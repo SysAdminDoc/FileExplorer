@@ -112,7 +112,18 @@ class CloudViewModel @Inject constructor(
         viewModelScope.launch {
             provider?.signOut(account)
             accountManager.removeAccount(account.id)
-            _toasts.emit("Account removed")
+                .onSuccess { _toasts.emit("Account removed") }
+                .onFailure { e -> _toasts.emit("Remove failed: ${e.message}") }
+        }
+    }
+
+    fun setStaySignedIn(account: CloudAccount, enabled: Boolean) {
+        viewModelScope.launch {
+            accountManager.setStaySignedIn(account.id, enabled)
+                .onSuccess {
+                    _toasts.emit(if (enabled) "Account will stay signed in" else "Account will be forgotten on app close")
+                }
+                .onFailure { e -> _toasts.emit("Account storage failed: ${e.message}") }
         }
     }
 
@@ -186,6 +197,7 @@ fun CloudScreen(
                         account = account,
                         onBrowse = { viewModel.browseAccount(account) },
                         onRemove = { viewModel.removeAccount(account) },
+                        onStaySignedInChange = { enabled -> viewModel.setStaySignedIn(account, enabled) },
                     )
                 }
             }
@@ -224,7 +236,12 @@ fun CloudScreen(
 }
 
 @Composable
-private fun CloudAccountItem(account: CloudAccount, onBrowse: () -> Unit, onRemove: () -> Unit) {
+private fun CloudAccountItem(
+    account: CloudAccount,
+    onBrowse: () -> Unit,
+    onRemove: () -> Unit,
+    onStaySignedInChange: (Boolean) -> Unit,
+) {
     val icon = when (account.service) {
         CloudService.GOOGLE_DRIVE -> Icons.Filled.CloudCircle
         CloudService.DROPBOX -> Icons.Filled.CloudUpload
@@ -235,6 +252,9 @@ private fun CloudAccountItem(account: CloudAccount, onBrowse: () -> Unit, onRemo
         supportingContent = {
             Column {
                 Text("${account.service.displayName} - ${account.email}", style = MaterialTheme.typography.bodySmall)
+                if (account.staySignedIn) {
+                    Text("Stays signed in on this device", style = MaterialTheme.typography.labelSmall)
+                }
                 if (account.quotaTotal > 0) {
                     val usedGb = "%.1f".format(account.quotaUsed / (1024.0 * 1024 * 1024))
                     val totalGb = "%.1f".format(account.quotaTotal / (1024.0 * 1024 * 1024))
@@ -253,6 +273,14 @@ private fun CloudAccountItem(account: CloudAccount, onBrowse: () -> Unit, onRemo
                 var expanded by remember { mutableStateOf(false) }
                 IconButton(onClick = { expanded = true }) { Icon(Icons.Filled.MoreVert, "More") }
                 DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text(if (account.staySignedIn) "Forget on close" else "Stay signed in") },
+                        onClick = {
+                            onStaySignedInChange(!account.staySignedIn)
+                            expanded = false
+                        },
+                        leadingIcon = { Icon(if (account.staySignedIn) Icons.Filled.LockOpen else Icons.Filled.Lock, null) },
+                    )
                     DropdownMenuItem(text = { Text("Remove") }, onClick = { onRemove(); expanded = false },
                         leadingIcon = { Icon(Icons.Filled.RemoveCircle, null) })
                 }

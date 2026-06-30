@@ -156,9 +156,12 @@ class NetworkViewModel @Inject constructor(
 
     fun saveConnection(entity: ConnectionEntity) {
         viewModelScope.launch {
-            connectionManager.saveConnection(entity)
-            _state.update { it.copy(showForm = false, editingConnection = null) }
-            _toasts.emit("Connection saved")
+            runCatching { connectionManager.saveConnection(entity) }
+                .onSuccess {
+                    _state.update { it.copy(showForm = false, editingConnection = null) }
+                    _toasts.emit("Connection saved")
+                }
+                .onFailure { e -> _toasts.emit("Save failed: ${e.message}") }
         }
     }
 

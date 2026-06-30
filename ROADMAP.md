@@ -1,6 +1,6 @@
 # ROADMAP
 
-> FileExplorer v1.3.0 | Updated 2026-06-27 | Research-driven, 50+ sources
+> FileExplorer v1.3.1 | Updated 2026-06-30 | Research-driven, 50+ sources
 >
 > Core feature set is dense (local/root/archive/network/cloud/editor/apps/security).
 > This roadmap closes the gaps versus Solid Explorer, MiXplorer Silver, Material Files,
@@ -20,15 +20,7 @@
 
 ---
 
-## Now (v1.3.0 -- v1.4.0)
-
-### N-02: Encrypt stored passwords with Android Keystore
-`ConnectionEntity.password` is plaintext (`// TODO: encrypt via Android Keystore` at `Entities.kt:41`).
-Wrap with `EncryptedSharedPreferences` or raw `KeyStore` + AES-256-GCM. Cloud tokens (currently
-in-memory only) should also get opt-in Keystore-backed persistence for "stay signed in."
-
-- **Impact:** 5/5 (security table-stakes). **Effort:** 2/5.
-- **Source:** Existing TODO in code; Android Keystore best practices; Solid Explorer and MiXplorer both encrypt credentials at rest.
+## Now (v1.3.1 -- v1.4.0)
 
 ### N-03: SFTP known_hosts verification
 Replace `PromiscuousVerifier()` (`SftpFileRepository.kt:37`) with proper known_hosts file support.
@@ -544,7 +536,7 @@ the Material 3 icon set is sufficient and consistent. Would dilute the design la
 
 ### What FileExplorer Already Beats Them On
 
-FileExplorer v1.3.0 is the only Android file manager (OSS or commercial) that ships ALL of:
+FileExplorer v1.3.1 is the only Android file manager (OSS or commercial) that ships ALL of:
 - Jetpack Compose + Material 3 UI (modern stack)
 - Full root access via libsu
 - Archives (ZIP/7z/TAR/GZ/BZ2/XZ/Zstandard) with virtual folder browsing

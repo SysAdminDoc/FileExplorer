@@ -1,4 +1,4 @@
-// FileExplorer v1.3.0 — All Phases + Advanced Features
+// FileExplorer v1.3.1 — All Phases + Advanced Features
 plugins {
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.android.library) apply false

@@ -6,30 +6,41 @@ import com.explorer.fileexplorer.core.network.ftp.FtpFileRepository
 import com.explorer.fileexplorer.core.network.sftp.SftpFileRepository
 import com.explorer.fileexplorer.core.network.smb.SmbFileRepository
 import com.explorer.fileexplorer.core.network.webdav.WebDavFileRepository
+import com.explorer.fileexplorer.core.storage.CredentialCipher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class ConnectionManager @Inject constructor(
     private val connectionDao: ConnectionDao,
+    private val credentialCipher: CredentialCipher,
 ) {
     private val _activeConnections = MutableStateFlow<Map<Long, ActiveConnection>>(emptyMap())
     val activeConnections: StateFlow<Map<Long, ActiveConnection>> = _activeConnections.asStateFlow()
 
     val savedConnections: Flow<List<ConnectionEntity>> = connectionDao.getAllFlow()
+        .onEach(::migratePlaintextPasswords)
+        .map { connections -> connections.map(::decryptPassword) }
 
     suspend fun connect(entity: ConnectionEntity): Result<NetworkFileRepository> {
-        val connection = entityToConnection(entity)
+        val decryptedEntity = try {
+            decryptPassword(entity)
+        } catch (e: Exception) {
+            return Result.failure(e)
+        }
+        val connection = entityToConnection(decryptedEntity)
         val repo = createRepository(connection.protocol)
 
         val result = repo.connect(connection)
         if (result.isSuccess) {
-            connectionDao.updateLastConnected(entity.id)
-            _activeConnections.value = _activeConnections.value + (entity.id to ActiveConnection(entity, repo))
+            connectionDao.updateLastConnected(decryptedEntity.id)
+            _activeConnections.value = _activeConnections.value + (decryptedEntity.id to ActiveConnection(decryptedEntity, repo))
         }
         return result.map { repo }
     }
@@ -56,16 +67,21 @@ class ConnectionManager @Inject constructor(
     }
 
     suspend fun saveConnection(entity: ConnectionEntity): Long {
-        return connectionDao.insert(entity)
+        return connectionDao.insert(encryptPassword(entity))
     }
 
     suspend fun deleteConnection(entity: ConnectionEntity) {
         disconnect(entity.id)
-        connectionDao.delete(entity)
+        connectionDao.deleteById(entity.id)
     }
 
     suspend fun testConnection(entity: ConnectionEntity): Result<Unit> {
-        val connection = entityToConnection(entity)
+        val decryptedEntity = try {
+            decryptPassword(entity)
+        } catch (e: Exception) {
+            return Result.failure(e)
+        }
+        val connection = entityToConnection(decryptedEntity)
         val repo = createRepository(connection.protocol)
         val result = repo.connect(connection)
         if (result.isSuccess) repo.disconnect()
@@ -90,6 +106,20 @@ class ConnectionManager @Inject constructor(
             shareName = entity.shareName, remotePath = entity.remotePath,
             privateKeyPath = entity.privateKeyPath, useTls = entity.useTls,
         )
+    }
+
+    private suspend fun migratePlaintextPasswords(connections: List<ConnectionEntity>) {
+        connections
+            .filter { it.password.isNotEmpty() && !credentialCipher.isEncrypted(it.password) }
+            .forEach { connectionDao.update(encryptPassword(it)) }
+    }
+
+    private fun encryptPassword(entity: ConnectionEntity): ConnectionEntity {
+        return entity.copy(password = credentialCipher.encrypt(entity.password))
+    }
+
+    private fun decryptPassword(entity: ConnectionEntity): ConnectionEntity {
+        return entity.copy(password = credentialCipher.decrypt(entity.password))
     }
 }
 
