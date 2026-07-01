@@ -4,6 +4,8 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -40,6 +43,7 @@ fun BrowserScreen(
     onOpenCloud: () -> Unit = {},
     onOpenSecurity: () -> Unit = {},
     onOpenApps: () -> Unit = {},
+    onOpenTrash: () -> Unit = {},
     onOpenEditor: (String) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -84,7 +88,8 @@ fun BrowserScreen(
                 onOpenNetwork = { scope.launch { drawerState.close() }; onOpenNetwork() },
                 onOpenCloud = { scope.launch { drawerState.close() }; onOpenCloud() },
                 onOpenSecurity = { scope.launch { drawerState.close() }; onOpenSecurity() },
-                onOpenApps = { scope.launch { drawerState.close() }; onOpenApps() })
+                onOpenApps = { scope.launch { drawerState.close() }; onOpenApps() },
+                onOpenTrash = { scope.launch { drawerState.close() }; onOpenTrash() })
         },
     ) {
         Scaffold(
@@ -95,7 +100,9 @@ fun BrowserScreen(
                         insideArchive = state.insideArchive,
                         onClear = viewModel::clearSelection, onSelectAll = viewModel::selectAll,
                         onCopy = viewModel::copySelected, onCut = viewModel::cutSelected,
-                        onDelete = viewModel::deleteSelected, onShare = viewModel::shareSelected,
+                        onDelete = viewModel::deleteSelected,
+                        onPermanentDelete = viewModel::permanentlyDeleteSelected,
+                        onShare = viewModel::shareSelected,
                         onCompress = viewModel::showCompressDialog,
                         onRename = { state.files.firstOrNull { it.path in state.selectedItems }?.let { viewModel.showRename(it) } },
                         onProperties = { state.files.firstOrNull { it.path in state.selectedItems }?.let { viewModel.showProperties(it) } })
@@ -256,12 +263,12 @@ private fun BrowserTopBar(
             else MaterialTheme.colorScheme.surface))
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun SelectionTopBar(
     selectedCount: Int, insideArchive: Boolean,
     onClear: () -> Unit, onSelectAll: () -> Unit,
-    onCopy: () -> Unit, onCut: () -> Unit, onDelete: () -> Unit, onShare: () -> Unit,
+    onCopy: () -> Unit, onCut: () -> Unit, onDelete: () -> Unit, onPermanentDelete: () -> Unit, onShare: () -> Unit,
     onCompress: () -> Unit, onRename: () -> Unit, onProperties: () -> Unit,
 ) {
     TopAppBar(
@@ -272,12 +279,25 @@ private fun SelectionTopBar(
             if (!insideArchive) {
                 IconButton(onClick = onCopy) { Icon(Icons.Filled.ContentCopy, "Copy") }
                 IconButton(onClick = onCut) { Icon(Icons.Filled.ContentCut, "Cut") }
-                IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, "Delete") }
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .combinedClickable(
+                            onClick = onDelete,
+                            onLongClick = onPermanentDelete,
+                            role = Role.Button,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Filled.Delete, "Delete")
+                }
             }
             var moreExpanded by remember { mutableStateOf(false) }
             IconButton(onClick = { moreExpanded = true }) { Icon(Icons.Filled.MoreVert, "More") }
             DropdownMenu(expanded = moreExpanded, onDismissRequest = { moreExpanded = false }) {
                 if (!insideArchive) {
+                    DropdownMenuItem(text = { Text("Delete permanently") }, onClick = { onPermanentDelete(); moreExpanded = false },
+                        leadingIcon = { Icon(Icons.Filled.DeleteForever, null) })
                     DropdownMenuItem(text = { Text("Compress") }, onClick = { onCompress(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.FolderZip, null) })
                     DropdownMenuItem(text = { Text("Share") }, onClick = { onShare(); moreExpanded = false },

@@ -25,6 +25,7 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.documentfile)
+    testImplementation(kotlin("test"))
 
     // Root access
     implementation(libs.libsu.core)

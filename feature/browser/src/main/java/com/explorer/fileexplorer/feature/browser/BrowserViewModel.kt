@@ -7,6 +7,8 @@ import com.explorer.fileexplorer.core.data.ArchiveFormat
 import com.explorer.fileexplorer.core.data.ArchiveHelper
 import com.explorer.fileexplorer.core.data.FileRepository
 import com.explorer.fileexplorer.core.data.FileRepositoryFactory
+import com.explorer.fileexplorer.core.data.LocalFileRepository
+import com.explorer.fileexplorer.core.data.LocalTrashManager
 import com.explorer.fileexplorer.core.data.RootFileRepository
 import com.explorer.fileexplorer.core.database.BookmarkDao
 import com.explorer.fileexplorer.core.database.BookmarkEntity
@@ -16,6 +18,7 @@ import com.explorer.fileexplorer.core.model.*
 import com.explorer.fileexplorer.core.storage.RootHelper
 import com.explorer.fileexplorer.core.storage.RootState
 import com.explorer.fileexplorer.core.storage.StorageVolumeHelper
+import com.explorer.fileexplorer.feature.settings.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -71,6 +74,8 @@ class BrowserViewModel @Inject constructor(
     private val rootRepo: RootFileRepository,
     private val archiveHelper: ArchiveHelper,
     private val storageVolumeHelper: StorageVolumeHelper,
+    private val trashManager: LocalTrashManager,
+    private val settingsRepository: SettingsRepository,
     private val bookmarkDao: BookmarkDao,
     private val recentFileDao: RecentFileDao,
 ) : ViewModel() {
@@ -258,11 +263,35 @@ class BrowserViewModel @Inject constructor(
     }
 
     fun deleteSelected() {
+        deleteSelected(useTrash = true)
+    }
+
+    fun permanentlyDeleteSelected() {
+        deleteSelected(useTrash = false)
+    }
+
+    private fun deleteSelected(useTrash: Boolean) {
         viewModelScope.launch {
             val paths = _state.value.selectedItems.toList()
-            repoFactory.getRepository(paths.firstOrNull() ?: return@launch).deleteFiles(paths)
-                .onSuccess { c -> _events.emit(BrowserEvent.Toast("$c items deleted")); clearSelection(); refresh() }
-                .onFailure { e -> _events.emit(BrowserEvent.Toast("Delete failed: ${e.message}")) }
+            if (paths.isEmpty()) return@launch
+
+            if (useTrash) {
+                if (repoFactory.getRepository(paths.first()) !is LocalFileRepository) {
+                    _events.emit(BrowserEvent.Toast("Trash is only available for local storage"))
+                    return@launch
+                }
+                val roots = trashVolumeRoots()
+                val ttlDays = settingsRepository.settings.first().trashTtlDays
+                trashManager.purgeExpired(ttlDays, roots)
+                    .onFailure { e -> _events.emit(BrowserEvent.Toast("Trash purge failed: ${e.message}")) }
+                trashManager.moveToTrash(paths, roots)
+                    .onSuccess { c -> _events.emit(BrowserEvent.Toast("$c items moved to Trash")); clearSelection(); refresh() }
+                    .onFailure { e -> _events.emit(BrowserEvent.Toast("Trash failed: ${e.message}")) }
+            } else {
+                repoFactory.getRepository(paths.first()).deleteFiles(paths)
+                    .onSuccess { c -> _events.emit(BrowserEvent.Toast("$c items deleted permanently")); clearSelection(); refresh() }
+                    .onFailure { e -> _events.emit(BrowserEvent.Toast("Delete failed: ${e.message}")) }
+            }
         }
     }
 
@@ -310,6 +339,7 @@ class BrowserViewModel @Inject constructor(
     }
 
     private fun loadVolumes() { _state.update { it.copy(volumes = storageVolumeHelper.getStorageVolumes()) } }
+    private fun trashVolumeRoots(): List<String> = storageVolumeHelper.getStorageVolumes().map { it.path }.distinct()
     private fun observeBookmarks() { viewModelScope.launch { bookmarkDao.getAllFlow().collect { b -> _state.update { it.copy(bookmarks = b) } } } }
     private fun getSelectedFileItems(): List<FileItem> { val s = _state.value.selectedItems; return _state.value.files.filter { it.path in s } }
 

@@ -18,6 +18,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.explorer.fileexplorer.core.data.LocalTrashManager
 import com.explorer.fileexplorer.core.designsystem.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -38,6 +39,7 @@ object SettingsKeys {
     val SORT_DIRECTION = stringPreferencesKey("sort_direction")
     val THUMBNAIL_SIZE = intPreferencesKey("thumbnail_size")
     val THEME_MODE = stringPreferencesKey("theme_mode")
+    val TRASH_TTL_DAYS = intPreferencesKey("trash_ttl_days")
 }
 
 data class SettingsState(
@@ -49,6 +51,7 @@ data class SettingsState(
     val sortDirection: String = "ASCENDING",
     val thumbnailSize: Int = 48,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val trashTtlDays: Int = LocalTrashManager.DEFAULT_TTL_DAYS,
 )
 
 @Singleton
@@ -67,6 +70,7 @@ class SettingsRepository @Inject constructor(
             sortDirection = prefs[SettingsKeys.SORT_DIRECTION] ?: "ASCENDING",
             thumbnailSize = prefs[SettingsKeys.THUMBNAIL_SIZE] ?: 48,
             themeMode = ThemeMode.fromKey(prefs[SettingsKeys.THEME_MODE]),
+            trashTtlDays = prefs[SettingsKeys.TRASH_TTL_DAYS] ?: LocalTrashManager.DEFAULT_TTL_DAYS,
         )
     }
 
@@ -85,6 +89,7 @@ class SettingsViewModel @Inject constructor(
     fun toggleFoldersFirst() { viewModelScope.launch { repo.update(SettingsKeys.FOLDERS_FIRST, !state.value.foldersFirst) } }
     fun toggleConfirmDelete() { viewModelScope.launch { repo.update(SettingsKeys.CONFIRM_DELETE, !state.value.confirmDelete) } }
     fun setThemeMode(mode: ThemeMode) { viewModelScope.launch { repo.update(SettingsKeys.THEME_MODE, mode.name) } }
+    fun setTrashTtlDays(days: Int) { viewModelScope.launch { repo.update(SettingsKeys.TRASH_TTL_DAYS, days) } }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -166,6 +171,11 @@ fun SettingsScreen(
                 onToggle = viewModel::toggleConfirmDelete,
             )
 
+            TrashTtlSelector(
+                currentDays = state.trashTtlDays,
+                onSelect = viewModel::setTrashTtlDays,
+            )
+
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
             // About
@@ -178,7 +188,7 @@ fun SettingsScreen(
 
             ListItem(
                 headlineContent = { Text("Version") },
-                supportingContent = { Text("1.3.2") },
+                supportingContent = { Text("1.3.3") },
             )
         }
     }
@@ -198,6 +208,32 @@ private fun SettingsToggle(
             Switch(checked = checked, onCheckedChange = { onToggle() })
         },
     )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TrashTtlSelector(
+    currentDays: Int,
+    onSelect: (Int) -> Unit,
+) {
+    val options = listOf(7, 14, 30, 60, 90)
+    ListItem(
+        headlineContent = { Text("Trash auto-purge") },
+        supportingContent = { Text("Delete trash after $currentDays days") },
+    )
+    FlowRow(
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        options.forEach { days ->
+            FilterChip(
+                selected = currentDays == days,
+                onClick = { onSelect(days) },
+                label = { Text("${days}d") },
+            )
+        }
+    }
 }
 
 @Composable

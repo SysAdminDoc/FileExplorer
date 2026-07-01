@@ -1,6 +1,6 @@
 # FileExplorer
 
-![Version](https://img.shields.io/badge/version-1.3.2-blue)
+![Version](https://img.shields.io/badge/version-1.3.3-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Android%208.0+-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.2-7F52FF?logo=kotlin&logoColor=white)
@@ -27,7 +27,8 @@ cd FileExplorer
 | Feature | Description | Status |
 |---------|-------------|--------|
 | File Browsing | NIO2 backend, breadcrumb nav, grid/list, sort by name/size/date/type | Complete |
-| File Operations | Copy, move, delete, rename, create. Foreground service with progress notification | Complete |
+| File Operations | Copy, move, trash, restore, permanent delete, rename, create. Foreground service with progress notification | Complete |
+| Trash Bin | `.FileExplorer-Trash/` per storage volume, 30-day default purge, configurable TTL, restore and empty-trash screen | Complete |
 | Search | Streaming results via Coroutine Flow, regex support, search history | Complete |
 | Bookmarks | Bookmark any directory, persisted in Room DB, accessible from drawer | Complete |
 | Recent Files | Track opened files, quick access from drawer | Complete |
@@ -119,6 +120,7 @@ Cloud providers require OAuth configuration. Each is optional and the app works 
 | Folders first | Settings | Pin folders above files in listings |
 | Default view | Settings | List or Grid |
 | Sort order | Settings / Top bar | Name, size, date, type |
+| Trash auto-purge | Settings | Retain trash for 7, 14, 30, 60, or 90 days |
 | Root mode | Drawer toggle | Enable/disable root shell access |
 | App lock | Security screen | Biometric requirement on launch |
 | Secure delete | Security screen | 3-pass overwrite before deletion |

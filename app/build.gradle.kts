@@ -1,9 +1,16 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+}
+
+val signingProps = Properties().apply {
+    val f = rootProject.file("signing.properties")
+    if (f.exists()) load(f.inputStream())
 }
 
 android {
@@ -14,16 +21,20 @@ android {
         applicationId = "com.explorer.fileexplorer"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "1.3.2"
+        versionCode = 17
+        versionName = "1.3.3"
     }
 
     signingConfigs {
         create("release") {
-            storeFile = file("${rootProject.projectDir}/fileexplorer.jks")
-            storePassword = "fileexplorer2025"
-            keyAlias = "fileexplorer"
-            keyPassword = "fileexplorer2025"
+            storeFile = file("${rootProject.projectDir}/${signingProps.getProperty("STORE_FILE", "fileexplorer.jks")}")
+            storePassword = signingProps.getProperty("STORE_PASSWORD")
+                ?: System.getenv("FILEEXPLORER_STORE_PASSWORD")
+                ?: error("Release signing: set STORE_PASSWORD in signing.properties or FILEEXPLORER_STORE_PASSWORD env var")
+            keyAlias = signingProps.getProperty("KEY_ALIAS", "fileexplorer")
+            keyPassword = signingProps.getProperty("KEY_PASSWORD")
+                ?: System.getenv("FILEEXPLORER_KEY_PASSWORD")
+                ?: error("Release signing: set KEY_PASSWORD in signing.properties or FILEEXPLORER_KEY_PASSWORD env var")
         }
     }
 

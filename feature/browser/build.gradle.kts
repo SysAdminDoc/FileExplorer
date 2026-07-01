@@ -24,6 +24,7 @@ dependencies {
     implementation(project(":core:database"))
     implementation(project(":core:ui"))
     implementation(project(":core:designsystem"))
+    implementation(project(":feature:settings"))
 
     implementation(libs.core.ktx)
     implementation(libs.lifecycle.runtime)
