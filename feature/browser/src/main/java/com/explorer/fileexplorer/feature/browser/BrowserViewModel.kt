@@ -10,6 +10,8 @@ import com.explorer.fileexplorer.core.data.FileRepositoryFactory
 import com.explorer.fileexplorer.core.data.LocalFileRepository
 import com.explorer.fileexplorer.core.data.LocalTrashManager
 import com.explorer.fileexplorer.core.data.RootFileRepository
+import com.explorer.fileexplorer.core.data.SecureDelete
+import com.explorer.fileexplorer.feature.security.SecurityRepository
 import com.explorer.fileexplorer.core.database.BookmarkDao
 import com.explorer.fileexplorer.core.database.BookmarkEntity
 import com.explorer.fileexplorer.core.database.RecentFileDao
@@ -76,6 +78,7 @@ class BrowserViewModel @Inject constructor(
     private val storageVolumeHelper: StorageVolumeHelper,
     private val trashManager: LocalTrashManager,
     private val settingsRepository: SettingsRepository,
+    private val securityRepository: SecurityRepository,
     private val bookmarkDao: BookmarkDao,
     private val recentFileDao: RecentFileDao,
 ) : ViewModel() {
@@ -288,9 +291,26 @@ class BrowserViewModel @Inject constructor(
                     .onSuccess { c -> _events.emit(BrowserEvent.Toast("$c items moved to Trash")); clearSelection(); refresh() }
                     .onFailure { e -> _events.emit(BrowserEvent.Toast("Trash failed: ${e.message}")) }
             } else {
-                repoFactory.getRepository(paths.first()).deleteFiles(paths)
-                    .onSuccess { c -> _events.emit(BrowserEvent.Toast("$c items deleted permanently")); clearSelection(); refresh() }
-                    .onFailure { e -> _events.emit(BrowserEvent.Toast("Delete failed: ${e.message}")) }
+                val repo = repoFactory.getRepository(paths.first())
+                val secureEnabled = securityRepository.settings.first().secureDeleteEnabled
+                if (secureEnabled && repo is LocalFileRepository) {
+                    var failed = false
+                    for (p in paths) {
+                        SecureDelete.secureDelete(p).onFailure { e ->
+                            _events.emit(BrowserEvent.Toast("Secure delete failed: ${e.message}"))
+                            failed = true
+                        }
+                    }
+                    if (!failed) _events.emit(BrowserEvent.Toast("${paths.size} items securely deleted"))
+                    clearSelection(); refresh()
+                } else {
+                    if (secureEnabled && repo !is LocalFileRepository) {
+                        _events.emit(BrowserEvent.Toast("Secure delete is only available for local files"))
+                    }
+                    repo.deleteFiles(paths)
+                        .onSuccess { c -> _events.emit(BrowserEvent.Toast("$c items deleted permanently")); clearSelection(); refresh() }
+                        .onFailure { e -> _events.emit(BrowserEvent.Toast("Delete failed: ${e.message}")) }
+                }
             }
         }
     }
