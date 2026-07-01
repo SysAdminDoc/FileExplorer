@@ -15,39 +15,38 @@ import java.nio.file.attribute.PosixFilePermission
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * FileRepository implementation using root shell (libsu) for
- * accessing restricted paths: /data, /system, /vendor, etc.
- */
 @Singleton
 class RootFileRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val rootHelper: RootHelper,
 ) : FileRepository {
 
+    private fun esc(s: String): String = "'" + s.replace("'", "'\\''") + "'"
+
     override fun listFiles(path: String): Flow<List<FileItem>> = flow {
+        val p = esc(path)
         val result = rootHelper.exec(
-            "ls -lAp --color=never '$path' 2>/dev/null || ls -la '$path' 2>/dev/null"
+            "ls -lAp --color=never $p 2>/dev/null || ls -la $p 2>/dev/null"
         )
         if (!result.isSuccess) {
             emit(emptyList())
             return@flow
         }
         val items = result.out
-            .drop(1) // Skip "total N" line
+            .drop(1)
             .filter { it.isNotBlank() }
             .mapNotNull { line -> parseLsLine(line, path) }
         emit(items)
     }.flowOn(Dispatchers.IO)
 
     override suspend fun getFileInfo(path: String): FileItem? = withContext(Dispatchers.IO) {
-        val result = rootHelper.exec("ls -ldA '$path' 2>/dev/null")
+        val result = rootHelper.exec("ls -ldA ${esc(path)} 2>/dev/null")
         if (!result.isSuccess || result.out.isEmpty()) return@withContext null
         parseLsLine(result.out.first(), path.substringBeforeLast('/'))
     }
 
     override suspend fun exists(path: String): Boolean = withContext(Dispatchers.IO) {
-        rootHelper.exec("test -e '$path'").isSuccess
+        rootHelper.exec("test -e ${esc(path)}").isSuccess
     }
 
     override suspend fun copyFiles(
@@ -58,16 +57,16 @@ class RootFileRepository @Inject constructor(
     ): Result<Int> = withContext(Dispatchers.IO) {
         var count = 0
         try {
+            val dest = esc(destination)
             for (src in sources) {
                 val name = src.substringAfterLast('/')
                 onProgress(0, 0, name)
-
                 val flags = when (conflictResolution) {
                     ConflictResolution.OVERWRITE -> "-rf"
                     ConflictResolution.SKIP -> "-n"
                     else -> "-rf"
                 }
-                val result = rootHelper.exec("cp $flags '$src' '$destination/'")
+                val result = rootHelper.exec("cp $flags ${esc(src)} $dest/")
                 if (result.isSuccess) count++
             }
             Result.success(count)
@@ -84,11 +83,12 @@ class RootFileRepository @Inject constructor(
     ): Result<Int> = withContext(Dispatchers.IO) {
         var count = 0
         try {
+            val dest = esc(destination)
             for (src in sources) {
                 val name = src.substringAfterLast('/')
                 onProgress(0, 0, name)
                 val flags = if (conflictResolution == ConflictResolution.OVERWRITE) "-f" else ""
-                val result = rootHelper.exec("mv $flags '$src' '$destination/'")
+                val result = rootHelper.exec("mv $flags ${esc(src)} $dest/")
                 if (result.isSuccess) count++
             }
             Result.success(count)
@@ -105,7 +105,7 @@ class RootFileRepository @Inject constructor(
         try {
             for (path in paths) {
                 onProgress(path.substringAfterLast('/'))
-                val result = rootHelper.exec("rm -rf '$path'")
+                val result = rootHelper.exec("rm -rf ${esc(path)}")
                 if (result.isSuccess) count++
             }
             Result.success(count)
@@ -115,7 +115,7 @@ class RootFileRepository @Inject constructor(
     }
 
     override suspend fun createDirectory(path: String): Result<FileItem> = withContext(Dispatchers.IO) {
-        val result = rootHelper.exec("mkdir -p '$path'")
+        val result = rootHelper.exec("mkdir -p ${esc(path)}")
         if (result.isSuccess) {
             getFileInfo(path)?.let { Result.success(it) }
                 ?: Result.failure(Exception("Created but cannot stat"))
@@ -125,7 +125,7 @@ class RootFileRepository @Inject constructor(
     }
 
     override suspend fun createFile(path: String): Result<FileItem> = withContext(Dispatchers.IO) {
-        val result = rootHelper.exec("touch '$path'")
+        val result = rootHelper.exec("touch ${esc(path)}")
         if (result.isSuccess) {
             getFileInfo(path)?.let { Result.success(it) }
                 ?: Result.failure(Exception("Created but cannot stat"))
@@ -137,7 +137,7 @@ class RootFileRepository @Inject constructor(
     override suspend fun rename(path: String, newName: String): Result<FileItem> = withContext(Dispatchers.IO) {
         val parent = path.substringBeforeLast('/')
         val target = "$parent/$newName"
-        val result = rootHelper.exec("mv '$path' '$target'")
+        val result = rootHelper.exec("mv ${esc(path)} ${esc(target)}")
         if (result.isSuccess) {
             getFileInfo(target)?.let { Result.success(it) }
                 ?: Result.failure(Exception("Renamed but cannot stat"))
@@ -149,7 +149,7 @@ class RootFileRepository @Inject constructor(
     override suspend fun calculateSize(paths: List<String>): Long = withContext(Dispatchers.IO) {
         var total = 0L
         for (path in paths) {
-            val result = rootHelper.exec("du -sb '$path' 2>/dev/null | tail -1")
+            val result = rootHelper.exec("du -sb ${esc(path)} 2>/dev/null | tail -1")
             if (result.isSuccess && result.out.isNotEmpty()) {
                 result.out.first().split("\\s+".toRegex()).firstOrNull()?.toLongOrNull()?.let {
                     total += it
@@ -165,10 +165,10 @@ class RootFileRepository @Inject constructor(
         regex: Boolean,
         includeHidden: Boolean,
     ): Flow<FileItem> = flow {
-        val namePattern = if (regex) "-regex '.*$query.*'" else "-iname '*$query*'"
+        val namePattern = if (regex) "-regex ${esc(".*$query.*")}" else "-iname ${esc("*$query*")}"
         val hiddenFilter = if (!includeHidden) "! -name '.*'" else ""
         val result = rootHelper.exec(
-            "find '$rootPath' -maxdepth 5 $namePattern $hiddenFilter 2>/dev/null | head -500"
+            "find ${esc(rootPath)} -maxdepth 5 $namePattern $hiddenFilter 2>/dev/null | head -500"
         )
         if (result.isSuccess) {
             for (line in result.out) {
@@ -186,29 +186,23 @@ class RootFileRepository @Inject constructor(
             "SHA-512", "SHA512" -> "sha512sum"
             else -> "sha256sum"
         }
-        val result = rootHelper.exec("$cmd '$path' 2>/dev/null")
+        val result = rootHelper.exec("$cmd ${esc(path)} 2>/dev/null")
         if (result.isSuccess && result.out.isNotEmpty()) {
             result.out.first().split("\\s+".toRegex()).firstOrNull() ?: ""
         } else ""
     }
 
-    // -- Additional root-specific operations --
-
-    /** Get SELinux context for a file. */
     suspend fun getSelinuxContext(path: String): String? = withContext(Dispatchers.IO) {
-        val result = rootHelper.exec("ls -Z '$path' 2>/dev/null")
+        val result = rootHelper.exec("ls -Z ${esc(path)} 2>/dev/null")
         if (result.isSuccess && result.out.isNotEmpty()) {
-            // Format: context filename
             result.out.first().split("\\s+".toRegex()).firstOrNull()
         } else null
     }
 
-    /** Get mount points. */
     suspend fun getMountPoints(): List<MountPoint> = withContext(Dispatchers.IO) {
         val result = rootHelper.exec("mount 2>/dev/null")
         if (!result.isSuccess) return@withContext emptyList()
         result.out.mapNotNull { line ->
-            // Format: device on /mount/point type filesystem (options)
             val parts = line.split(" on ", " type ")
             if (parts.size >= 3) {
                 val device = parts[0].trim()
@@ -221,26 +215,24 @@ class RootFileRepository @Inject constructor(
         }
     }
 
-    /** Remount a partition as read-write. */
     suspend fun remountRw(mountPoint: String): Boolean = withContext(Dispatchers.IO) {
-        rootHelper.exec("mount -o remount,rw '$mountPoint'").isSuccess
+        rootHelper.exec("mount -o remount,rw ${esc(mountPoint)}").isSuccess
     }
 
-    /** Remount a partition as read-only. */
     suspend fun remountRo(mountPoint: String): Boolean = withContext(Dispatchers.IO) {
-        rootHelper.exec("mount -o remount,ro '$mountPoint'").isSuccess
+        rootHelper.exec("mount -o remount,ro ${esc(mountPoint)}").isSuccess
     }
 
-    /** Change file permissions. */
     suspend fun chmod(path: String, mode: String, recursive: Boolean = false): Boolean = withContext(Dispatchers.IO) {
+        if (!mode.matches(Regex("[0-7]{3,4}"))) return@withContext false
         val flags = if (recursive) "-R" else ""
-        rootHelper.exec("chmod $flags $mode '$path'").isSuccess
+        rootHelper.exec("chmod $flags $mode ${esc(path)}").isSuccess
     }
 
-    /** Change file ownership. */
     suspend fun chown(path: String, owner: String, group: String, recursive: Boolean = false): Boolean = withContext(Dispatchers.IO) {
+        if (!owner.matches(Regex("[a-zA-Z0-9._-]+")) || !group.matches(Regex("[a-zA-Z0-9._-]+"))) return@withContext false
         val flags = if (recursive) "-R" else ""
-        rootHelper.exec("chown $flags $owner:$group '$path'").isSuccess
+        rootHelper.exec("chown $flags $owner:$group ${esc(path)}").isSuccess
     }
 
     // -- ls -l parser --
