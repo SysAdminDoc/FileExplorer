@@ -226,36 +226,6 @@ class LocalFileRepository @Inject constructor(
         query: String,
         regex: Boolean,
         includeHidden: Boolean,
-    ): Flow<FileItem> = flow<FileItem> {
-        val root = Paths.get(rootPath)
-        val pattern = if (regex) Regex(query, RegexOption.IGNORE_CASE) else null
-
-        Files.walkFileTree(root, object : SimpleFileVisitor<Path>() {
-            override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
-                val name = file.fileName.toString()
-                if (!includeHidden && name.startsWith(".")) return FileVisitResult.CONTINUE
-                val matches = if (pattern != null) pattern.containsMatchIn(name)
-                else name.contains(query, ignoreCase = true)
-                if (matches) {
-                    // walkFileTree visitor can't emit - this search uses non-streaming approach
-                }
-                return FileVisitResult.CONTINUE
-            }
-
-            override fun preVisitDirectory(dir: Path, attrs: BasicFileAttributes): FileVisitResult {
-                val name = dir.fileName?.toString() ?: return FileVisitResult.CONTINUE
-                if (!includeHidden && name.startsWith(".")) return FileVisitResult.SKIP_SUBTREE
-                return FileVisitResult.CONTINUE
-            }
-        })
-    }.flowOn(Dispatchers.IO)
-
-    // Proper streaming search using manual recursion
-    fun searchStreaming(
-        rootPath: String,
-        query: String,
-        regex: Boolean = false,
-        includeHidden: Boolean = false,
     ): Flow<FileItem> = flow {
         val root = Paths.get(rootPath)
         val pattern = if (regex) Regex(query, RegexOption.IGNORE_CASE) else null
@@ -280,6 +250,13 @@ class LocalFileRepository @Inject constructor(
             } catch (_: AccessDeniedException) { /* skip inaccessible dirs */ }
         }
     }.flowOn(Dispatchers.IO)
+
+    fun searchStreaming(
+        rootPath: String,
+        query: String,
+        regex: Boolean = false,
+        includeHidden: Boolean = false,
+    ): Flow<FileItem> = search(rootPath, query, regex, includeHidden)
 
     override suspend fun getChecksum(path: String, algorithm: String): String = withContext(Dispatchers.IO) {
         val digest = MessageDigest.getInstance(algorithm)
