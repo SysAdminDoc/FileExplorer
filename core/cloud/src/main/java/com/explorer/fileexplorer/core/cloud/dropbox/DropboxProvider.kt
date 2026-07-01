@@ -7,6 +7,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import com.explorer.fileexplorer.core.cloud.CloudAccount
 import com.explorer.fileexplorer.core.cloud.CloudProvider
 import com.explorer.fileexplorer.core.cloud.CloudService
+import com.explorer.fileexplorer.core.cloud.StreamingFileBody
 import com.explorer.fileexplorer.core.model.FileItem
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -147,10 +148,9 @@ class DropboxProvider @Inject constructor(
                 .header("Authorization", "Bearer ${account.accessToken}")
                 .header("Dropbox-API-Arg", arg.toString())
                 .header("Content-Type", "application/octet-stream")
-                .post(file.readBytes().toRequestBody("application/octet-stream".toMediaType())).build()
+                .post(StreamingFileBody(file, "application/octet-stream".toMediaType(), onProgress)).build()
             val response = client.newCall(request).execute()
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
-            onProgress(file.length(), file.length())
             Result.success(FileItem(
                 name = json.get("name")?.asString ?: file.name,
                 path = json.get("path_lower")?.asString ?: "",

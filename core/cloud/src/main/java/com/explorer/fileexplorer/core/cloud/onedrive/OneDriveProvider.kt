@@ -5,6 +5,7 @@ import android.content.Intent
 import com.explorer.fileexplorer.core.cloud.CloudAccount
 import com.explorer.fileexplorer.core.cloud.CloudProvider
 import com.explorer.fileexplorer.core.cloud.CloudService
+import com.explorer.fileexplorer.core.cloud.StreamingFileBody
 import com.explorer.fileexplorer.core.model.FileItem
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -121,10 +122,9 @@ class OneDriveProvider @Inject constructor(
             val url = "$graphBase/me/drive/items/$parent:/${file.name}:/content"
             val request = Request.Builder().url(url)
                 .header("Authorization", "Bearer ${account.accessToken}")
-                .put(file.readBytes().toRequestBody("application/octet-stream".toMediaType())).build()
+                .put(StreamingFileBody(file, "application/octet-stream".toMediaType(), onProgress)).build()
             val response = client.newCall(request).execute()
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
-            onProgress(file.length(), file.length())
             Result.success(FileItem(
                 name = json.get("name")?.asString ?: file.name,
                 path = json.get("id")?.asString ?: "", size = file.length(),
