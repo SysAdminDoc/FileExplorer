@@ -136,6 +136,13 @@ class TransferService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        _currentTask.value = _currentTask.value?.copy(state = TransferState.FAILED)
+        updateNotification("Operation timed out by system", -1f)
+        currentJob?.cancel()
+        stopSelf(startId)
+    }
+
     override fun onDestroy() {
         currentJob?.cancel()
         scope.cancel()
