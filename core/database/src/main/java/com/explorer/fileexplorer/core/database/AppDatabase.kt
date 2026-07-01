@@ -19,7 +19,7 @@ import javax.inject.Singleton
         ConnectionEntity::class,
     ],
     version = 2,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun bookmarkDao(): BookmarkDao
@@ -39,7 +39,7 @@ object DatabaseModule {
             context,
             AppDatabase::class.java,
             "file_explorer.db"
-        ).fallbackToDestructiveMigration().build()
+        ).build()
     }
 
     @Provides fun provideBookmarkDao(db: AppDatabase): BookmarkDao = db.bookmarkDao()
