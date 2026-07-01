@@ -147,10 +147,33 @@ class VaultManager @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
     private val vaultDir: File get() = File(context.filesDir, ".vault")
+    private companion object {
+        const val KEYSTORE_ALIAS = "file_explorer_vault"
+        const val IV_SIZE = 12
+        const val BUFFER_SIZE = 65536
+    }
+
+    private fun getOrCreateKey(): javax.crypto.SecretKey {
+        val ks = java.security.KeyStore.getInstance("AndroidKeyStore")
+        ks.load(null)
+        ks.getKey(KEYSTORE_ALIAS, null)?.let { return it as javax.crypto.SecretKey }
+        val spec = android.security.keystore.KeyGenParameterSpec.Builder(
+            KEYSTORE_ALIAS,
+            android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or android.security.keystore.KeyProperties.PURPOSE_DECRYPT
+        )
+            .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setKeySize(256)
+            .build()
+        val keygen = javax.crypto.KeyGenerator.getInstance(
+            android.security.keystore.KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore"
+        )
+        keygen.init(spec)
+        return keygen.generateKey()
+    }
 
     fun getVaultPath(): String {
         vaultDir.mkdirs()
-        // Set directory permissions to owner-only
         vaultDir.setReadable(false, false)
         vaultDir.setReadable(true, true)
         vaultDir.setWritable(false, false)
@@ -160,36 +183,70 @@ class VaultManager @Inject constructor(
         return vaultDir.absolutePath
     }
 
-    /** Move a file into the vault. */
     suspend fun lockFile(sourcePath: String): Result<String> = withContext(Dispatchers.IO) {
         try {
             val source = File(sourcePath)
-            val dest = File(getVaultPath(), source.name)
+            if (!source.exists()) return@withContext Result.failure(Exception("Source not found"))
+            val encName = source.name + ".enc"
+            var dest = File(getVaultPath(), encName)
             if (dest.exists()) {
-                // Auto-rename
                 var counter = 1
-                var newDest = File(getVaultPath(), "${source.nameWithoutExtension} ($counter).${source.extension}")
-                while (newDest.exists()) { counter++; newDest = File(getVaultPath(), "${source.nameWithoutExtension} ($counter).${source.extension}") }
-                source.renameTo(newDest)
-                Result.success(newDest.absolutePath)
-            } else {
-                source.renameTo(dest)
-                Result.success(dest.absolutePath)
+                while (dest.exists()) {
+                    dest = File(getVaultPath(), "${source.nameWithoutExtension} ($counter).${source.extension}.enc")
+                    counter++
+                }
             }
-        } catch (e: Exception) { Result.failure(e) }
-    }
-
-    /** Move a file out of the vault. */
-    suspend fun unlockFile(vaultPath: String, destinationDir: String): Result<String> = withContext(Dispatchers.IO) {
-        try {
-            val source = File(vaultPath)
-            val dest = File(destinationDir, source.name)
-            source.renameTo(dest)
+            val key = getOrCreateKey()
+            val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, key)
+            val iv = cipher.iv
+            dest.outputStream().buffered().use { out ->
+                out.write(iv)
+                source.inputStream().buffered().use { input ->
+                    val buf = ByteArray(BUFFER_SIZE)
+                    var len: Int
+                    while (input.read(buf).also { len = it } != -1) {
+                        out.write(cipher.update(buf, 0, len) ?: ByteArray(0))
+                    }
+                    out.write(cipher.doFinal())
+                }
+            }
+            source.delete()
             Result.success(dest.absolutePath)
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    /** List files in the vault. */
+    suspend fun unlockFile(vaultPath: String, destinationDir: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val source = File(vaultPath)
+            if (!source.exists()) return@withContext Result.failure(Exception("Vault file not found"))
+            val originalName = if (source.name.endsWith(".enc")) source.name.removeSuffix(".enc") else source.name
+            val dest = File(destinationDir, originalName)
+            val key = getOrCreateKey()
+            source.inputStream().buffered().use { input ->
+                val iv = ByteArray(IV_SIZE)
+                var read = 0
+                while (read < IV_SIZE) {
+                    val n = input.read(iv, read, IV_SIZE - read)
+                    if (n < 0) return@withContext Result.failure(Exception("Truncated vault file"))
+                    read += n
+                }
+                val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+                cipher.init(javax.crypto.Cipher.DECRYPT_MODE, key, javax.crypto.spec.GCMParameterSpec(128, iv))
+                dest.outputStream().buffered().use { out ->
+                    val buf = ByteArray(BUFFER_SIZE)
+                    var len: Int
+                    while (input.read(buf).also { len = it } != -1) {
+                        out.write(cipher.update(buf, 0, len) ?: ByteArray(0))
+                    }
+                    out.write(cipher.doFinal())
+                }
+            }
+            source.delete()
+            Result.success(dest.absolutePath)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
     fun listVaultFiles(): List<File> {
         return vaultDir.listFiles()?.toList() ?: emptyList()
     }
@@ -348,7 +405,7 @@ fun SecurityScreen(
                 ListItem(
                     headlineContent = { Text("Security Model") },
                     supportingContent = {
-                        Text("Vault files stored in app-private directory with owner-only permissions. " +
+                        Text("Vault files are AES-256-GCM encrypted with Android Keystore-backed keys. " +
                                 "Secure delete uses DoD 5220.22-M 3-pass overwrite. " +
                                 "Checksums computed using java.security.MessageDigest.")
                     },
