@@ -39,11 +39,11 @@ cd FileExplorer
 | FTP/FTPS | File transfer via Apache Commons Net 3.13.0 with TLS toggle | Complete |
 | WebDAV | HTTP/HTTPS via sardine-android 0.9 with server-side copy/move | Complete |
 | Connection Manager | Save, edit, test network connections with Android Keystore-encrypted passwords. Remote file browser | Complete |
-| Google Drive | REST API v3. Browse, upload, download, delete, rename, quota display | Complete |
-| Dropbox | HTTP API v2. Browse, upload, download, folder operations | Complete |
-| OneDrive | Microsoft Graph API. Full file operations, quota tracking | Complete |
+| Google Drive | REST API v3. Browse, upload, download, delete, rename, quota display | Requires configuration |
+| Dropbox | HTTP API v2. Browse, upload, download, folder operations | Requires configuration |
+| OneDrive | Microsoft Graph API. Full file operations, quota tracking | Requires configuration |
 | Biometric Lock | Fingerprint/face/device credential via AndroidX Biometric | Complete |
-| Encrypted Vault | App-private storage with owner-only permissions | Complete |
+| Encrypted Vault | AES-256-GCM encrypted storage with Android Keystore-backed keys | Complete |
 | Secure Delete | DoD 5220.22-M 3-pass overwrite before deletion | Complete |
 | Checksum Verify | MD5, SHA-1, SHA-256, SHA-512 via java.security.MessageDigest | Complete |
 | Text Editor | Built-in editor with syntax highlighting, line numbers, find/replace, undo/redo | Complete |
