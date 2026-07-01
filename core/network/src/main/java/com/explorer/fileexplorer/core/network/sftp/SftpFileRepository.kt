@@ -23,6 +23,7 @@ import javax.inject.Inject
 
 class SftpFileRepository @Inject constructor(
     private val knownHostsStore: SftpKnownHostsStore,
+    private val diagnosticLog: com.explorer.fileexplorer.core.data.DiagnosticLog,
 ) : NetworkFileRepository {
 
     private var ssh: SSHClient? = null
@@ -58,6 +59,7 @@ class SftpFileRepository @Inject constructor(
             currentConnection = connection
             Result.success(Unit)
         } catch (e: Exception) {
+            diagnosticLog.log("SFTP", "connect", e, "${connection.host}:${connection.port}")
             disconnect()
             Result.failure(e)
         }

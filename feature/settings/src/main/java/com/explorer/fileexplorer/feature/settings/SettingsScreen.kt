@@ -92,6 +92,7 @@ class SettingsRepository @Inject constructor(
 class SettingsViewModel @Inject constructor(
     private val repo: SettingsRepository,
     private val backupManager: com.explorer.fileexplorer.core.data.BackupManager,
+    private val diagnosticLog: com.explorer.fileexplorer.core.data.DiagnosticLog,
 ) : ViewModel() {
     val state = repo.settings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsState())
 
@@ -117,6 +118,22 @@ class SettingsViewModel @Inject constructor(
             backupManager.importFromStream(input)
                 .onSuccess { s -> _toasts.emit("Imported ${s.bookmarks} bookmarks, ${s.connections} connections") }
                 .onFailure { e -> _toasts.emit("Import failed: ${e.message}") }
+        }
+    }
+
+    fun shareDiagnosticLog(context: android.content.Context) {
+        viewModelScope.launch {
+            val text = diagnosticLog.exportToString()
+            if (text.lines().size <= 4) {
+                _toasts.emit("No diagnostic entries to export")
+                return@launch
+            }
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(android.content.Intent.EXTRA_TEXT, text)
+                putExtra(android.content.Intent.EXTRA_SUBJECT, "FileExplorer Diagnostic Log")
+            }
+            context.startActivity(android.content.Intent.createChooser(intent, "Share diagnostic log"))
         }
     }
 }
@@ -250,6 +267,13 @@ fun SettingsScreen(
                 supportingContent = { Text("Restore from a previously exported backup") },
                 leadingContent = { Icon(Icons.Filled.FileDownload, null) },
                 modifier = Modifier.clickable { importLauncher.launch(arrayOf("application/json")) },
+            )
+
+            ListItem(
+                headlineContent = { Text("Export diagnostic log") },
+                supportingContent = { Text("Share error logs for troubleshooting") },
+                leadingContent = { Icon(Icons.Filled.FileUpload, null) },
+                modifier = Modifier.clickable { viewModel.shareDiagnosticLog(appContext) },
             )
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))

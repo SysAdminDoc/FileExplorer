@@ -23,6 +23,7 @@ class ConnectionManager @Inject constructor(
     private val connectionDao: ConnectionDao,
     private val credentialCipher: CredentialCipher,
     private val sftpKnownHostsStore: SftpKnownHostsStore,
+    private val diagnosticLog: com.explorer.fileexplorer.core.data.DiagnosticLog,
 ) {
     private val _activeConnections = MutableStateFlow<Map<Long, ActiveConnection>>(emptyMap())
     val activeConnections: StateFlow<Map<Long, ActiveConnection>> = _activeConnections.asStateFlow()
@@ -98,7 +99,7 @@ class ConnectionManager @Inject constructor(
     private fun createRepository(protocol: Protocol): NetworkFileRepository {
         return when (protocol) {
             Protocol.SMB -> SmbFileRepository()
-            Protocol.SFTP -> SftpFileRepository(sftpKnownHostsStore)
+            Protocol.SFTP -> SftpFileRepository(sftpKnownHostsStore, diagnosticLog)
             Protocol.FTP, Protocol.FTPS -> FtpFileRepository()
             Protocol.WEBDAV -> WebDavFileRepository()
         }
