@@ -147,6 +147,19 @@ OLED remains available as the high-contrast AMOLED option, while System follows 
 - Device or emulator running Android 8.0+ (API 26)
 - Rooted device for root features (optional)
 
+## Permissions
+
+| Permission | Why |
+|-----------|-----|
+| `MANAGE_EXTERNAL_STORAGE` | Browse files outside app-private directories — core function of a file manager |
+| `QUERY_ALL_PACKAGES` | App Manager: list, search, sort, and share APKs for all installed apps |
+| `INTERNET` + `ACCESS_NETWORK_STATE` | SMB/SFTP/FTP/WebDAV and cloud provider connectivity |
+| `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC` | Long-running copy/move/delete with progress notification |
+| `POST_NOTIFICATIONS` | Transfer progress and completion notifications |
+| `READ_MEDIA_*` | Android 13+ granular media access |
+
+Backup rules exclude the Room database (contains Keystore-encrypted network credentials), security preferences, and vault files from Android cloud backup.
+
 ## FAQ
 
 **Q: Why does it need All Files Access?**

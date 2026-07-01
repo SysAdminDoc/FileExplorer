@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="database" path="file_explorer.db" />
+        <exclude domain="database" path="file_explorer.db-wal" />
+        <exclude domain="database" path="file_explorer.db-shm" />
+        <exclude domain="root" path="datastore/security_prefs.preferences_pb" />
+        <exclude domain="root" path="files/.vault/" />
+    </cloud-backup>
+</data-extraction-rules>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <exclude domain="database" path="file_explorer.db" />
+    <exclude domain="database" path="file_explorer.db-wal" />
+    <exclude domain="database" path="file_explorer.db-shm" />
+    <exclude domain="sharedpref" path="security_prefs.preferences_pb" />
+    <exclude domain="file" path=".vault/" />
+</full-backup-content>
