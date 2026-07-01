@@ -1,10 +1,16 @@
 package com.explorer.fileexplorer.feature.settings
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -85,8 +91,12 @@ class SettingsRepository @Inject constructor(
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val repo: SettingsRepository,
+    private val backupManager: com.explorer.fileexplorer.core.data.BackupManager,
 ) : ViewModel() {
     val state = repo.settings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsState())
+
+    private val _toasts = kotlinx.coroutines.flow.MutableSharedFlow<String>()
+    val toasts: kotlinx.coroutines.flow.SharedFlow<String> = _toasts.asSharedFlow()
 
     fun toggleShowHidden() { viewModelScope.launch { repo.update(SettingsKeys.SHOW_HIDDEN, !state.value.showHidden) } }
     fun toggleFoldersFirst() { viewModelScope.launch { repo.update(SettingsKeys.FOLDERS_FIRST, !state.value.foldersFirst) } }
@@ -94,6 +104,21 @@ class SettingsViewModel @Inject constructor(
     fun setThemeMode(mode: ThemeMode) { viewModelScope.launch { repo.update(SettingsKeys.THEME_MODE, mode.name) } }
     fun setTrashTtlDays(days: Int) { viewModelScope.launch { repo.update(SettingsKeys.TRASH_TTL_DAYS, days) } }
     fun toggleCompactDensity() { viewModelScope.launch { repo.update(SettingsKeys.COMPACT_DENSITY, !state.value.compactDensity) } }
+
+    fun exportBackup(out: java.io.OutputStream) {
+        viewModelScope.launch {
+            backupManager.exportToStream(out)
+            _toasts.emit("Backup exported")
+        }
+    }
+
+    fun importBackup(input: java.io.InputStream) {
+        viewModelScope.launch {
+            backupManager.importFromStream(input)
+                .onSuccess { s -> _toasts.emit("Imported ${s.bookmarks} bookmarks, ${s.connections} connections") }
+                .onFailure { e -> _toasts.emit("Import failed: ${e.message}") }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -103,6 +128,9 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val appContext = LocalContext.current
+
+    LaunchedEffect(Unit) { viewModel.toasts.collect { Toast.makeText(appContext, it, Toast.LENGTH_SHORT).show() } }
 
     Scaffold(
         topBar = {
@@ -189,6 +217,43 @@ fun SettingsScreen(
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
+            // Backup
+            Text(
+                text = "BACKUP",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            )
+
+            val cr = appContext.contentResolver
+            val exportLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.CreateDocument("application/json"),
+            ) { uri ->
+                uri?.let { cr.openOutputStream(it)?.use { out -> viewModel.exportBackup(out) } }
+            }
+
+            val importLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.OpenDocument(),
+            ) { uri ->
+                uri?.let { cr.openInputStream(it)?.use { input -> viewModel.importBackup(input) } }
+            }
+
+            ListItem(
+                headlineContent = { Text("Export bookmarks") },
+                supportingContent = { Text("Save bookmarks and settings to a JSON file") },
+                leadingContent = { Icon(Icons.Filled.FileUpload, null) },
+                modifier = Modifier.clickable { exportLauncher.launch("fileexplorer-backup.json") },
+            )
+
+            ListItem(
+                headlineContent = { Text("Import bookmarks") },
+                supportingContent = { Text("Restore from a previously exported backup") },
+                leadingContent = { Icon(Icons.Filled.FileDownload, null) },
+                modifier = Modifier.clickable { importLauncher.launch(arrayOf("application/json")) },
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
             // About
             Text(
                 text = "ABOUT",
@@ -199,7 +264,7 @@ fun SettingsScreen(
 
             ListItem(
                 headlineContent = { Text("Version") },
-                supportingContent = { Text("1.3.3") },
+                supportingContent = { Text("1.4.0") },
             )
         }
     }
