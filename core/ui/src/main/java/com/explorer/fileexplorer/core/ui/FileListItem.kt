@@ -24,6 +24,7 @@ fun FileListItem(
     item: FileItem,
     isSelected: Boolean = false,
     selectionMode: Boolean = false,
+    compact: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -44,11 +45,11 @@ fun FileListItem(
                     onClick = onClick,
                     onLongClick = onLongClick,
                 )
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 16.dp, vertical = if (compact) 4.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Selection indicator or file icon
-            Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.size(if (compact) 32.dp else 40.dp), contentAlignment = Alignment.Center) {
                 if (selectionMode && isSelected) {
                     Icon(
                         imageVector = Icons.Filled.CheckCircle,

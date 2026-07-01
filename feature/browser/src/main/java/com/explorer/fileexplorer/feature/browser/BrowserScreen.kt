@@ -193,6 +193,7 @@ fun BrowserScreen(
                             items(items = state.files, key = { it.path }) { item ->
                                 FileListItem(item = item, isSelected = item.path in state.selectedItems,
                                     selectionMode = state.selectionMode,
+                                    compact = state.compactDensity,
                                     onClick = { viewModel.onItemClick(item) },
                                     onLongClick = { viewModel.onItemLongClick(item) })
                             }

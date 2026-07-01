@@ -51,6 +51,7 @@ data class BrowserUiState(
     val archiveInternalPath: String = "",
     val showCompressDialog: Boolean = false,
     val showExtractDialog: Boolean = false,
+    val compactDensity: Boolean = false,
 ) {
     val selectionMode: Boolean get() = selectedItems.isNotEmpty()
     val selectedCount: Int get() = selectedItems.size
@@ -93,8 +94,17 @@ class BrowserViewModel @Inject constructor(
         loadVolumes()
         observeBookmarks()
         observeRootState()
+        observeSettings()
         initializeRoot()
         navigateTo(_state.value.currentPath)
+    }
+
+    private fun observeSettings() {
+        viewModelScope.launch {
+            settingsRepository.settings.collect { s ->
+                _state.update { it.copy(compactDensity = s.compactDensity) }
+            }
+        }
     }
 
     private fun initializeRoot() {

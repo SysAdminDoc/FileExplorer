@@ -40,6 +40,7 @@ object SettingsKeys {
     val THUMBNAIL_SIZE = intPreferencesKey("thumbnail_size")
     val THEME_MODE = stringPreferencesKey("theme_mode")
     val TRASH_TTL_DAYS = intPreferencesKey("trash_ttl_days")
+    val COMPACT_DENSITY = booleanPreferencesKey("compact_density")
 }
 
 data class SettingsState(
@@ -52,6 +53,7 @@ data class SettingsState(
     val thumbnailSize: Int = 48,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val trashTtlDays: Int = LocalTrashManager.DEFAULT_TTL_DAYS,
+    val compactDensity: Boolean = false,
 )
 
 @Singleton
@@ -71,6 +73,7 @@ class SettingsRepository @Inject constructor(
             thumbnailSize = prefs[SettingsKeys.THUMBNAIL_SIZE] ?: 48,
             themeMode = ThemeMode.fromKey(prefs[SettingsKeys.THEME_MODE]),
             trashTtlDays = prefs[SettingsKeys.TRASH_TTL_DAYS] ?: LocalTrashManager.DEFAULT_TTL_DAYS,
+            compactDensity = prefs[SettingsKeys.COMPACT_DENSITY] ?: false,
         )
     }
 
@@ -90,6 +93,7 @@ class SettingsViewModel @Inject constructor(
     fun toggleConfirmDelete() { viewModelScope.launch { repo.update(SettingsKeys.CONFIRM_DELETE, !state.value.confirmDelete) } }
     fun setThemeMode(mode: ThemeMode) { viewModelScope.launch { repo.update(SettingsKeys.THEME_MODE, mode.name) } }
     fun setTrashTtlDays(days: Int) { viewModelScope.launch { repo.update(SettingsKeys.TRASH_TTL_DAYS, days) } }
+    fun toggleCompactDensity() { viewModelScope.launch { repo.update(SettingsKeys.COMPACT_DENSITY, !state.value.compactDensity) } }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -152,6 +156,13 @@ fun SettingsScreen(
                 subtitle = "Always show folders before files",
                 checked = state.foldersFirst,
                 onToggle = viewModel::toggleFoldersFirst,
+            )
+
+            SettingsToggle(
+                title = "Compact density",
+                subtitle = "Reduce spacing for more visible files per screen",
+                checked = state.compactDensity,
+                onToggle = viewModel::toggleCompactDensity,
             )
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
