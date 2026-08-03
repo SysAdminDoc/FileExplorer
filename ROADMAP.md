@@ -58,14 +58,6 @@ For operations exceeding 6 hours, consider chunking or using WorkManager.
 
 ## Next (v1.5.0 -- v1.7.0)
 
-### X-02: Tabbed browsing
-Multiple tabs per pane, long-press to reorder, swipe to close. MiXplorer offers unlimited tabs.
-Amaze has multi-tab. Material Files does not. Users repeatedly cite tabs as essential for
-productivity alongside dual-pane.
-
-- **Impact:** 4/5. **Effort:** 3/5.
-- **Source:** Reddit r/androidapps; MiXplorer feature list; Amaze multi-tab.
-
 ### X-03: Storage analyzer with duplicate finder
 Recursive size treemap (DiskUsage-style) with drill-down, duplicate finder, and big-file list.
 Expected in any modern Android file manager. Solid Explorer, X-plore, and Files by Google all

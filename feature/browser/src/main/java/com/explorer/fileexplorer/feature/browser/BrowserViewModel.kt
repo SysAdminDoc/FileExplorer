@@ -26,6 +26,11 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+data class BrowserTab(
+    val id: Long,
+    val path: String,
+)
+
 data class BrowserUiState(
     val currentPath: String = Environment.getExternalStorageDirectory().absolutePath,
     val files: List<FileItem> = emptyList(),
@@ -59,6 +64,14 @@ data class BrowserUiState(
     val secondaryError: String? = null,
     val secondarySelectedItems: Set<String> = emptySet(),
     val pendingDrop: PendingDrop? = null,
+    val tabs: List<BrowserTab> = listOf(
+        BrowserTab(1L, Environment.getExternalStorageDirectory().absolutePath),
+    ),
+    val selectedTabIndex: Int = 0,
+    val secondaryTabs: List<BrowserTab> = listOf(
+        BrowserTab(2L, Environment.getExternalStorageDirectory().absolutePath),
+    ),
+    val secondarySelectedTabIndex: Int = 0,
 ) {
     val selectionMode: Boolean get() = selectedItems.isNotEmpty()
     val selectedCount: Int get() = selectedItems.size
@@ -101,6 +114,8 @@ class BrowserViewModel @Inject constructor(
     private val bookmarkDao: BookmarkDao,
     private val recentFileDao: RecentFileDao,
 ) : ViewModel() {
+
+    private var nextTabId = 3L
 
     private val _state = MutableStateFlow(BrowserUiState())
     val state: StateFlow<BrowserUiState> = _state.asStateFlow()
@@ -149,7 +164,14 @@ class BrowserViewModel @Inject constructor(
 
     fun navigateTo(path: String) {
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true, error = null, selectedItems = emptySet()) }
+            _state.update {
+                it.copy(
+                    isLoading = true,
+                    error = null,
+                    selectedItems = emptySet(),
+                    tabs = updateTabPath(it.tabs, it.selectedTabIndex, path),
+                )
+            }
             val repo = repoFactory.getRepository(path)
             repo.listFiles(path).collect { files ->
                 val sorted = sortFiles(files, _state.value.sortOrder, _state.value.showHidden)
@@ -196,7 +218,16 @@ class BrowserViewModel @Inject constructor(
         if (!_state.value.dualPaneEnabled) return
         viewModelScope.launch {
             _state.update {
-                it.copy(secondaryIsLoading = true, secondaryError = null, secondarySelectedItems = emptySet())
+                it.copy(
+                    secondaryIsLoading = true,
+                    secondaryError = null,
+                    secondarySelectedItems = emptySet(),
+                    secondaryTabs = updateTabPath(
+                        it.secondaryTabs,
+                        it.secondarySelectedTabIndex,
+                        path,
+                    ),
+                )
             }
             try {
                 repoFactory.getRepository(path).listFiles(path).collect { files ->
@@ -225,6 +256,93 @@ class BrowserViewModel @Inject constructor(
 
     fun refreshSecondary() {
         navigateSecondaryTo(_state.value.secondaryPath)
+    }
+
+    fun openTab(pane: BrowserPane) {
+        val state = _state.value
+        val path = if (pane == BrowserPane.PRIMARY) state.currentPath else state.secondaryPath
+        val tab = BrowserTab(nextTabId++, path)
+        if (pane == BrowserPane.PRIMARY) {
+            _state.update { it.copy(tabs = it.tabs + tab, selectedTabIndex = it.tabs.size) }
+            navigateTo(path)
+        } else {
+            _state.update {
+                it.copy(
+                    secondaryTabs = it.secondaryTabs + tab,
+                    secondarySelectedTabIndex = it.secondaryTabs.size,
+                )
+            }
+            navigateSecondaryTo(path)
+        }
+    }
+
+    fun selectTab(pane: BrowserPane, index: Int) {
+        val state = _state.value
+        if (pane == BrowserPane.PRIMARY) {
+            val tab = state.tabs.getOrNull(index) ?: return
+            if (index == state.selectedTabIndex) return
+            _state.update { it.copy(selectedTabIndex = index) }
+            navigateTo(tab.path)
+        } else {
+            val tab = state.secondaryTabs.getOrNull(index) ?: return
+            if (index == state.secondarySelectedTabIndex) return
+            _state.update { it.copy(secondarySelectedTabIndex = index) }
+            navigateSecondaryTo(tab.path)
+        }
+    }
+
+    fun closeTab(pane: BrowserPane, index: Int) {
+        val state = _state.value
+        if (pane == BrowserPane.PRIMARY) {
+            if (state.tabs.size <= 1 || state.tabs.getOrNull(index) == null) return
+            val tabs = state.tabs.toMutableList().apply { removeAt(index) }
+            val selected = TabIndexPolicy.selectedIndexAfterClose(state.selectedTabIndex, index, tabs.lastIndex)
+            _state.update { it.copy(tabs = tabs, selectedTabIndex = selected) }
+            if (index == state.selectedTabIndex) navigateTo(tabs[selected].path)
+        } else {
+            if (state.secondaryTabs.size <= 1 || state.secondaryTabs.getOrNull(index) == null) return
+            val tabs = state.secondaryTabs.toMutableList().apply { removeAt(index) }
+            val selected = TabIndexPolicy.selectedIndexAfterClose(
+                state.secondarySelectedTabIndex,
+                index,
+                tabs.lastIndex,
+            )
+            _state.update { it.copy(secondaryTabs = tabs, secondarySelectedTabIndex = selected) }
+            if (index == state.secondarySelectedTabIndex) navigateSecondaryTo(tabs[selected].path)
+        }
+    }
+
+    fun reorderTabs(pane: BrowserPane, fromIndex: Int, toIndex: Int) {
+        if (fromIndex == toIndex) return
+        _state.update { state ->
+            if (pane == BrowserPane.PRIMARY) {
+                val tabs = state.tabs.toMutableList()
+                if (fromIndex !in tabs.indices || toIndex !in tabs.indices) return@update state
+                val tab = tabs.removeAt(fromIndex)
+                tabs.add(toIndex, tab)
+                state.copy(
+                    tabs = tabs,
+                    selectedTabIndex = TabIndexPolicy.moveSelectedIndex(
+                        state.selectedTabIndex,
+                        fromIndex,
+                        toIndex,
+                    ),
+                )
+            } else {
+                val tabs = state.secondaryTabs.toMutableList()
+                if (fromIndex !in tabs.indices || toIndex !in tabs.indices) return@update state
+                val tab = tabs.removeAt(fromIndex)
+                tabs.add(toIndex, tab)
+                state.copy(
+                    secondaryTabs = tabs,
+                    secondarySelectedTabIndex = TabIndexPolicy.moveSelectedIndex(
+                        state.secondarySelectedTabIndex,
+                        fromIndex,
+                        toIndex,
+                    ),
+                )
+            }
+        }
     }
 
     fun onSecondaryItemClick(item: FileItem) {
@@ -556,6 +674,12 @@ class BrowserViewModel @Inject constructor(
             else it.copy(secondarySelectedItems = emptySet())
         }
     }
+
+    private fun updateTabPath(tabs: List<BrowserTab>, selectedIndex: Int, path: String): List<BrowserTab> {
+        val tab = tabs.getOrNull(selectedIndex) ?: return tabs
+        return tabs.toMutableList().apply { set(selectedIndex, tab.copy(path = path)) }
+    }
+
 
     private fun loadVolumes() { _state.update { it.copy(volumes = storageVolumeHelper.getStorageVolumes()) } }
     private fun trashVolumeRoots(): List<String> = storageVolumeHelper.getStorageVolumes().map { it.path }.distinct()

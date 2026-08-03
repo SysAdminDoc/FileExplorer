@@ -163,6 +163,14 @@ fun BrowserScreen(
                 }
 
                 if (!state.dualPaneEnabled) {
+                    BrowserTabsBar(
+                        tabs = state.tabs,
+                        selectedIndex = state.selectedTabIndex,
+                        onSelect = { viewModel.selectTab(BrowserPane.PRIMARY, it) },
+                        onClose = { viewModel.closeTab(BrowserPane.PRIMARY, it) },
+                        onAdd = { viewModel.openTab(BrowserPane.PRIMARY) },
+                        onReorder = { from, to -> viewModel.reorderTabs(BrowserPane.PRIMARY, from, to) },
+                    )
                     // Breadcrumb
                     BreadcrumbBar(currentPath = state.currentPath, onNavigate = viewModel::navigateTo)
                 }
@@ -200,6 +208,10 @@ fun BrowserScreen(
                         onSecondaryNavigateUp = viewModel::navigateSecondaryUp,
                         onPrimaryRefresh = viewModel::refresh,
                         onSecondaryRefresh = viewModel::refreshSecondary,
+                        onSelectTab = viewModel::selectTab,
+                        onCloseTab = viewModel::closeTab,
+                        onAddTab = viewModel::openTab,
+                        onReorderTabs = viewModel::reorderTabs,
                         onRequestDrop = viewModel::requestDrop,
                     )
                 } else {

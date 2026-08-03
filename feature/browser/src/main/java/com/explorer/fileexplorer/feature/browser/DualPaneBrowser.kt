@@ -40,6 +40,10 @@ internal fun DualPaneContent(
     onSecondaryNavigateUp: () -> Unit,
     onPrimaryRefresh: () -> Unit,
     onSecondaryRefresh: () -> Unit,
+    onSelectTab: (BrowserPane, Int) -> Unit,
+    onCloseTab: (BrowserPane, Int) -> Unit,
+    onAddTab: (BrowserPane) -> Unit,
+    onReorderTabs: (BrowserPane, Int, Int) -> Unit,
     onRequestDrop: (List<FileItem>, String, BrowserPane, BrowserPane) -> Unit,
 ) {
     var dragSession by remember { mutableStateOf<DragSession?>(null) }
@@ -86,6 +90,12 @@ internal fun DualPaneContent(
             error = state.error,
             selectedItems = state.selectedItems,
             compactDensity = state.compactDensity,
+            tabs = state.tabs,
+            selectedTabIndex = state.selectedTabIndex,
+            onSelectTab = { stateIndex -> onSelectTab(BrowserPane.PRIMARY, stateIndex) },
+            onCloseTab = { stateIndex -> onCloseTab(BrowserPane.PRIMARY, stateIndex) },
+            onAddTab = { onAddTab(BrowserPane.PRIMARY) },
+            onReorderTabs = { from, to -> onReorderTabs(BrowserPane.PRIMARY, from, to) },
             isDropTarget = dragSession?.let {
                 it.sourcePane != BrowserPane.PRIMARY && primaryBounds.contains(it.position)
             } == true,
@@ -115,6 +125,12 @@ internal fun DualPaneContent(
             error = state.secondaryError,
             selectedItems = state.secondarySelectedItems,
             compactDensity = state.compactDensity,
+            tabs = state.secondaryTabs,
+            selectedTabIndex = state.secondarySelectedTabIndex,
+            onSelectTab = { stateIndex -> onSelectTab(BrowserPane.SECONDARY, stateIndex) },
+            onCloseTab = { stateIndex -> onCloseTab(BrowserPane.SECONDARY, stateIndex) },
+            onAddTab = { onAddTab(BrowserPane.SECONDARY) },
+            onReorderTabs = { from, to -> onReorderTabs(BrowserPane.SECONDARY, from, to) },
             isDropTarget = dragSession?.let {
                 it.sourcePane != BrowserPane.SECONDARY && secondaryBounds.contains(it.position)
             } == true,
@@ -144,6 +160,12 @@ private fun PanePanel(
     error: String?,
     selectedItems: Set<String>,
     compactDensity: Boolean,
+    tabs: List<BrowserTab>,
+    selectedTabIndex: Int,
+    onSelectTab: (Int) -> Unit,
+    onCloseTab: (Int) -> Unit,
+    onAddTab: () -> Unit,
+    onReorderTabs: (Int, Int) -> Unit,
     isDropTarget: Boolean,
     itemBounds: SnapshotStateMap<ItemKey, Rect>,
     pane: BrowserPane,
@@ -183,6 +205,15 @@ private fun PanePanel(
                 Icon(Icons.Filled.Refresh, contentDescription = "Refresh pane")
             }
         }
+
+        BrowserTabsBar(
+            tabs = tabs,
+            selectedIndex = selectedTabIndex,
+            onSelect = onSelectTab,
+            onClose = onCloseTab,
+            onAdd = onAddTab,
+            onReorder = onReorderTabs,
+        )
 
         BreadcrumbBar(currentPath = path, onNavigate = onNavigate)
 
