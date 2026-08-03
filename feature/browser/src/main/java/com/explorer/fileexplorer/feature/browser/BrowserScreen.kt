@@ -106,6 +106,7 @@ fun BrowserScreen(
                         onPermanentDelete = viewModel::permanentlyDeleteSelected,
                         onShare = viewModel::shareSelected,
                         onCompress = viewModel::showCompressDialog,
+                        onBatchRename = viewModel::showBatchRenameDialog,
                         onRename = { state.files.firstOrNull { it.path in state.selectedItems }?.let { viewModel.showRename(it) } },
                         onProperties = { state.files.firstOrNull { it.path in state.selectedItems }?.let { viewModel.showProperties(it) } })
                 } else {
@@ -250,6 +251,13 @@ fun BrowserScreen(
             confirmText = "Rename",
             onConfirm = { newName -> viewModel.rename(item.path, newName) }, onDismiss = viewModel::dismissRename)
     }
+    if (state.showBatchRenameDialog) {
+        BatchRenameDialog(
+            items = state.files.filter { it.path in state.selectedItems },
+            onConfirm = viewModel::batchRename,
+            onDismiss = viewModel::dismissBatchRenameDialog,
+        )
+    }
     state.propertiesItem?.let { item ->
         PropertiesSheet(item = item, selinuxContext = state.selinuxContext,
             onDismiss = viewModel::dismissProperties,
@@ -320,7 +328,7 @@ private fun SelectionTopBar(
     selectedCount: Int, insideArchive: Boolean,
     onClear: () -> Unit, onSelectAll: () -> Unit,
     onCopy: () -> Unit, onCut: () -> Unit, onDelete: () -> Unit, onPermanentDelete: () -> Unit, onShare: () -> Unit,
-    onCompress: () -> Unit, onRename: () -> Unit, onProperties: () -> Unit,
+    onCompress: () -> Unit, onBatchRename: () -> Unit, onRename: () -> Unit, onProperties: () -> Unit,
 ) {
     TopAppBar(
         title = { Text("$selectedCount selected") },
@@ -353,6 +361,8 @@ private fun SelectionTopBar(
                         leadingIcon = { Icon(Icons.Filled.FolderZip, null) })
                     DropdownMenuItem(text = { Text("Share") }, onClick = { onShare(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.Share, null) })
+                    DropdownMenuItem(text = { Text("Batch rename") }, onClick = { onBatchRename(); moreExpanded = false },
+                        leadingIcon = { Icon(Icons.Filled.EditNote, null) })
                     if (selectedCount == 1) {
                         DropdownMenuItem(text = { Text("Rename") }, onClick = { onRename(); moreExpanded = false },
                             leadingIcon = { Icon(Icons.Filled.Edit, null) })

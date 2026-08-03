@@ -58,14 +58,6 @@ For operations exceeding 6 hours, consider chunking or using WorkManager.
 
 ## Next (v1.5.0 -- v1.7.0)
 
-### X-04: Batch rename with regex + tokens + live preview
-Variable-based rename (counter, date, parent folder name, regex capture groups). Live preview
-of all renames before committing. Only Solid Explorer and MiXplorer offer this among Android FMs.
-Frequently requested by photographers and content creators.
-
-- **Impact:** 4/5. **Effort:** 3/5.
-- **Source:** Reddit community requests; Computerworld review; Solid Explorer batch rename; MiXplorer regex rename.
-
 ### X-05: Queued transfer manager UI
 Pausable, reorderable transfer queue with per-task bandwidth limit, per-file conflict resolution
 (Skip/Replace/Rename/Keep Both with "apply to all"), and a diff preview for text file conflicts.

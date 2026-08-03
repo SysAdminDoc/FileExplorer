@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.explorer.fileexplorer.core.data.ArchiveFormat
 import com.explorer.fileexplorer.core.data.ArchiveHelper
+import com.explorer.fileexplorer.core.data.BatchRenameEngine
+import com.explorer.fileexplorer.core.data.BatchRenameOptions
 import com.explorer.fileexplorer.core.data.FileRepository
 import com.explorer.fileexplorer.core.data.FileRepositoryFactory
 import com.explorer.fileexplorer.core.data.LocalFileRepository
@@ -24,6 +26,7 @@ import com.explorer.fileexplorer.feature.settings.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
 
 data class BrowserTab(
@@ -47,6 +50,7 @@ data class BrowserUiState(
     val historyIndex: Int = -1,
     val propertiesItem: FileItem? = null,
     val renameItem: FileItem? = null,
+    val showBatchRenameDialog: Boolean = false,
     val showNewFolderDialog: Boolean = false,
     val rootState: RootState = RootState.UNKNOWN,
     val rootEnabled: Boolean = false,
@@ -612,6 +616,81 @@ class BrowserViewModel @Inject constructor(
         }
     }
 
+    fun showBatchRenameDialog() {
+        if (_state.value.selectedItems.isNotEmpty()) {
+            _state.update { it.copy(showBatchRenameDialog = true) }
+        }
+    }
+
+    fun dismissBatchRenameDialog() {
+        _state.update { it.copy(showBatchRenameDialog = false) }
+    }
+
+    fun batchRename(options: BatchRenameOptions) {
+        val snapshot = _state.value
+        val items = snapshot.files.filter { it.path in snapshot.selectedItems }
+        val preview = BatchRenameEngine.preview(items, options)
+        if (!preview.isValid) {
+            viewModelScope.launch {
+                _events.emit(
+                    BrowserEvent.Toast(
+                        preview.errors.firstOrNull() ?: "Choose a template that changes at least one name",
+                    ),
+                )
+            }
+            return
+        }
+
+        _state.update { it.copy(showBatchRenameDialog = false) }
+        viewModelScope.launch {
+            val staged = mutableListOf<StagedRename>()
+            try {
+                val repository = repoFactory.getRepository(snapshot.currentPath)
+                val changedSources = preview.changedItems.map { it.item.path }.toSet()
+                val conflict = preview.changedItems.firstOrNull { operation ->
+                    operation.targetPath !in changedSources && repository.exists(operation.targetPath)
+                }
+                if (conflict != null) {
+                    _events.emit(BrowserEvent.Toast("Target already exists: ${conflict.newName}"))
+                    return@launch
+                }
+
+                val operationId = UUID.randomUUID().toString().replace("-", "")
+                preview.changedItems.forEachIndexed { index, operation ->
+                    val temporaryName = ".fileexplorer-rename-$operationId-$index"
+                    val temporaryPath = BatchRenameEngine.siblingPath(operation.item.path, temporaryName)
+                    if (repository.exists(temporaryPath)) {
+                        error("Temporary rename target already exists")
+                    }
+                    repository.rename(operation.item.path, temporaryName).getOrThrow()
+                    staged += StagedRename(operation, temporaryPath)
+                }
+
+                staged.forEach { operation ->
+                    repository.rename(operation.temporaryPath, operation.preview.newName).getOrThrow()
+                    operation.finalized = true
+                }
+                _events.emit(BrowserEvent.Toast("${staged.size} items renamed"))
+                clearSelection()
+                refresh()
+            } catch (error: Exception) {
+                if (staged.isNotEmpty()) {
+                    val repository = repoFactory.getRepository(snapshot.currentPath)
+                    staged.asReversed().forEach { operation ->
+                        val currentPath = if (operation.finalized) {
+                            operation.preview.targetPath
+                        } else {
+                            operation.temporaryPath
+                        }
+                        repository.rename(currentPath, operation.preview.item.name)
+                    }
+                }
+                _events.emit(BrowserEvent.Toast("Batch rename failed: ${error.message}"))
+                refresh()
+            }
+        }
+    }
+
     fun createFolder(name: String) {
         viewModelScope.launch {
             val path = "${_state.value.currentPath}/$name"
@@ -685,6 +764,12 @@ class BrowserViewModel @Inject constructor(
     private fun trashVolumeRoots(): List<String> = storageVolumeHelper.getStorageVolumes().map { it.path }.distinct()
     private fun observeBookmarks() { viewModelScope.launch { bookmarkDao.getAllFlow().collect { b -> _state.update { it.copy(bookmarks = b) } } } }
     private fun getSelectedFileItems(): List<FileItem> { val s = _state.value.selectedItems; return _state.value.files.filter { it.path in s } }
+
+    private data class StagedRename(
+        val preview: com.explorer.fileexplorer.core.data.BatchRenamePreviewItem,
+        val temporaryPath: String,
+        var finalized: Boolean = false,
+    )
 
     private fun sortFiles(files: List<FileItem>, order: SortOrder, showHidden: Boolean): List<FileItem> {
         val filtered = if (showHidden) files else files.filter { !it.isHidden }
