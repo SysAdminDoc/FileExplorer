@@ -14,6 +14,7 @@ import com.explorer.fileexplorer.core.data.LocalTrashManager
 import com.explorer.fileexplorer.core.data.RootFileRepository
 import com.explorer.fileexplorer.core.data.SecureDelete
 import com.explorer.fileexplorer.feature.security.SecurityRepository
+import com.explorer.fileexplorer.feature.transfer.TransferQueueManager
 import com.explorer.fileexplorer.core.database.BookmarkDao
 import com.explorer.fileexplorer.core.database.BookmarkEntity
 import com.explorer.fileexplorer.core.database.RecentFileDao
@@ -115,6 +116,7 @@ class BrowserViewModel @Inject constructor(
     private val trashManager: LocalTrashManager,
     private val settingsRepository: SettingsRepository,
     private val securityRepository: SecurityRepository,
+    private val transferQueueManager: TransferQueueManager,
     private val bookmarkDao: BookmarkDao,
     private val recentFileDao: RecentFileDao,
 ) : ViewModel() {
@@ -414,24 +416,14 @@ class BrowserViewModel @Inject constructor(
     fun confirmDrop(move: Boolean) {
         val request = _state.value.pendingDrop ?: return
         _state.update { it.copy(pendingDrop = null) }
+        transferQueueManager.enqueue(
+            operation = if (move) FileOperation.MOVE else FileOperation.COPY,
+            sourcePaths = request.items.map { it.path },
+            destination = request.destinationPath,
+        )
         viewModelScope.launch {
-            val repository = repoFactory.getRepository(request.destinationPath)
-            val sources = request.items.map { it.path }
-            val result = if (move) {
-                repository.moveFiles(sources, request.destinationPath, ConflictResolution.RENAME)
-            } else {
-                repository.copyFiles(sources, request.destinationPath, ConflictResolution.RENAME)
-            }
-            result
-                .onSuccess { count ->
-                    _events.emit(BrowserEvent.Toast("$count items ${if (move) "moved" else "copied"}"))
-                    clearPaneSelection(request.sourcePane)
-                    refreshPane(request.destinationPane)
-                    if (move && request.sourcePane != request.destinationPane) {
-                        refreshPane(request.sourcePane)
-                    }
-                }
-                .onFailure { e -> _events.emit(BrowserEvent.Toast("Transfer failed: ${e.message}")) }
+            _events.emit(BrowserEvent.Toast("${request.items.size} item(s) queued for ${if (move) "move" else "copy"}"))
+            clearPaneSelection(request.sourcePane)
         }
     }
 
@@ -546,15 +538,14 @@ class BrowserViewModel @Inject constructor(
 
     fun paste() {
         val cb = _state.value.clipboard; if (cb.isEmpty) return
+        transferQueueManager.enqueue(
+            operation = if (cb.isCut) FileOperation.MOVE else FileOperation.COPY,
+            sourcePaths = cb.items.map { it.path },
+            destination = _state.value.currentPath,
+        )
+        _state.update { it.copy(clipboard = ClipboardContent()) }
         viewModelScope.launch {
-            val repo = repoFactory.getRepository(_state.value.currentPath)
-            val r = when (cb.operation) {
-                FileOperation.COPY -> repo.copyFiles(cb.items.map { it.path }, _state.value.currentPath, ConflictResolution.RENAME)
-                FileOperation.MOVE -> repo.moveFiles(cb.items.map { it.path }, _state.value.currentPath, ConflictResolution.RENAME)
-                else -> return@launch
-            }
-            r.onSuccess { c -> _events.emit(BrowserEvent.Toast("$c items ${if (cb.isCut) "moved" else "copied"}")); _state.update { it.copy(clipboard = ClipboardContent()) }; refresh() }
-             .onFailure { e -> _events.emit(BrowserEvent.Toast("Error: ${e.message}")) }
+            _events.emit(BrowserEvent.Toast("${cb.items.size} item(s) queued for ${if (cb.isCut) "move" else "copy"}"))
         }
     }
 

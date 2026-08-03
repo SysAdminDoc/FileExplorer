@@ -17,6 +17,7 @@ import com.explorer.fileexplorer.feature.network.NetworkScreen
 import com.explorer.fileexplorer.feature.search.SearchScreen
 import com.explorer.fileexplorer.feature.security.SecurityScreen
 import com.explorer.fileexplorer.feature.settings.SettingsScreen
+import com.explorer.fileexplorer.feature.transfer.TransferQueueScreen
 
 object Routes {
     const val BROWSER = "browser"
@@ -29,6 +30,7 @@ object Routes {
     const val APPS = "apps"
     const val TRASH = "trash"
     const val ANALYZER = "analyzer"
+    const val TRANSFERS = "transfers"
 
     fun editorRoute(filePath: String) = "editor/${java.net.URLEncoder.encode(filePath, "UTF-8")}"
 }
@@ -48,6 +50,7 @@ fun AppNavigation(
                 onOpenApps = { navController.navigate(Routes.APPS) },
                 onOpenTrash = { navController.navigate(Routes.TRASH) },
                 onOpenAnalyzer = { navController.navigate(Routes.ANALYZER) },
+                onOpenTransfers = { navController.navigate(Routes.TRANSFERS) },
                 onOpenEditor = { path -> navController.navigate(Routes.editorRoute(path)) },
             )
         }
@@ -66,6 +69,7 @@ fun AppNavigation(
         composable(Routes.APPS) { AppsScreen(onNavigateBack = { navController.popBackStack() }) }
         composable(Routes.TRASH) { TrashScreen(onNavigateBack = { navController.popBackStack() }) }
         composable(Routes.ANALYZER) { StorageAnalyzerScreen(onNavigateBack = { navController.popBackStack() }) }
+        composable(Routes.TRANSFERS) { TransferQueueScreen(onNavigateBack = { navController.popBackStack() }) }
 
         composable(
             route = Routes.EDITOR,

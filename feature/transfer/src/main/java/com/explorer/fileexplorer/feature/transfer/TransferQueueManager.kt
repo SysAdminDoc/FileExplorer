@@ -1,0 +1,382 @@
+package com.explorer.fileexplorer.feature.transfer
+
+import com.explorer.fileexplorer.core.data.FileRepositoryFactory
+import com.explorer.fileexplorer.core.model.ConflictResolution
+import com.explorer.fileexplorer.core.model.FileOperation
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import java.io.IOException
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.util.concurrent.atomic.AtomicLong
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class TransferQueueManager @Inject constructor(
+    private val repositoryFactory: FileRepositoryFactory,
+) {
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val nextId = AtomicLong(System.currentTimeMillis())
+    private val lock = Any()
+    private val _tasks = MutableStateFlow<List<TransferQueueTask>>(emptyList())
+    val tasks: StateFlow<List<TransferQueueTask>> = _tasks.asStateFlow()
+    private val pauseSignals = mutableMapOf<Long, CompletableDeferred<Unit>>()
+    private val conflictWaiters = mutableMapOf<Long, CompletableDeferred<TransferConflictAction>>()
+    private val cancelledIds = mutableSetOf<Long>()
+    private var runner: Job? = null
+    private var activeId: Long? = null
+
+    fun enqueue(
+        operation: FileOperation,
+        sourcePaths: List<String>,
+        destination: String,
+        bandwidthLimitBytesPerSecond: Long = 0L,
+    ): Long {
+        require(sourcePaths.isNotEmpty()) { "At least one source is required" }
+        val id = nextId.incrementAndGet()
+        _tasks.update {
+            it + TransferQueueTask(
+                id = id,
+                operation = operation,
+                sourcePaths = sourcePaths,
+                destination = destination,
+                bandwidthLimitBytesPerSecond = bandwidthLimitBytesPerSecond.coerceAtLeast(0L),
+            )
+        }
+        startRunner()
+        return id
+    }
+
+    fun pause(id: Long) {
+        val task = tasks.value.firstOrNull { it.id == id } ?: return
+        if (task.state !in setOf(TransferQueueState.QUEUED, TransferQueueState.RUNNING)) return
+        _tasks.update { list -> list.map { if (it.id == id) it.copy(state = TransferQueueState.PAUSED) else it } }
+    }
+
+    fun resume(id: Long) {
+        val task = tasks.value.firstOrNull { it.id == id } ?: return
+        if (task.state != TransferQueueState.PAUSED) return
+        _tasks.update { list ->
+            list.map {
+                if (it.id == id) it.copy(state = if (activeId == id) TransferQueueState.RUNNING else TransferQueueState.QUEUED)
+                else it
+            }
+        }
+        synchronized(lock) { pauseSignals.remove(id)?.complete(Unit) }
+        startRunner()
+    }
+
+    fun cancel(id: Long) {
+        val task = tasks.value.firstOrNull { it.id == id } ?: return
+        if (task.isTerminal) return
+        val wasActive = synchronized(lock) {
+            cancelledIds += id
+            conflictWaiters.remove(id)?.completeExceptionally(CancellationException("Transfer cancelled"))
+            pauseSignals.remove(id)?.complete(Unit)
+            activeId == id
+        }
+        _tasks.update { list -> list.map { if (it.id == id) it.copy(state = TransferQueueState.CANCELLED, conflict = null) else it } }
+        if (!wasActive) synchronized(lock) { cancelledIds.remove(id) }
+        startRunner()
+    }
+
+    fun move(id: Long, offset: Int) {
+        _tasks.update { list ->
+            val index = list.indexOfFirst { it.id == id }
+            val target = index + offset
+            if (index < 0 || target !in list.indices) return@update list
+            val mutable = list.toMutableList()
+            val item = mutable.removeAt(index)
+            mutable.add(target, item)
+            mutable
+        }
+    }
+
+    fun setBandwidthLimit(id: Long, bytesPerSecond: Long) {
+        _tasks.update { list ->
+            list.map {
+                if (it.id == id) it.copy(bandwidthLimitBytesPerSecond = bytesPerSecond.coerceAtLeast(0L)) else it
+            }
+        }
+    }
+
+    fun resolveConflict(id: Long, action: TransferConflictAction, applyToAll: Boolean) {
+        val task = tasks.value.firstOrNull { it.id == id } ?: return
+        if (task.state != TransferQueueState.WAITING_CONFLICT || task.conflict == null) return
+        val waiter = synchronized(lock) { conflictWaiters[id] } ?: return
+        _tasks.update { list ->
+            list.map {
+                if (it.id == id) {
+                    it.copy(
+                        state = TransferQueueState.RUNNING,
+                        conflict = null,
+                        conflictAction = if (applyToAll) action else it.conflictAction,
+                        applyConflictToAll = applyToAll,
+                    )
+                } else it
+            }
+        }
+        waiter?.complete(action)
+    }
+
+    fun clearFinished() {
+        _tasks.update { list -> list.filterNot { it.isTerminal } }
+    }
+
+    fun shutdown() {
+        scope.coroutineContext[Job]?.cancel()
+    }
+
+    private fun startRunner() {
+        synchronized(lock) {
+            if (runner?.isActive == true) return
+            runner = scope.launch {
+                try {
+                    runQueue()
+                } finally {
+                    synchronized(lock) { runner = null }
+                    if (tasks.value.any { it.state == TransferQueueState.QUEUED }) startRunner()
+                }
+            }
+        }
+    }
+
+    private suspend fun runQueue() {
+        while (true) {
+            val task = tasks.value.firstOrNull { it.state == TransferQueueState.QUEUED } ?: return
+            activeId = task.id
+            execute(task)
+            activeId = null
+        }
+    }
+
+    private suspend fun execute(initial: TransferQueueTask) {
+        val taskId = initial.id
+        var started = false
+        _tasks.update { list ->
+            list.map {
+                if (it.id == taskId && it.state == TransferQueueState.QUEUED) {
+                    started = true
+                    it.copy(state = TransferQueueState.RUNNING, error = null)
+                } else it
+            }
+        }
+        if (!started) return
+        var transferredBefore = 0L
+        var sharedAction = initial.conflictAction
+
+        try {
+            val repository = repositoryFactory.getRepository(
+                if (initial.operation == FileOperation.DELETE) initial.sourcePaths.first() else initial.destination,
+            )
+            val totalBytes = if (initial.operation == FileOperation.DELETE) 0L else repository.calculateSize(initial.sourcePaths)
+            updateTask(taskId) { it.copy(totalBytes = totalBytes) }
+            initial.sourcePaths.forEachIndexed { index, source ->
+                awaitRunnable(taskId)
+                ensureNotCancelled(taskId)
+                val task = tasks.value.first { it.id == taskId }
+                val target = targetPath(task.destination, source)
+                val sourceSize = if (task.operationNeedsDestination()) repository.calculateSize(listOf(source)) else 0L
+                val conflict = if (task.operationNeedsDestination() && repository.exists(target)) {
+                    buildConflict(source, target)
+                } else null
+                val action = if (conflict == null) null else {
+                    sharedAction ?: requestConflict(taskId, conflict)
+                }
+                if (action != null && tasks.value.first { it.id == taskId }.applyConflictToAll) sharedAction = action
+                if (action == TransferConflictAction.SKIP) {
+                    updateTask(taskId) { it.copy(completedSources = index + 1, currentFile = source) }
+                    return@forEachIndexed
+                }
+
+                val resolution = when (action) {
+                    TransferConflictAction.REPLACE -> ConflictResolution.OVERWRITE
+                    TransferConflictAction.RENAME, TransferConflictAction.KEEP_BOTH, null -> ConflictResolution.RENAME
+                    TransferConflictAction.SKIP -> ConflictResolution.SKIP
+                }
+                val limiter = BandwidthLimiter(tasks.value.first { it.id == taskId }.bandwidthLimitBytesPerSecond)
+                val result = when (task.operation) {
+                    FileOperation.COPY -> repository.copyFiles(listOf(source), task.destination, resolution) { copied, _, file ->
+                        ensureNotCancelled(taskId)
+                        limiter.throttle(copied)
+                        updateTask(taskId) {
+                            it.copy(
+                                transferredBytes = transferredBefore + copied,
+                                currentFile = file,
+                                state = if (it.state == TransferQueueState.PAUSED) TransferQueueState.PAUSED else TransferQueueState.RUNNING,
+                            )
+                        }
+                    }
+                    FileOperation.MOVE -> repository.moveFiles(listOf(source), task.destination, resolution) { moved, _, file ->
+                        ensureNotCancelled(taskId)
+                        limiter.throttle(moved)
+                        updateTask(taskId) {
+                            it.copy(
+                                transferredBytes = transferredBefore + moved,
+                                currentFile = file,
+                                state = if (it.state == TransferQueueState.PAUSED) TransferQueueState.PAUSED else TransferQueueState.RUNNING,
+                            )
+                        }
+                    }
+                    FileOperation.DELETE -> repository.deleteFiles(listOf(source)) { file ->
+                        ensureNotCancelled(taskId)
+                        updateTask(taskId) { it.copy(currentFile = file, state = TransferQueueState.RUNNING) }
+                    }
+                    else -> Result.failure(UnsupportedOperationException("Unsupported transfer operation"))
+                }
+                ensureNotCancelled(taskId)
+                result.getOrThrow()
+                transferredBefore += sourceSize
+                updateTask(taskId) { it.copy(transferredBytes = transferredBefore, completedSources = index + 1) }
+            }
+            updateTask(taskId) { it.copy(state = TransferQueueState.COMPLETED, conflict = null) }
+        } catch (cancelled: CancellationException) {
+            if (isCancelled(taskId)) {
+                updateTask(taskId) { it.copy(state = TransferQueueState.CANCELLED, conflict = null) }
+            } else {
+                throw cancelled
+            }
+        } catch (error: Exception) {
+            updateTask(taskId) { it.copy(state = TransferQueueState.FAILED, error = error.message, conflict = null) }
+        } finally {
+            synchronized(lock) {
+                cancelledIds.remove(taskId)
+                pauseSignals.remove(taskId)
+                conflictWaiters.remove(taskId)
+            }
+        }
+    }
+
+    private suspend fun requestConflict(id: Long, conflict: TransferConflict): TransferConflictAction {
+        val waiter = CompletableDeferred<TransferConflictAction>()
+        synchronized(lock) { conflictWaiters[id] = waiter }
+        updateTask(id) { it.copy(state = TransferQueueState.WAITING_CONFLICT, conflict = conflict) }
+        return try {
+            waiter.await()
+        } finally {
+            synchronized(lock) { conflictWaiters.remove(id) }
+        }
+    }
+
+    private suspend fun awaitRunnable(id: Long) {
+        while (true) {
+            ensureNotCancelled(id)
+            if (tasks.value.firstOrNull { it.id == id }?.state != TransferQueueState.PAUSED) return
+            val signal = CompletableDeferred<Unit>()
+            synchronized(lock) { pauseSignals[id] = signal }
+            signal.await()
+        }
+    }
+
+    private fun updateTask(id: Long, transform: (TransferQueueTask) -> TransferQueueTask) {
+        _tasks.update { list -> list.map { if (it.id == id) transform(it) else it } }
+    }
+
+    private fun ensureNotCancelled(id: Long) {
+        if (isCancelled(id)) throw CancellationException("Transfer cancelled")
+    }
+
+    private fun isCancelled(id: Long): Boolean = synchronized(lock) { id in cancelledIds }
+
+    private fun TransferQueueTask.operationNeedsDestination(): Boolean =
+        operation == FileOperation.COPY || operation == FileOperation.MOVE
+
+    private fun targetPath(destination: String, source: String): String {
+        val name = source.trimEnd('/', '\\').substringAfterLastAny('/', '\\')
+        return destination.trimEnd('/', '\\') + "/" + name
+    }
+
+    private suspend fun buildConflict(source: String, target: String): TransferConflict {
+        val extension = source.substringAfterLast('.', "").lowercase()
+        val isText = extension in TEXT_EXTENSIONS
+        val diff = if (isText && !source.contains("://") && !target.contains("://")) {
+            textDiff(source, target)
+        } else ""
+        return TransferConflict(source, target, isText, diff)
+    }
+
+    private fun textDiff(source: String, target: String): String {
+        return try {
+            val left = readPreview(Paths.get(source))
+            val right = readPreview(Paths.get(target))
+            if (left == right) {
+                "Text contents are identical in the preview."
+            } else {
+                val leftLines = left.lines()
+                val rightLines = right.lines()
+                buildString {
+                    appendLine("--- existing destination")
+                    appendLine("+++ incoming source")
+                    leftLines.zipLongest(rightLines).take(MAX_DIFF_LINES).forEach { (old, new) ->
+                        if (old != new) {
+                            old?.let { appendLine("- $it") }
+                            new?.let { appendLine("+ $it") }
+                        }
+                    }
+                }.trimEnd()
+            }
+        } catch (_: IOException) {
+            "Text diff unavailable for this file."
+        }
+    }
+
+    private fun readPreview(path: Path): String = Files.newInputStream(path).use { input ->
+        val bytes = ByteArray(MAX_DIFF_BYTES)
+        var count = 0
+        while (count < bytes.size) {
+            val read = input.read(bytes, count, bytes.size - count)
+            if (read <= 0) break
+            count += read
+        }
+        String(bytes, 0, count, StandardCharsets.UTF_8)
+    }
+
+    private class BandwidthLimiter(private val limit: Long) {
+        private var lastBytes = 0L
+        private var lastNanos = System.nanoTime()
+
+        fun throttle(totalBytes: Long) {
+            if (limit <= 0L || totalBytes <= lastBytes) return
+            val delta = totalBytes - lastBytes
+            val targetNanos = delta * 1_000_000_000L / limit
+            val elapsed = System.nanoTime() - lastNanos
+            if (targetNanos > elapsed) {
+                val sleepNanos = (targetNanos - elapsed).coerceAtMost(1_000_000_000L)
+                try {
+                    Thread.sleep(sleepNanos / 1_000_000L, (sleepNanos % 1_000_000L).toInt())
+                } catch (_: InterruptedException) {
+                    throw CancellationException("Transfer interrupted")
+                }
+            }
+            lastBytes = totalBytes
+            lastNanos = System.nanoTime()
+        }
+    }
+
+    private companion object {
+        const val MAX_DIFF_BYTES = 64 * 1024
+        const val MAX_DIFF_LINES = 80
+        val TEXT_EXTENSIONS = setOf("txt", "md", "json", "xml", "yaml", "yml", "toml", "ini", "cfg", "conf", "log", "csv", "tsv", "kt", "java", "js", "ts", "html", "css", "py", "rs", "go", "sql")
+    }
+}
+
+private fun String.substringAfterLastAny(first: Char, second: Char): String {
+    val index = lastIndexOfAny(charArrayOf(first, second))
+    return if (index >= 0) substring(index + 1) else this
+}
+
+private fun <A, B> List<A>.zipLongest(other: List<B>): List<Pair<A?, B?>> =
+    (0 until maxOf(size, other.size)).map { index -> getOrNull(index) to other.getOrNull(index) }

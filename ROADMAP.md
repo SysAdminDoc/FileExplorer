@@ -58,14 +58,6 @@ For operations exceeding 6 hours, consider chunking or using WorkManager.
 
 ## Next (v1.5.0 -- v1.7.0)
 
-### X-05: Queued transfer manager UI
-Pausable, reorderable transfer queue with per-task bandwidth limit, per-file conflict resolution
-(Skip/Replace/Rename/Keep Both with "apply to all"), and a diff preview for text file conflicts.
-Currently transfers are fire-and-forget through the foreground service.
-
-- **Impact:** 4/5. **Effort:** 4/5.
-- **Source:** Material Files per-operation worker queue pattern; Solid Explorer transfer manager.
-
 ### X-06: DocumentsProvider (SAF export)
 Implement `DocumentsProvider` so other apps can pick files *from* FileExplorer via the system
 file picker. Also enables SSHFS-style virtual mounts where remote shares appear as local storage

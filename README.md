@@ -31,6 +31,7 @@ cd FileExplorer
 | Tabbed Browsing | Multiple tabs per pane with add, select, reorder, and swipe-to-close controls | Complete |
 | Storage Analyzer | Recursive size treemap, SHA-256 duplicate groups, and largest-file list | Complete |
 | Batch Rename | Regex capture groups, counter/date/parent tokens, collision checks, and live preview | Complete |
+| Transfer Queue | Pausable and reorderable copy, move, and delete queue with throttling, conflict choices, and text diff preview | Complete |
 | File Operations | Copy, move, trash, restore, permanent delete, rename, create. Foreground service with progress notification | Complete |
 | Trash Bin | `.FileExplorer-Trash/` per storage volume, 30-day default purge, configurable TTL, restore and empty-trash screen | Complete |
 | Search | Streaming results via Coroutine Flow, regex support, search history | Complete |

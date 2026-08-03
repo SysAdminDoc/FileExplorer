@@ -26,6 +26,7 @@ dependencies {
     implementation(project(":core:designsystem"))
     implementation(project(":feature:settings"))
     implementation(project(":feature:security"))
+    implementation(project(":feature:transfer"))
 
     implementation(libs.core.ktx)
     implementation(libs.lifecycle.runtime)
