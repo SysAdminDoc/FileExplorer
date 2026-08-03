@@ -11,6 +11,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added a Storage Analyzer screen with recursive treemap drill-down, duplicate-content groups, progress/cancel scanning, and largest-file list.
 - Added batch rename with counter, date, parent, and regex capture-group tokens, collision validation, and live preview before a two-phase rename.
 - Added a queued transfer manager with pause/resume, reordering, bandwidth limits, conflict resolution, and text diff previews; browser paste and dual-pane transfers now enqueue work.
+- Added a system-gated DocumentsProvider for SAF browsing, search, recent files, open/create, rename, delete, copy, and move access to local storage.
 
 ## [v1.3.3] - 2026-06-30
 
