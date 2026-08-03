@@ -8,6 +8,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added an independent dual-pane browser layout with per-pane navigation, refresh, sorting, hidden-file filtering, and selection.
 - Added long-press drag-and-drop transfers between panes with self/descendant path protection and explicit Copy or Move confirmation.
 - Added per-pane tabs with independent selection, close, long-press reorder, and swipe-to-close behavior.
+- Added a Storage Analyzer screen with recursive treemap drill-down, duplicate-content groups, progress/cancel scanning, and largest-file list.
 
 ## [v1.3.3] - 2026-06-30
 

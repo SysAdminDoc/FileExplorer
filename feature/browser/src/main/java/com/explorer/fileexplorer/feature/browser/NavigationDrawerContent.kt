@@ -30,6 +30,7 @@ fun NavigationDrawerContent(
     onOpenSecurity: () -> Unit,
     onOpenApps: () -> Unit,
     onOpenTrash: () -> Unit,
+    onOpenAnalyzer: () -> Unit,
 ) {
     ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surface) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(vertical = 12.dp)) {
@@ -172,6 +173,11 @@ fun NavigationDrawerContent(
             // Trash
             NavigationDrawerItem(label = { Text("Trash") }, selected = false,
                 onClick = onOpenTrash, icon = { Icon(Icons.Filled.DeleteSweep, null) },
+                modifier = Modifier.padding(horizontal = 12.dp))
+
+            // Storage analyzer
+            NavigationDrawerItem(label = { Text("Storage Analyzer") }, selected = false,
+                onClick = onOpenAnalyzer, icon = { Icon(Icons.Filled.Analytics, null) },
                 modifier = Modifier.padding(horizontal = 12.dp))
 
             // App Manager

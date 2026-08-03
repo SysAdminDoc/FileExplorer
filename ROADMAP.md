@@ -58,14 +58,6 @@ For operations exceeding 6 hours, consider chunking or using WorkManager.
 
 ## Next (v1.5.0 -- v1.7.0)
 
-### X-03: Storage analyzer with duplicate finder
-Recursive size treemap (DiskUsage-style) with drill-down, duplicate finder, and big-file list.
-Expected in any modern Android file manager. Solid Explorer, X-plore, and Files by Google all
-have storage analysis. No OSS FM does it well.
-
-- **Impact:** 5/5 (table-stakes). **Effort:** 4/5.
-- **Source:** DiskUsage (github.com/IvanVolosyuk/diskusage); Solid Explorer storage analyzer; X-plore disk map.
-
 ### X-04: Batch rename with regex + tokens + live preview
 Variable-based rename (counter, date, parent folder name, regex capture groups). Live preview
 of all renames before committing. Only Solid Explorer and MiXplorer offer this among Android FMs.

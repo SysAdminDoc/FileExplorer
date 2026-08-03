@@ -44,6 +44,7 @@ fun BrowserScreen(
     onOpenSecurity: () -> Unit = {},
     onOpenApps: () -> Unit = {},
     onOpenTrash: () -> Unit = {},
+    onOpenAnalyzer: () -> Unit = {},
     onOpenEditor: (String) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -89,7 +90,8 @@ fun BrowserScreen(
                 onOpenCloud = { scope.launch { drawerState.close() }; onOpenCloud() },
                 onOpenSecurity = { scope.launch { drawerState.close() }; onOpenSecurity() },
                 onOpenApps = { scope.launch { drawerState.close() }; onOpenApps() },
-                onOpenTrash = { scope.launch { drawerState.close() }; onOpenTrash() })
+                onOpenTrash = { scope.launch { drawerState.close() }; onOpenTrash() },
+                onOpenAnalyzer = { scope.launch { drawerState.close() }; onOpenAnalyzer() })
         },
     ) {
         Scaffold(

@@ -10,6 +10,7 @@ import androidx.navigation.navArgument
 import com.explorer.fileexplorer.feature.apps.AppsScreen
 import com.explorer.fileexplorer.feature.browser.BrowserScreen
 import com.explorer.fileexplorer.feature.browser.TrashScreen
+import com.explorer.fileexplorer.feature.browser.StorageAnalyzerScreen
 import com.explorer.fileexplorer.feature.cloud.CloudScreen
 import com.explorer.fileexplorer.feature.editor.EditorScreen
 import com.explorer.fileexplorer.feature.network.NetworkScreen
@@ -27,6 +28,7 @@ object Routes {
     const val EDITOR = "editor/{filePath}"
     const val APPS = "apps"
     const val TRASH = "trash"
+    const val ANALYZER = "analyzer"
 
     fun editorRoute(filePath: String) = "editor/${java.net.URLEncoder.encode(filePath, "UTF-8")}"
 }
@@ -45,6 +47,7 @@ fun AppNavigation(
                 onOpenSecurity = { navController.navigate(Routes.SECURITY) },
                 onOpenApps = { navController.navigate(Routes.APPS) },
                 onOpenTrash = { navController.navigate(Routes.TRASH) },
+                onOpenAnalyzer = { navController.navigate(Routes.ANALYZER) },
                 onOpenEditor = { path -> navController.navigate(Routes.editorRoute(path)) },
             )
         }
@@ -62,6 +65,7 @@ fun AppNavigation(
         composable(Routes.SECURITY) { SecurityScreen(onNavigateBack = { navController.popBackStack() }) }
         composable(Routes.APPS) { AppsScreen(onNavigateBack = { navController.popBackStack() }) }
         composable(Routes.TRASH) { TrashScreen(onNavigateBack = { navController.popBackStack() }) }
+        composable(Routes.ANALYZER) { StorageAnalyzerScreen(onNavigateBack = { navController.popBackStack() }) }
 
         composable(
             route = Routes.EDITOR,

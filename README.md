@@ -29,6 +29,7 @@ cd FileExplorer
 | File Browsing | NIO2 backend, breadcrumb nav, grid/list, sort by name/size/date/type | Complete |
 | Dual-pane Browsing | Independent left/right folders with long-press drag-and-drop copy or move | Complete |
 | Tabbed Browsing | Multiple tabs per pane with add, select, reorder, and swipe-to-close controls | Complete |
+| Storage Analyzer | Recursive size treemap, SHA-256 duplicate groups, and largest-file list | Complete |
 | File Operations | Copy, move, trash, restore, permanent delete, rename, create. Foreground service with progress notification | Complete |
 | Trash Bin | `.FileExplorer-Trash/` per storage volume, 30-day default purge, configurable TTL, restore and empty-trash screen | Complete |
 | Search | Streaming results via Coroutine Flow, regex support, search history | Complete |
