@@ -58,15 +58,6 @@ For operations exceeding 6 hours, consider chunking or using WorkManager.
 
 ## Next (v1.5.0 -- v1.7.0)
 
-### X-01: Dual-pane / split-pane view
-Drag-and-drop between two directory panels in one screen. The #1 most-requested power-user
-feature across every community. Solid Explorer, X-plore, MiXplorer, Total Commander, and
-Ghost Commander all have it. No mainstream FOSS file manager on F-Droid offers it.
-
-- **Impact:** 5/5. **Effort:** 5/5 (new navigation paradigm, gesture handling, state management).
-- **Dependency:** None, but benefits from X-02 (tabs).
-- **Source:** XDA vote thread (MiXplorer vs Solid Explorer); Reddit r/Android; Computerworld review.
-
 ### X-02: Tabbed browsing
 Multiple tabs per pane, long-press to reorder, swipe to close. MiXplorer offers unlimited tabs.
 Amaze has multi-tab. Material Files does not. Users repeatedly cite tabs as essential for

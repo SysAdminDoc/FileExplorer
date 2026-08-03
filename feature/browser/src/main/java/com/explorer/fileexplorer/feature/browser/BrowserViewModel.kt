@@ -52,6 +52,13 @@ data class BrowserUiState(
     val showCompressDialog: Boolean = false,
     val showExtractDialog: Boolean = false,
     val compactDensity: Boolean = false,
+    val dualPaneEnabled: Boolean = false,
+    val secondaryPath: String = Environment.getExternalStorageDirectory().absolutePath,
+    val secondaryFiles: List<FileItem> = emptyList(),
+    val secondaryIsLoading: Boolean = false,
+    val secondaryError: String? = null,
+    val secondarySelectedItems: Set<String> = emptySet(),
+    val pendingDrop: PendingDrop? = null,
 ) {
     val selectionMode: Boolean get() = selectedItems.isNotEmpty()
     val selectedCount: Int get() = selectedItems.size
@@ -62,6 +69,17 @@ data class BrowserUiState(
         listOf("/data", "/system", "/vendor", "/product", "/efs").any { p.startsWith(it) }
     }
 }
+
+enum class BrowserPane {
+    PRIMARY, SECONDARY,
+}
+
+data class PendingDrop(
+    val items: List<FileItem>,
+    val destinationPath: String,
+    val sourcePane: BrowserPane,
+    val destinationPane: BrowserPane,
+)
 
 sealed interface BrowserEvent {
     data class Toast(val message: String) : BrowserEvent
@@ -137,7 +155,7 @@ class BrowserViewModel @Inject constructor(
                 val sorted = sortFiles(files, _state.value.sortOrder, _state.value.showHidden)
                 val history = _state.value.pathHistory.toMutableList()
                 val idx = _state.value.historyIndex
-                if (idx < history.lastIndex) { while (history.size > idx + 1) history.removeLast() }
+                if (idx < history.lastIndex) { while (history.size > idx + 1) history.removeAt(history.lastIndex) }
                 history.add(path)
                 val selinux = if (_state.value.rootEnabled && rootHelper.requiresRoot(path)) {
                     rootRepo.getSelinuxContext(path)
@@ -149,6 +167,149 @@ class BrowserViewModel @Inject constructor(
                         selinuxContext = selinux)
                 }
             }
+        }
+    }
+
+    fun toggleDualPane() {
+        val current = _state.value
+        if (current.insideArchive) {
+            viewModelScope.launch {
+                _events.emit(BrowserEvent.Toast("Close the archive before opening dual-pane view"))
+            }
+            return
+        }
+
+        val enabled = !current.dualPaneEnabled
+        _state.update {
+            it.copy(
+                dualPaneEnabled = enabled,
+                secondarySelectedItems = emptySet(),
+                pendingDrop = null,
+            )
+        }
+        if (enabled) {
+            navigateSecondaryTo(current.secondaryPath.ifBlank { current.currentPath })
+        }
+    }
+
+    fun navigateSecondaryTo(path: String) {
+        if (!_state.value.dualPaneEnabled) return
+        viewModelScope.launch {
+            _state.update {
+                it.copy(secondaryIsLoading = true, secondaryError = null, secondarySelectedItems = emptySet())
+            }
+            try {
+                repoFactory.getRepository(path).listFiles(path).collect { files ->
+                    _state.update {
+                        it.copy(
+                            secondaryPath = path,
+                            secondaryFiles = sortFiles(files, it.sortOrder, it.showHidden),
+                            secondaryIsLoading = false,
+                            secondaryError = null,
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(secondaryIsLoading = false, secondaryError = "Unable to open folder: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun navigateSecondaryUp() {
+        val path = _state.value.secondaryPath
+        val parent = path.substringBeforeLast('/', "/")
+        if (parent.isNotEmpty() && parent != path) navigateSecondaryTo(parent)
+    }
+
+    fun refreshSecondary() {
+        navigateSecondaryTo(_state.value.secondaryPath)
+    }
+
+    fun onSecondaryItemClick(item: FileItem) {
+        if (_state.value.secondarySelectedItems.isNotEmpty()) {
+            toggleSecondarySelection(item.path)
+            return
+        }
+        if (item.isArchive && archiveHelper.isArchive(item.path)) {
+            viewModelScope.launch {
+                _events.emit(BrowserEvent.Toast("Close dual-pane view to browse an archive"))
+            }
+        } else if (item.isDirectory) {
+            navigateSecondaryTo(item.path)
+        } else {
+            viewModelScope.launch {
+                recentFileDao.upsert(
+                    RecentFileEntity(name = item.name, path = item.path, mimeType = item.mimeType, size = item.size),
+                )
+                _events.emit(BrowserEvent.OpenFile(item))
+            }
+        }
+    }
+
+    fun onSecondaryItemLongClick(item: FileItem) {
+        toggleSecondarySelection(item.path)
+    }
+
+    fun toggleSecondarySelection(path: String) {
+        _state.update { state ->
+            val selected = state.secondarySelectedItems.toMutableSet()
+            if (!selected.add(path)) selected.remove(path)
+            state.copy(secondarySelectedItems = selected)
+        }
+    }
+
+    fun requestDrop(
+        items: List<FileItem>,
+        destinationPath: String,
+        sourcePane: BrowserPane,
+        destinationPane: BrowserPane,
+    ) {
+        val validItems = items.filter { DropPathPolicy.canDrop(it.path, destinationPath) }
+        if (validItems.isEmpty()) {
+            viewModelScope.launch {
+                _events.emit(BrowserEvent.Toast("Nothing can be dropped into this folder"))
+            }
+            return
+        }
+        _state.update {
+            it.copy(
+                pendingDrop = PendingDrop(
+                    items = validItems,
+                    destinationPath = destinationPath,
+                    sourcePane = sourcePane,
+                    destinationPane = destinationPane,
+                ),
+            )
+        }
+    }
+
+    fun dismissDrop() {
+        _state.update { it.copy(pendingDrop = null) }
+    }
+
+    fun confirmDrop(move: Boolean) {
+        val request = _state.value.pendingDrop ?: return
+        _state.update { it.copy(pendingDrop = null) }
+        viewModelScope.launch {
+            val repository = repoFactory.getRepository(request.destinationPath)
+            val sources = request.items.map { it.path }
+            val result = if (move) {
+                repository.moveFiles(sources, request.destinationPath, ConflictResolution.RENAME)
+            } else {
+                repository.copyFiles(sources, request.destinationPath, ConflictResolution.RENAME)
+            }
+            result
+                .onSuccess { count ->
+                    _events.emit(BrowserEvent.Toast("$count items ${if (move) "moved" else "copied"}"))
+                    clearPaneSelection(request.sourcePane)
+                    refreshPane(request.destinationPane)
+                    if (move && request.sourcePane != request.destinationPane) {
+                        refreshPane(request.sourcePane)
+                    }
+                }
+                .onFailure { e -> _events.emit(BrowserEvent.Toast("Transfer failed: ${e.message}")) }
         }
     }
 
@@ -351,10 +512,27 @@ class BrowserViewModel @Inject constructor(
     fun shareSelected() { viewModelScope.launch { _events.emit(BrowserEvent.ShareFiles(getSelectedFileItems())) } }
 
     fun setSortOrder(sortOrder: SortOrder) {
-        _state.update { s -> s.copy(sortOrder = sortOrder, files = sortFiles(s.files, sortOrder, s.showHidden)) }
+        _state.update { s ->
+            s.copy(
+                sortOrder = sortOrder,
+                files = sortFiles(s.files, sortOrder, s.showHidden),
+                secondaryFiles = sortFiles(s.secondaryFiles, sortOrder, s.showHidden),
+            )
+        }
     }
     fun toggleViewMode() { _state.update { s -> s.copy(viewMode = if (s.viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST) } }
-    fun toggleHidden() { _state.update { it.copy(showHidden = !it.showHidden) }; refresh() }
+    fun toggleHidden() {
+        _state.update { state ->
+            val showHidden = !state.showHidden
+            state.copy(
+                showHidden = showHidden,
+                files = sortFiles(state.files, state.sortOrder, showHidden),
+                secondaryFiles = sortFiles(state.secondaryFiles, state.sortOrder, showHidden),
+            )
+        }
+        refresh()
+        if (_state.value.dualPaneEnabled) refreshSecondary()
+    }
 
     fun toggleBookmark(path: String, name: String) {
         viewModelScope.launch {
@@ -366,6 +544,17 @@ class BrowserViewModel @Inject constructor(
     fun refresh() {
         if (_state.value.insideArchive) navigateInsideArchive(_state.value.archivePath!!, _state.value.archiveInternalPath)
         else navigateTo(_state.value.currentPath)
+    }
+
+    private fun refreshPane(pane: BrowserPane) {
+        if (pane == BrowserPane.PRIMARY) refresh() else refreshSecondary()
+    }
+
+    private fun clearPaneSelection(pane: BrowserPane) {
+        _state.update {
+            if (pane == BrowserPane.PRIMARY) it.copy(selectedItems = emptySet())
+            else it.copy(secondarySelectedItems = emptySet())
+        }
     }
 
     private fun loadVolumes() { _state.update { it.copy(volumes = storageVolumeHelper.getStorageVolumes()) } }

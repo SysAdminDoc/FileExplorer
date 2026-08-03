@@ -47,4 +47,5 @@ dependencies {
     implementation(libs.coroutines.android)
     implementation(libs.coil.compose)
     implementation(libs.datastore.preferences)
+    testImplementation(kotlin("test"))
 }

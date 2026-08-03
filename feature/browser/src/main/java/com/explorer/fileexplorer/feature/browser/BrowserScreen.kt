@@ -116,6 +116,8 @@ fun BrowserScreen(
                         canPaste = state.canPaste, onPaste = viewModel::paste,
                         rootEnabled = state.rootEnabled, isRootPath = state.isRootPath,
                         insideArchive = state.insideArchive,
+                        dualPaneEnabled = state.dualPaneEnabled,
+                        onToggleDualPane = viewModel::toggleDualPane,
                         onExtractAll = { viewModel.extractArchive() })
                 }
             },
@@ -160,8 +162,10 @@ fun BrowserScreen(
                     }
                 }
 
-                // Breadcrumb
-                BreadcrumbBar(currentPath = state.currentPath, onNavigate = viewModel::navigateTo)
+                if (!state.dualPaneEnabled) {
+                    // Breadcrumb
+                    BreadcrumbBar(currentPath = state.currentPath, onNavigate = viewModel::navigateTo)
+                }
 
                 // Sort menu
                 DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
@@ -183,19 +187,36 @@ fun BrowserScreen(
                     }
                 }
 
-                // File list
-                PullToRefreshBox(isRefreshing = state.isLoading, onRefresh = viewModel::refresh,
-                    modifier = Modifier.fillMaxSize()) {
-                    if (state.files.isEmpty() && !state.isLoading) {
-                        EmptyState(state.error)
-                    } else {
-                        LazyColumn(modifier = Modifier.fillMaxSize()) {
-                            items(items = state.files, key = { it.path }) { item ->
-                                FileListItem(item = item, isSelected = item.path in state.selectedItems,
-                                    selectionMode = state.selectionMode,
-                                    compact = state.compactDensity,
-                                    onClick = { viewModel.onItemClick(item) },
-                                    onLongClick = { viewModel.onItemLongClick(item) })
+                if (state.dualPaneEnabled) {
+                    DualPaneContent(
+                        state = state,
+                        onPrimaryNavigate = viewModel::navigateTo,
+                        onPrimaryItemClick = viewModel::onItemClick,
+                        onPrimaryItemLongClick = viewModel::onItemLongClick,
+                        onSecondaryNavigate = viewModel::navigateSecondaryTo,
+                        onSecondaryItemClick = viewModel::onSecondaryItemClick,
+                        onSecondaryItemLongClick = viewModel::onSecondaryItemLongClick,
+                        onPrimaryNavigateUp = viewModel::navigateUp,
+                        onSecondaryNavigateUp = viewModel::navigateSecondaryUp,
+                        onPrimaryRefresh = viewModel::refresh,
+                        onSecondaryRefresh = viewModel::refreshSecondary,
+                        onRequestDrop = viewModel::requestDrop,
+                    )
+                } else {
+                    // File list
+                    PullToRefreshBox(isRefreshing = state.isLoading, onRefresh = viewModel::refresh,
+                        modifier = Modifier.fillMaxSize()) {
+                        if (state.files.isEmpty() && !state.isLoading) {
+                            EmptyState(state.error)
+                        } else {
+                            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                                items(items = state.files, key = { it.path }) { item ->
+                                    FileListItem(item = item, isSelected = item.path in state.selectedItems,
+                                        selectionMode = state.selectionMode,
+                                        compact = state.compactDensity,
+                                        onClick = { viewModel.onItemClick(item) },
+                                        onLongClick = { viewModel.onItemLongClick(item) })
+                                }
                             }
                         }
                     }
@@ -225,6 +246,14 @@ fun BrowserScreen(
             onConfirm = { name, format, password -> viewModel.compressSelected(name, format, password) },
             onDismiss = viewModel::dismissCompressDialog)
     }
+    state.pendingDrop?.let { request ->
+        DropConfirmationDialog(
+            request = request,
+            onCopy = { viewModel.confirmDrop(move = false) },
+            onMove = { viewModel.confirmDrop(move = true) },
+            onDismiss = viewModel::dismissDrop,
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -233,7 +262,8 @@ private fun BrowserTopBar(
     onMenuClick: () -> Unit, onSearchClick: () -> Unit, onSortClick: () -> Unit,
     onViewToggle: () -> Unit, onToggleHidden: () -> Unit, onNewFolder: () -> Unit,
     viewMode: ViewMode, showHidden: Boolean, canPaste: Boolean, onPaste: () -> Unit,
-    rootEnabled: Boolean, isRootPath: Boolean, insideArchive: Boolean, onExtractAll: () -> Unit,
+    rootEnabled: Boolean, isRootPath: Boolean, insideArchive: Boolean,
+    dualPaneEnabled: Boolean, onToggleDualPane: () -> Unit, onExtractAll: () -> Unit,
 ) {
     TopAppBar(
         title = { Text("File Explorer", maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -247,6 +277,12 @@ private fun BrowserTopBar(
             IconButton(onClick = onSortClick) { Icon(Icons.AutoMirrored.Filled.Sort, "Sort") }
             IconButton(onClick = onViewToggle) {
                 Icon(if (viewMode == ViewMode.LIST) Icons.Filled.GridView else Icons.Filled.ViewList, "Toggle View")
+            }
+            IconButton(onClick = onToggleDualPane) {
+                Icon(
+                    Icons.Filled.ViewColumn,
+                    if (dualPaneEnabled) "Close dual-pane view" else "Open dual-pane view",
+                )
             }
             var moreExpanded by remember { mutableStateOf(false) }
             IconButton(onClick = { moreExpanded = true }) { Icon(Icons.Filled.MoreVert, "More") }
