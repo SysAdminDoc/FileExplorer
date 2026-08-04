@@ -66,6 +66,15 @@ class ConnectionManager @Inject constructor(
         return _activeConnections.value[connectionId]?.repo
     }
 
+    /** Connect a saved connection for background actions when it is not already active. */
+    suspend fun connectById(connectionId: Long): Result<NetworkFileRepository> {
+        getActiveRepo(connectionId)?.takeIf { it.isConnected }?.let { return Result.success(it) }
+        if (_activeConnections.value.containsKey(connectionId)) disconnect(connectionId)
+        val entity = connectionDao.getById(connectionId)
+            ?: return Result.failure(IllegalArgumentException("Saved connection $connectionId was not found"))
+        return connect(entity)
+    }
+
     fun isConnected(connectionId: Long): Boolean {
         return _activeConnections.value[connectionId]?.repo?.isConnected == true
     }

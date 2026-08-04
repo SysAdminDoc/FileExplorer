@@ -22,7 +22,7 @@ data class TransferTask(
 }
 
 enum class FileOperation {
-    COPY, MOVE, DELETE, COMPRESS, EXTRACT
+    COPY, MOVE, DELETE, COMPRESS, EXTRACT, UPLOAD
 }
 
 enum class TransferState {

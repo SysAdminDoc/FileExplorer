@@ -25,6 +25,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added native PDF page rendering and bounded DOCX/XLSX document previews from the browser.
 - Added configurable swipe-left/right actions for browser list rows, including safe delete confirmation and cut-to-move.
 - Added a root-only module browser for Magisk, KernelSU, and APatch, with module status toggles and manager-backed ZIP installation.
+- Added exported Tasker / Automate intent actions for copy, move, archive creation, and saved-connection network uploads, with request completion broadcasts.
 
 ## [v1.3.3] - 2026-06-30
 

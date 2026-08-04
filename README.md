@@ -64,6 +64,27 @@ cd FileExplorer
 | PDF / Document Preview | Native paginated PDF rendering plus bounded DOCX paragraph and XLSX worksheet previews | Complete |
 | Hex Editor | Paginated hexadecimal view with byte editing up to 64 MiB and read-only larger-file inspection | Complete |
 | Gesture Actions | Configurable swipe-left/right actions for delete, share, compress, and cut-to-move | Complete |
+| Automation Intents | Exported Tasker / Automate actions for copy, move, archive creation, and network upload | Complete |
+
+## Automation intents
+
+Tasker, Automate, and other automation tools can send broadcasts to the exported
+`AutomationReceiver`. Every request accepts `source` (one path) or `sources` (a
+string array), plus the `destination` extra. Use these action names:
+
+| Action | Additional extras |
+|--------|-------------------|
+| `com.explorer.fileexplorer.action.COPY` | Optional `conflict`: `rename` (default), `overwrite`, or `skip` |
+| `com.explorer.fileexplorer.action.MOVE` | Optional `conflict`: `rename` (default), `overwrite`, or `skip` |
+| `com.explorer.fileexplorer.action.ZIP` | Optional `format`: `zip` (default), `7z`, or `tar.gz` |
+| `com.explorer.fileexplorer.action.UPLOAD` | Required positive `connection_id` for a saved Network connection; `destination` is the remote path |
+
+Actions return `RESULT_OK` when the foreground transfer is accepted. Add a
+unique `request_id` to receive a completion broadcast with action
+`com.explorer.fileexplorer.action.TRANSFER_RESULT`; its `status` is
+`completed`, `failed`, or `cancelled`, and failures include `error`.
+Upload sources must be local files. A saved network connection is connected
+automatically for the action and disconnected afterward if it was not already active.
 
 ## Architecture
 
