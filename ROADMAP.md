@@ -59,15 +59,6 @@ For operations exceeding 6 hours, consider chunking or using WorkManager.
 ## Next (v1.5.0 -- v1.7.0)
 
 
-
-### X-08: Per-file AES-256 encryption/decryption
-Encrypt individual files with AES-256-GCM keyed via Android Keystore. Decrypt with biometric
-prompt. Amaze has this (javax.crypto). Distinct from vault (which hides files in app-private
-storage) — this encrypts files in-place so they can be stored on cloud/NAS.
-
-- **Impact:** 3/5. **Effort:** 3/5.
-- **Source:** Amaze AES encrypt/decrypt; MiXplorer Aescrypt format support.
-
 ### X-09: Shizuku support for Android/data access
 Shizuku enables privileged operations without root by delegating to a debug shell service.
 Allows reading `/Android/data/` and `/Android/obb/` on Android 11+ without

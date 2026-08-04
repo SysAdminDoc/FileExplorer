@@ -13,6 +13,8 @@ import com.explorer.fileexplorer.core.data.LocalFileRepository
 import com.explorer.fileexplorer.core.data.LocalTrashManager
 import com.explorer.fileexplorer.core.data.RootFileRepository
 import com.explorer.fileexplorer.core.data.SecureDelete
+import com.explorer.fileexplorer.feature.security.FileEncryptionManager
+import com.explorer.fileexplorer.feature.security.FileEncryptionBatchResult
 import com.explorer.fileexplorer.feature.security.SecurityRepository
 import com.explorer.fileexplorer.feature.transfer.TransferQueueManager
 import com.explorer.fileexplorer.core.database.BookmarkDao
@@ -103,6 +105,7 @@ sealed interface BrowserEvent {
     data class Toast(val message: String) : BrowserEvent
     data class OpenFile(val item: FileItem) : BrowserEvent
     data class ShareFiles(val items: List<FileItem>) : BrowserEvent
+    data class RequestDecrypt(val paths: List<String>) : BrowserEvent
 }
 
 @HiltViewModel
@@ -116,6 +119,7 @@ class BrowserViewModel @Inject constructor(
     private val trashManager: LocalTrashManager,
     private val settingsRepository: SettingsRepository,
     private val securityRepository: SecurityRepository,
+    private val fileEncryptionManager: FileEncryptionManager,
     private val transferQueueManager: TransferQueueManager,
     private val bookmarkDao: BookmarkDao,
     private val recentFileDao: RecentFileDao,
@@ -698,6 +702,48 @@ class BrowserViewModel @Inject constructor(
     fun showRename(item: FileItem) { _state.update { it.copy(renameItem = item) } }
     fun dismissRename() { _state.update { it.copy(renameItem = null) } }
     fun shareSelected() { viewModelScope.launch { _events.emit(BrowserEvent.ShareFiles(getSelectedFileItems())) } }
+
+    fun encryptSelected() {
+        val paths = _state.value.selectedItems.toList()
+        if (paths.isEmpty()) return
+        viewModelScope.launch {
+            _events.emit(BrowserEvent.Toast("Encrypting..."))
+            val result = fileEncryptionManager.encryptFiles(paths)
+            _events.emit(BrowserEvent.Toast(encryptionSummary("Encrypted", result)))
+            if (result.succeeded.isNotEmpty()) {
+                clearSelection()
+                refresh()
+            }
+        }
+    }
+
+    fun requestDecryptSelected() {
+        val paths = _state.value.selectedItems.toList()
+        if (paths.isNotEmpty()) {
+            viewModelScope.launch { _events.emit(BrowserEvent.RequestDecrypt(paths)) }
+        }
+    }
+
+    fun decryptFiles(paths: List<String>) {
+        if (paths.isEmpty()) return
+        viewModelScope.launch {
+            _events.emit(BrowserEvent.Toast("Decrypting..."))
+            val result = fileEncryptionManager.decryptFiles(paths)
+            _events.emit(BrowserEvent.Toast(encryptionSummary("Decrypted", result)))
+            if (result.succeeded.isNotEmpty()) {
+                clearSelection()
+                refresh()
+            }
+        }
+    }
+
+    private fun encryptionSummary(action: String, result: FileEncryptionBatchResult): String {
+        return when {
+            result.failures.isEmpty() -> "$action ${result.succeeded.size} file(s)"
+            result.succeeded.isEmpty() -> "$action failed: ${result.failures.first()}"
+            else -> "$action ${result.succeeded.size} file(s); ${result.failures.size} failed"
+        }
+    }
 
     fun setSortOrder(sortOrder: SortOrder) {
         _state.update { s ->

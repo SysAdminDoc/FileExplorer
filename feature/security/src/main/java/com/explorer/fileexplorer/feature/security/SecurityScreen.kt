@@ -381,6 +381,15 @@ fun SecurityScreen(
                     leadingContent = { Icon(Icons.Filled.Verified, null) },
                 )
             }
+            item {
+                ListItem(
+                    headlineContent = { Text("File Encryption") },
+                    supportingContent = {
+                        Text("Select files in Browser, open More, then Encrypt files. Decryption requires biometric authentication.")
+                    },
+                    leadingContent = { Icon(Icons.Filled.EnhancedEncryption, null) },
+                )
+            }
             if (state.checksumResult != null) {
                 item {
                     Surface(

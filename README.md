@@ -34,6 +34,7 @@ cd FileExplorer
 | Transfer Queue | Pausable and reorderable copy, move, and delete queue with throttling, conflict choices, and text diff preview | Complete |
 | DocumentsProvider | SAF access to the local storage root with browsing, search, recent files, and document mutations | Complete |
 | Share Server | Authenticated HTTP web access and passive FTP sharing with foreground service and Quick Settings start/stop | Complete |
+| File Encryption | AES-256-GCM encryption with an Android Keystore key and biometric-gated decryption from the browser | Complete |
 | File Operations | Copy, move, trash, restore, permanent delete, rename, create. Foreground service with progress notification | Complete |
 | Trash Bin | `.FileExplorer-Trash/` per storage volume, 30-day default purge, configurable TTL, restore and empty-trash screen | Complete |
 | Search | Streaming results via Coroutine Flow, regex support, search history | Complete |
@@ -132,6 +133,7 @@ Cloud providers require OAuth configuration. Each is optional and the app works 
 | App lock | Security screen | Biometric requirement on launch |
 | Secure delete | Security screen | 3-pass overwrite before deletion |
 | Vault | Security screen | Protected private storage area |
+| File encryption | Browser selection → More | Encrypt files to `.encrypted`; biometric authentication is required to decrypt |
 | Share server | Share Server screen / Quick Settings | Authenticated HTTP or FTP access to a selected local folder |
 
 ## Theme

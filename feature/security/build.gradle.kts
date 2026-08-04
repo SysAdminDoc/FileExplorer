@@ -35,4 +35,5 @@ dependencies {
     implementation(libs.biometric)
     implementation(libs.security.crypto)
     implementation(libs.datastore.preferences)
+    testImplementation(kotlin("test"))
 }

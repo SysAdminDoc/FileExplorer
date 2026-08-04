@@ -13,6 +13,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added a queued transfer manager with pause/resume, reordering, bandwidth limits, conflict resolution, and text diff previews; browser paste and dual-pane transfers now enqueue work.
 - Added a system-gated DocumentsProvider for SAF browsing, search, recent files, open/create, rename, delete, copy, and move access to local storage.
 - Added an authenticated HTTP/FTP LAN share server with directory listings, file transfers, safe mutations, a foreground notification, and a Quick Settings toggle.
+- Added per-file AES-256-GCM encryption with an Android Keystore key and biometric-gated decryption from the browser.
 
 ## [v1.3.3] - 2026-06-30
 

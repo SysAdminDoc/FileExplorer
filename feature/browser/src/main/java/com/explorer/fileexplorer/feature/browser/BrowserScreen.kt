@@ -22,6 +22,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.explorer.fileexplorer.core.data.ArchiveFormat
@@ -30,6 +31,8 @@ import com.explorer.fileexplorer.core.model.*
 import com.explorer.fileexplorer.core.storage.RootState
 import com.explorer.fileexplorer.core.ui.BreadcrumbBar
 import com.explorer.fileexplorer.core.ui.FileListItem
+import com.explorer.fileexplorer.feature.security.SecurityEntryPoint
+import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -51,6 +54,12 @@ fun BrowserScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val securityEntryPoint = remember(context) {
+        EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            SecurityEntryPoint::class.java,
+        )
+    }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var showSortMenu by remember { mutableStateOf(false) }
@@ -68,6 +77,22 @@ fun BrowserScreen(
                     }
                 }
                 is BrowserEvent.ShareFiles -> shareFiles(context, event.items)
+                is BrowserEvent.RequestDecrypt -> {
+                    val activity = context as? FragmentActivity
+                    if (activity == null) {
+                        Toast.makeText(context, "Biometric authentication unavailable", Toast.LENGTH_SHORT).show()
+                    } else {
+                        securityEntryPoint.biometricHelper().showBiometricPrompt(
+                            activity = activity,
+                            title = "Decrypt files",
+                            subtitle = "Authenticate to decrypt selected files",
+                            onSuccess = { viewModel.decryptFiles(event.paths) },
+                            onFailure = { reason ->
+                                Toast.makeText(context, "Decryption cancelled: $reason", Toast.LENGTH_SHORT).show()
+                            },
+                        )
+                    }
+                }
             }
         }
     }
@@ -109,6 +134,8 @@ fun BrowserScreen(
                         onDelete = viewModel::deleteSelected,
                         onPermanentDelete = viewModel::permanentlyDeleteSelected,
                         onShare = viewModel::shareSelected,
+                        onEncrypt = viewModel::encryptSelected,
+                        onDecrypt = viewModel::requestDecryptSelected,
                         onCompress = viewModel::showCompressDialog,
                         onBatchRename = viewModel::showBatchRenameDialog,
                         onRename = { state.files.firstOrNull { it.path in state.selectedItems }?.let { viewModel.showRename(it) } },
@@ -332,6 +359,7 @@ private fun SelectionTopBar(
     selectedCount: Int, insideArchive: Boolean,
     onClear: () -> Unit, onSelectAll: () -> Unit,
     onCopy: () -> Unit, onCut: () -> Unit, onDelete: () -> Unit, onPermanentDelete: () -> Unit, onShare: () -> Unit,
+    onEncrypt: () -> Unit, onDecrypt: () -> Unit,
     onCompress: () -> Unit, onBatchRename: () -> Unit, onRename: () -> Unit, onProperties: () -> Unit,
 ) {
     TopAppBar(
@@ -365,6 +393,10 @@ private fun SelectionTopBar(
                         leadingIcon = { Icon(Icons.Filled.FolderZip, null) })
                     DropdownMenuItem(text = { Text("Share") }, onClick = { onShare(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.Share, null) })
+                    DropdownMenuItem(text = { Text("Encrypt files") }, onClick = { onEncrypt(); moreExpanded = false },
+                        leadingIcon = { Icon(Icons.Filled.Lock, null) })
+                    DropdownMenuItem(text = { Text("Decrypt files") }, onClick = { onDecrypt(); moreExpanded = false },
+                        leadingIcon = { Icon(Icons.Filled.LockOpen, null) })
                     DropdownMenuItem(text = { Text("Batch rename") }, onClick = { onBatchRename(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.EditNote, null) })
                     if (selectedCount == 1) {
