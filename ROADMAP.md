@@ -81,37 +81,6 @@ already have rclone configured; importing saves re-entering credentials.
 
 ## Under Consideration
 
-### U-01: Kotlin Multiplatform for shared logic
-Share file operation logic (model, repository interfaces, archive handling) across Android and
-potential desktop (JVM) builds. Feasibility depends on how much code is Android-specific.
-kotlinx-io and Okio provide multiplatform I/O primitives.
-
-- **Source:** awesome-kotlin KMP resources; kotlinx-io; Okio.
-
-### U-02: Built-in terminal emulator
-Inline terminal with file-path awareness (cd to current directory). Adjacent to hex editor and
-root features. Termux integration via intent may be simpler.
-
-- **Source:** Community requests; Termux; MiXplorer shell feature.
-
-### U-04: SELinux context editor with policy suggestions
-Beyond the current read-only display. Would require root + deep SELinux knowledge.
-Risky to expose to casual users.
-
-- **Source:** Existing ROADMAP item; Material Files chcon support.
-
-### U-05: NFS client
-No Android file manager currently offers NFS. Requested on Hacker News. Would need a
-native NFS library (none exist for Android Kotlin).
-
-- **Source:** HN comment requesting NFS; no existing implementation to reference.
-
-### U-07: Syncthing integration
-Detect Syncthing-synced folders and show sync status badges. Would require Syncthing's
-REST API or reading its config.
-
-- **Source:** github.com/syncthing/syncthing-android; adjacent tool research.
-
 ## Research-Driven Additions
 
 ### P0
