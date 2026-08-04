@@ -46,3 +46,15 @@ data class ConnectionEntity(
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "last_connected") val lastConnected: Long = 0L,
 )
+
+@Entity(tableName = "directory_view_preferences")
+data class DirectoryViewPreferenceEntity(
+    @PrimaryKey
+    @ColumnInfo(name = "path") val path: String,
+    @ColumnInfo(name = "view_mode") val viewMode: String = "LIST",
+    @ColumnInfo(name = "sort_field") val sortField: String = "NAME",
+    @ColumnInfo(name = "sort_direction") val sortDirection: String = "ASCENDING",
+    @ColumnInfo(name = "folders_first") val foldersFirst: Boolean = true,
+    @ColumnInfo(name = "visible_columns") val visibleColumns: String = "SIZE,DATE",
+    @ColumnInfo(name = "updated_at") val updatedAt: Long = System.currentTimeMillis(),
+)

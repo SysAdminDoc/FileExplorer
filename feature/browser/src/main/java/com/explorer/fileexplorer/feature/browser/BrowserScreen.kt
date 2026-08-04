@@ -9,6 +9,9 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.*
@@ -30,6 +33,7 @@ import com.explorer.fileexplorer.core.designsystem.AccentOrange
 import com.explorer.fileexplorer.core.model.*
 import com.explorer.fileexplorer.core.storage.RootState
 import com.explorer.fileexplorer.core.ui.BreadcrumbBar
+import com.explorer.fileexplorer.core.ui.FileGridItem
 import com.explorer.fileexplorer.core.ui.FileListItem
 import com.explorer.fileexplorer.feature.security.SecurityEntryPoint
 import dagger.hilt.android.EntryPointAccessors
@@ -152,8 +156,9 @@ fun BrowserScreen(
                         onMenuClick = { scope.launch { drawerState.open() } },
                         onSearchClick = onOpenSearch, onSortClick = { showSortMenu = true },
                         onViewToggle = viewModel::toggleViewMode, onToggleHidden = viewModel::toggleHidden,
+                        onToggleColumn = viewModel::toggleColumn,
                         onNewFolder = viewModel::showNewFolderDialog,
-                        viewMode = state.viewMode, showHidden = state.showHidden,
+                        viewMode = state.viewMode, visibleColumns = state.visibleColumns, showHidden = state.showHidden,
                         canPaste = state.canPaste, onPaste = viewModel::paste,
                         rootEnabled = state.rootEnabled, isRootPath = state.isRootPath,
                         insideArchive = state.insideArchive,
@@ -281,13 +286,35 @@ fun BrowserScreen(
                         if (state.files.isEmpty() && !state.isLoading) {
                             EmptyState(state.error)
                         } else {
-                            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                                items(items = state.files, key = { it.path }) { item ->
-                                    FileListItem(item = item, isSelected = item.path in state.selectedItems,
-                                        selectionMode = state.selectionMode,
-                                        compact = state.compactDensity,
-                                        onClick = { viewModel.onItemClick(item) },
-                                        onLongClick = { viewModel.onItemLongClick(item) })
+                            if (state.viewMode == ViewMode.GRID) {
+                                LazyVerticalGrid(
+                                    columns = GridCells.Adaptive(minSize = 140.dp),
+                                    modifier = Modifier.fillMaxSize(),
+                                ) {
+                                    gridItems(items = state.files, key = { it.path }) { item ->
+                                        FileGridItem(
+                                            item = item,
+                                            isSelected = item.path in state.selectedItems,
+                                            selectionMode = state.selectionMode,
+                                            visibleColumns = state.visibleColumns,
+                                            onClick = { viewModel.onItemClick(item) },
+                                            onLongClick = { viewModel.onItemLongClick(item) },
+                                        )
+                                    }
+                                }
+                            } else {
+                                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                                    items(items = state.files, key = { it.path }) { item ->
+                                        FileListItem(
+                                            item = item,
+                                            isSelected = item.path in state.selectedItems,
+                                            selectionMode = state.selectionMode,
+                                            compact = state.compactDensity,
+                                            visibleColumns = state.visibleColumns,
+                                            onClick = { viewModel.onItemClick(item) },
+                                            onLongClick = { viewModel.onItemLongClick(item) },
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -341,8 +368,9 @@ fun BrowserScreen(
 @Composable
 private fun BrowserTopBar(
     onMenuClick: () -> Unit, onSearchClick: () -> Unit, onSortClick: () -> Unit,
-    onViewToggle: () -> Unit, onToggleHidden: () -> Unit, onNewFolder: () -> Unit,
-    viewMode: ViewMode, showHidden: Boolean, canPaste: Boolean, onPaste: () -> Unit,
+    onViewToggle: () -> Unit, onToggleHidden: () -> Unit, onToggleColumn: (FileColumn) -> Unit,
+    onNewFolder: () -> Unit, viewMode: ViewMode, visibleColumns: Set<FileColumn>, showHidden: Boolean,
+    canPaste: Boolean, onPaste: () -> Unit,
     rootEnabled: Boolean, isRootPath: Boolean, insideArchive: Boolean,
     dualPaneEnabled: Boolean, onToggleDualPane: () -> Unit, onExtractAll: () -> Unit,
 ) {
@@ -370,6 +398,26 @@ private fun BrowserTopBar(
             DropdownMenu(expanded = moreExpanded, onDismissRequest = { moreExpanded = false }) {
                 DropdownMenuItem(text = { Text(if (showHidden) "Hide hidden files" else "Show hidden files") },
                     onClick = { onToggleHidden(); moreExpanded = false }, leadingIcon = { Icon(Icons.Filled.Visibility, null) })
+                HorizontalDivider()
+                Text(
+                    "Columns",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+                FileColumn.entries.forEach { column ->
+                    DropdownMenuItem(
+                        text = { Text(column.label) },
+                        onClick = { onToggleColumn(column) },
+                        leadingIcon = { Icon(Icons.Filled.ViewColumn, null) },
+                        trailingIcon = {
+                            Checkbox(
+                                checked = column in visibleColumns,
+                                onCheckedChange = null,
+                            )
+                        },
+                    )
+                }
                 if (!insideArchive) {
                     DropdownMenuItem(text = { Text("New folder") },
                         onClick = { onNewFolder(); moreExpanded = false }, leadingIcon = { Icon(Icons.Filled.CreateNewFolder, null) })

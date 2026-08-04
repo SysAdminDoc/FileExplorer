@@ -26,7 +26,7 @@ cd FileExplorer
 
 | Feature | Description | Status |
 |---------|-------------|--------|
-| File Browsing | NIO2 backend, breadcrumb nav, grid/list, sort by name/size/date/type | Complete |
+| File Browsing | NIO2 backend, breadcrumb nav, per-directory grid/list, sort, and column visibility | Complete |
 | Dual-pane Browsing | Independent left/right folders with long-press drag-and-drop copy or move | Complete |
 | Tabbed Browsing | Multiple tabs per pane with add, select, reorder, and swipe-to-close controls | Complete |
 | Storage Analyzer | Recursive size treemap, SHA-256 duplicate groups, and largest-file list | Complete |
@@ -82,7 +82,7 @@ cd FileExplorer
      │  :core:storage     PermissionHelper, StorageVolumeHelper, RootHelper     │
      │  :core:network     SMB / SFTP / FTP / WebDAV + ConnectionManager         │
      │  :core:cloud       Google Drive / Dropbox / OneDrive + AccountManager    │
-     │  :core:database    Room (bookmarks, recents, history, connections)        │
+     │  :core:database    Room (bookmarks, recents, history, connections, views)  │
      │  :core:model       FileItem, SortOrder, TransferTask, ClipboardContent   │
      │  :core:ui          FileIcon, BreadcrumbBar, FileListItem                 │
      │  :core:designsystem  OLED dark theme, Material 3 colors                 │
@@ -128,8 +128,8 @@ Cloud providers require OAuth configuration. Each is optional and the app works 
 |---------|----------|-------------|
 | Show hidden files | Settings / Drawer | Toggle visibility of dotfiles |
 | Folders first | Settings | Pin folders above files in listings |
-| Default view | Settings | List or Grid |
-| Sort order | Settings / Top bar | Name, size, date, type |
+| Directory view | Browser / More | List or Grid plus per-directory size, modified, and type columns |
+| Sort order | Browser / top bar | Per-directory name, size, date, or type with ascending/descending direction |
 | Trash auto-purge | Settings | Retain trash for 7, 14, 30, 60, or 90 days |
 | Root mode | Drawer toggle | Enable/disable root shell access |
 | App lock | Security screen | Biometric requirement on launch |

@@ -19,6 +19,8 @@ import com.explorer.fileexplorer.feature.security.SecurityRepository
 import com.explorer.fileexplorer.feature.transfer.TransferQueueManager
 import com.explorer.fileexplorer.core.database.BookmarkDao
 import com.explorer.fileexplorer.core.database.BookmarkEntity
+import com.explorer.fileexplorer.core.database.DirectoryViewPreferenceCodec
+import com.explorer.fileexplorer.core.database.DirectoryViewPreferenceDao
 import com.explorer.fileexplorer.core.database.RecentFileDao
 import com.explorer.fileexplorer.core.database.RecentFileEntity
 import com.explorer.fileexplorer.core.model.*
@@ -44,6 +46,7 @@ data class BrowserUiState(
     val error: String? = null,
     val sortOrder: SortOrder = SortOrder(),
     val viewMode: ViewMode = ViewMode.LIST,
+    val visibleColumns: Set<FileColumn> = FileColumn.DEFAULT_VISIBLE_COLUMNS,
     val showHidden: Boolean = false,
     val selectedItems: Set<String> = emptySet(),
     val clipboard: ClipboardContent = ClipboardContent(),
@@ -123,6 +126,7 @@ class BrowserViewModel @Inject constructor(
     private val transferQueueManager: TransferQueueManager,
     private val bookmarkDao: BookmarkDao,
     private val recentFileDao: RecentFileDao,
+    private val directoryViewPreferenceDao: DirectoryViewPreferenceDao,
 ) : ViewModel() {
 
     private var nextTabId = 3L
@@ -174,17 +178,21 @@ class BrowserViewModel @Inject constructor(
 
     fun navigateTo(path: String) {
         viewModelScope.launch {
+            val preferences = DirectoryViewPreferenceCodec.decode(directoryViewPreferenceDao.getByPath(path))
             _state.update {
                 it.copy(
                     isLoading = true,
                     error = null,
                     selectedItems = emptySet(),
+                    sortOrder = preferences.sortOrder,
+                    viewMode = preferences.viewMode,
+                    visibleColumns = preferences.visibleColumns,
                     tabs = updateTabPath(it.tabs, it.selectedTabIndex, path),
                 )
             }
             val repo = repoFactory.getRepository(path)
             repo.listFiles(path).collect { files ->
-                val sorted = sortFiles(files, _state.value.sortOrder, _state.value.showHidden)
+                val sorted = sortFiles(files, preferences.sortOrder, _state.value.showHidden)
                 val history = _state.value.pathHistory.toMutableList()
                 val idx = _state.value.historyIndex
                 if (idx < history.lastIndex) { while (history.size > idx + 1) history.removeAt(history.lastIndex) }
@@ -456,10 +464,20 @@ class BrowserViewModel @Inject constructor(
 
     private fun loadPath(path: String, historyIndex: Int) {
         viewModelScope.launch {
+            val preferences = DirectoryViewPreferenceCodec.decode(directoryViewPreferenceDao.getByPath(path))
             _state.update { it.copy(isLoading = true, selectedItems = emptySet()) }
             repoFactory.getRepository(path).listFiles(path).collect { files ->
-                _state.update { it.copy(currentPath = path, files = sortFiles(files, it.sortOrder, it.showHidden),
-                    isLoading = false, historyIndex = historyIndex) }
+                _state.update {
+                    it.copy(
+                        currentPath = path,
+                        files = sortFiles(files, preferences.sortOrder, it.showHidden),
+                        sortOrder = preferences.sortOrder,
+                        viewMode = preferences.viewMode,
+                        visibleColumns = preferences.visibleColumns,
+                        isLoading = false,
+                        historyIndex = historyIndex,
+                    )
+                }
             }
         }
     }
@@ -746,15 +764,47 @@ class BrowserViewModel @Inject constructor(
     }
 
     fun setSortOrder(sortOrder: SortOrder) {
-        _state.update { s ->
-            s.copy(
-                sortOrder = sortOrder,
-                files = sortFiles(s.files, sortOrder, s.showHidden),
-                secondaryFiles = sortFiles(s.secondaryFiles, sortOrder, s.showHidden),
+        val current = _state.value
+        val updated = current.copy(
+            sortOrder = sortOrder,
+            files = sortFiles(current.files, sortOrder, current.showHidden),
+            secondaryFiles = sortFiles(current.secondaryFiles, sortOrder, current.showHidden),
+        )
+        _state.value = updated
+        persistDirectoryPreferences(updated)
+    }
+
+    fun toggleViewMode() {
+        val current = _state.value
+        val updated = current.copy(
+            viewMode = if (current.viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST,
+        )
+        _state.value = updated
+        persistDirectoryPreferences(updated)
+    }
+
+    fun toggleColumn(column: FileColumn) {
+        val current = _state.value
+        val columns = current.visibleColumns.toMutableSet()
+        if (!columns.add(column)) columns.remove(column)
+        val updated = current.copy(visibleColumns = columns)
+        _state.value = updated
+        persistDirectoryPreferences(updated)
+    }
+
+    private fun persistDirectoryPreferences(state: BrowserUiState) {
+        if (state.currentPath.isBlank() || state.insideArchive) return
+        viewModelScope.launch {
+            directoryViewPreferenceDao.upsert(
+                DirectoryViewPreferenceCodec.encode(
+                    path = state.currentPath,
+                    viewMode = state.viewMode,
+                    sortOrder = state.sortOrder,
+                    visibleColumns = state.visibleColumns,
+                ),
             )
         }
     }
-    fun toggleViewMode() { _state.update { s -> s.copy(viewMode = if (s.viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST) } }
     fun toggleHidden() {
         _state.update { state ->
             val showHidden = !state.showHidden

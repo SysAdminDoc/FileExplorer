@@ -57,12 +57,6 @@ For operations exceeding 6 hours, consider chunking or using WorkManager.
 ---
 
 ## Next (v1.5.0 -- v1.7.0)
-### X-11: Per-directory view memory
-Remember grid vs list, sort order, and column visibility per directory path. Persisted in Room.
-MiXplorer does this; most other FMs reset view preferences on every navigation.
-
-- **Impact:** 3/5. **Effort:** 2/5.
-- **Source:** MiXplorer per-folder settings; existing ROADMAP item.
 
 ### X-12: RAR archive read support
 Add `libarchive` JNI or `junrar` for RAR decompression (read-only — RAR creation requires

@@ -8,6 +8,9 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -31,6 +34,7 @@ import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.model.StorageVolume
 import com.explorer.fileexplorer.core.storage.RootState
 import com.explorer.fileexplorer.core.ui.BreadcrumbBar
+import com.explorer.fileexplorer.core.ui.FileGridItem
 import com.explorer.fileexplorer.core.ui.FileListItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -339,28 +343,59 @@ private fun LargeFilePane(
                     )
                 }
             } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(state.files, key = { it.path }) { item ->
-                        FileListItem(
-                            item = item,
-                            isSelected = item.path == previewPath || item.path in state.selectedItems,
-                            selectionMode = state.selectionMode,
-                            compact = state.compactDensity,
-                            onClick = { onSelectItem(item) },
-                            onLongClick = { onLongClick(item) },
-                            modifier = Modifier
-                                .border(
-                                    width = if (item.path == previewPath) 1.dp else 0.dp,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                                .pointerInteropFilter { event ->
-                                    val secondary = event.buttonState and MotionEvent.BUTTON_SECONDARY != 0
-                                    if (secondary && event.actionMasked == MotionEvent.ACTION_DOWN) {
-                                        onContextMenu(item)
-                                    }
-                                    secondary
-                                },
-                        )
+                if (state.viewMode == com.explorer.fileexplorer.core.model.ViewMode.GRID) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 140.dp),
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        gridItems(state.files, key = { it.path }) { item ->
+                            FileGridItem(
+                                item = item,
+                                isSelected = item.path == previewPath || item.path in state.selectedItems,
+                                selectionMode = state.selectionMode,
+                                visibleColumns = state.visibleColumns,
+                                onClick = { onSelectItem(item) },
+                                onLongClick = { onLongClick(item) },
+                                modifier = Modifier
+                                    .border(
+                                        width = if (item.path == previewPath) 1.dp else 0.dp,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                    .pointerInteropFilter { event ->
+                                        val secondary = event.buttonState and MotionEvent.BUTTON_SECONDARY != 0
+                                        if (secondary && event.actionMasked == MotionEvent.ACTION_DOWN) {
+                                            onContextMenu(item)
+                                        }
+                                        secondary
+                                    },
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(state.files, key = { it.path }) { item ->
+                            FileListItem(
+                                item = item,
+                                isSelected = item.path == previewPath || item.path in state.selectedItems,
+                                selectionMode = state.selectionMode,
+                                compact = state.compactDensity,
+                                visibleColumns = state.visibleColumns,
+                                onClick = { onSelectItem(item) },
+                                onLongClick = { onLongClick(item) },
+                                modifier = Modifier
+                                    .border(
+                                        width = if (item.path == previewPath) 1.dp else 0.dp,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                    .pointerInteropFilter { event ->
+                                        val secondary = event.buttonState and MotionEvent.BUTTON_SECONDARY != 0
+                                        if (secondary && event.actionMasked == MotionEvent.ACTION_DOWN) {
+                                            onContextMenu(item)
+                                        }
+                                        secondary
+                                    },
+                            )
+                        }
                     }
                 }
             }

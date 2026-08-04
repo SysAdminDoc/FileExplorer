@@ -16,6 +16,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added per-file AES-256-GCM encryption with an Android Keystore key and biometric-gated decryption from the browser.
 - Added optional Shizuku/Sui UserService access for scoped Android/data and Android/obb browsing and file operations.
 - Added an adaptive large-screen browser workspace with places, files, and preview panes plus keyboard and mouse input affordances.
+- Added Room-backed per-directory view memory for grid/list mode, sorting, folder ordering, and visible file columns, including a 2-to-3 schema migration.
 
 ## [v1.3.3] - 2026-06-30
 

@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.explorer.fileexplorer.core.model.FileColumn
 import com.explorer.fileexplorer.core.model.FileItem
 import java.text.SimpleDateFormat
 import java.util.*
@@ -25,6 +26,7 @@ fun FileListItem(
     isSelected: Boolean = false,
     selectionMode: Boolean = false,
     compact: Boolean = false,
+    visibleColumns: Set<FileColumn> = FileColumn.DEFAULT_VISIBLE_COLUMNS,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -76,30 +78,41 @@ fun FileListItem(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (item.isDirectory) {
-                        item.childCount?.let { count ->
+                    if (FileColumn.SIZE in visibleColumns) {
+                        if (item.isDirectory) {
+                            item.childCount?.let { count ->
+                                Text(
+                                    text = "$count items",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        } else {
                             Text(
-                                text = "$count items",
+                                text = item.displaySize,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                    } else {
-                        Text(
-                            text = item.displaySize,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                     }
-                    if (item.lastModified > 0) {
+                    if (FileColumn.DATE in visibleColumns && item.lastModified > 0) {
                         Text(
                             text = formatDate(item.lastModified),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    if (FileColumn.TYPE in visibleColumns) {
+                        Text(
+                            text = if (item.isDirectory) "Folder" else item.extension.ifBlank { item.mimeType },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
-            }
 
             // Symlink indicator
             if (item.isSymlink) {

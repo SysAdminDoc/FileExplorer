@@ -104,3 +104,15 @@ interface ConnectionDao {
     @Query("UPDATE network_connections SET last_connected = :timestamp WHERE id = :id")
     suspend fun updateLastConnected(id: Long, timestamp: Long = System.currentTimeMillis())
 }
+
+@Dao
+interface DirectoryViewPreferenceDao {
+    @Query("SELECT * FROM directory_view_preferences WHERE path = :path")
+    suspend fun getByPath(path: String): DirectoryViewPreferenceEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(preference: DirectoryViewPreferenceEntity)
+
+    @Query("DELETE FROM directory_view_preferences WHERE path = :path")
+    suspend fun deleteByPath(path: String)
+}

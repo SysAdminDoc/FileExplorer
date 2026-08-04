@@ -17,3 +17,14 @@ data class SortOrder(
 enum class ViewMode {
     LIST, GRID
 }
+
+enum class FileColumn(val label: String) {
+    SIZE("Size"),
+    DATE("Modified"),
+    TYPE("Type"),
+    ;
+
+    companion object {
+        val DEFAULT_VISIBLE_COLUMNS: Set<FileColumn> = setOf(SIZE, DATE)
+    }
+}
