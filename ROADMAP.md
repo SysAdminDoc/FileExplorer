@@ -62,15 +62,6 @@ For operations exceeding 6 hours, consider chunking or using WorkManager.
 
 ## Later (v2.0+)
 
-### L-01: Plugin / add-on architecture
-ContentProvider or AIDL-based plugin API allowing third-party extensions (cloud providers,
-archive formats, tools). MiXplorer and Total Commander both use this pattern. Ghost Commander
-uses separate APK plugins for FTP/SFTP/SMB/cloud. Enables community contribution without
-bloating the core app.
-
-- **Impact:** 4/5 (ecosystem). **Effort:** 5/5 (API design, security sandboxing, lifecycle).
-- **Source:** MiXplorer add-on system; Total Commander plugin architecture; Ghost Commander plugins.
-
 ### L-02: Collections / smart categories
 Auto-grouped views: Photos, Videos, Music, Documents, Downloads, APKs. Queries MediaStore
 for indexed content. Solid Explorer's Collections is a key differentiator.

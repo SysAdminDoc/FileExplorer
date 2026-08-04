@@ -3,6 +3,7 @@ package com.explorer.fileexplorer
 import android.app.Application
 import com.explorer.fileexplorer.core.data.FileRepositoryFactory
 import com.explorer.fileexplorer.core.data.NetworkRepoProvider
+import com.explorer.fileexplorer.core.data.PluginFileRepository
 import com.explorer.fileexplorer.core.data.SchemeResolver
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
@@ -11,6 +12,7 @@ import com.explorer.fileexplorer.core.network.smb.SmbFileRepository
 import com.explorer.fileexplorer.core.network.sftp.SftpFileRepository
 import com.explorer.fileexplorer.core.network.ftp.FtpFileRepository
 import com.explorer.fileexplorer.core.network.webdav.WebDavFileRepository
+import com.explorer.fileexplorer.plugin.PluginManager
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -23,6 +25,7 @@ class App : Application() {
     @Inject lateinit var sftpRepo: SftpFileRepository
     @Inject lateinit var ftpRepo: FtpFileRepository
     @Inject lateinit var webDavRepo: WebDavFileRepository
+    @Inject lateinit var pluginManager: PluginManager
 
     override fun onCreate() {
         super.onCreate()
@@ -35,6 +38,9 @@ class App : Application() {
                 else -> null
             }
             repo?.let { wrap(it) }
+        }
+        repoFactory.registerPluginResolver { scheme ->
+            pluginManager.findByScheme(scheme)?.let { PluginFileRepository(pluginManager, it) }
         }
     }
 

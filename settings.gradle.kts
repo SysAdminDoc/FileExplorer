@@ -18,6 +18,7 @@ rootProject.name = "FileExplorer"
 
 include(":app")
 include(":core:model")
+include(":core:plugin")
 include(":core:data")
 include(":core:storage")
 include(":core:database")

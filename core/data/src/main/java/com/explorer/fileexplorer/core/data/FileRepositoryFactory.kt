@@ -17,8 +17,15 @@ class FileRepositoryFactory @Inject constructor(
     @Volatile
     private var schemeResolver: SchemeResolver? = null
 
+    @Volatile
+    private var pluginResolver: RepositoryResolver? = null
+
     fun registerSchemeResolver(resolver: SchemeResolver) {
         schemeResolver = resolver
+    }
+
+    fun registerPluginResolver(resolver: RepositoryResolver) {
+        pluginResolver = resolver
     }
 
     fun getRepository(path: String): FileRepository {
@@ -27,6 +34,7 @@ class FileRepositoryFactory @Inject constructor(
         if (schemeEnd > 0) {
             val scheme = path.substring(0, schemeEnd).lowercase()
             schemeResolver?.resolve(scheme)?.let { return NetworkRepoAdapter(it) }
+            pluginResolver?.resolve(scheme)?.let { return it }
         }
 
         if (rootHelper.rootEnabled.value && rootHelper.isRooted) {

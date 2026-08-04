@@ -18,6 +18,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added an adaptive large-screen browser workspace with places, files, and preview panes plus keyboard and mouse input affordances.
 - Added Room-backed per-directory view memory for grid/list mode, sorting, folder ordering, and visible file columns, including a 2-to-3 schema migration.
 - Added read-only RAR browsing and extraction, including path-traversal protection for extracted entries.
+- Added a versioned AIDL plugin/add-on API with manifest discovery, isolated binder calls, and URI-backed plugin repositories.
 
 ## [v1.3.3] - 2026-06-30
 

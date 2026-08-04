@@ -17,6 +17,7 @@ android {
 }
 dependencies {
     implementation(project(":core:model"))
+    implementation(project(":core:plugin"))
     implementation(project(":core:database"))
     implementation(project(":core:storage"))
     implementation(libs.core.ktx)

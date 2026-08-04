@@ -79,6 +79,7 @@ cd FileExplorer
      ┌──▼──▼─────────────▼────────▼──────▼────▼─────────▼────▼─────▼────────▼──┐
      │                        Core Layer                                        │
      │  :core:data        FileRepositoryFactory → Local / Root / Archive        │
+     │  :core:plugin      Versioned AIDL plugin discovery and URI repository     │
      │  :core:storage     PermissionHelper, StorageVolumeHelper, RootHelper     │
      │  :core:network     SMB / SFTP / FTP / WebDAV + ConnectionManager         │
      │  :core:cloud       Google Drive / Dropbox / OneDrive + AccountManager    │
@@ -89,7 +90,7 @@ cd FileExplorer
      └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-18 Gradle modules. MVVM + Clean Architecture. `FileRepositoryFactory` routes file operations to the correct backend based on path type and device capabilities.
+19 Gradle modules. MVVM + Clean Architecture. `FileRepositoryFactory` routes file operations to the correct backend based on path type, device capabilities, and installed plugin URI schemes.
 
 ## Technology Stack
 
@@ -111,6 +112,31 @@ cd FileExplorer
 | Security | AndroidX Biometric + Security-Crypto | 1.2.0 / 1.1.0 |
 | Images | Coil | 3.3.0 |
 | Navigation | Jetpack Navigation Compose | 2.8.5 |
+
+## Plugin / Add-on API
+
+Third-party providers can ship as separate APKs without running plugin code inside FileExplorer. The `:core:plugin` library defines protocol version 1, manifest metadata, and the `IFileExplorerPlugin` AIDL service. Filesystem plugins advertise URI schemes such as `sftp2` and are routed through `FileRepositoryFactory`; archive and tool plugins can use the same operation envelope without claiming a URI scheme.
+
+A plugin declares one exported service and the protocol metadata in its manifest:
+
+```xml
+<service
+    android:name=".FileExplorerPluginService"
+    android:exported="true"
+    android:process=":plugin">
+    <intent-filter>
+        <action android:name="com.explorer.fileexplorer.action.PLUGIN" />
+    </intent-filter>
+    <meta-data android:name="com.explorer.fileexplorer.plugin.PROTOCOL_VERSION" android:value="1" />
+    <meta-data android:name="com.explorer.fileexplorer.plugin.ID" android:value="com.example.sftp" />
+    <meta-data android:name="com.explorer.fileexplorer.plugin.DISPLAY_NAME" android:value="SFTP add-on" />
+    <meta-data android:name="com.explorer.fileexplorer.plugin.VERSION_NAME" android:value="1.0.0" />
+    <meta-data android:name="com.explorer.fileexplorer.plugin.SCHEMES" android:value="sftp2" />
+    <meta-data android:name="com.explorer.fileexplorer.plugin.CAPABILITIES" android:value="filesystem" />
+</service>
+```
+
+The host validates the metadata, binds only to the declared component, checks the negotiated protocol version, and sends `list`, `info`, `exists`, `copy`, `move`, `delete`, `create_directory`, `create_file`, `rename`, `size`, `search`, and `checksum` requests as `Bundle` messages. Each response must set `ok=true`; file entries use `PluginFileCodec` bundles. The binder boundary keeps failures and plugin dependencies out of the host process.
 
 ## Cloud Setup
 
@@ -184,7 +210,7 @@ A: Android requires `MANAGE_EXTERNAL_STORAGE` to browse outside app-specific dir
 A: No. Root features are optional and auto-detected. The app works as a standard file manager without root.
 
 **Q: Which archive formats are supported?**
-A: ZIP (with AES-256 encryption), 7z, TAR, GZ, BZ2, XZ, and Zstandard. Archives can be browsed as virtual folders without extracting.
+A: ZIP (with AES-256 encryption), 7z, TAR, GZ, BZ2, XZ, Zstandard, and read-only RAR. Archives can be browsed as virtual folders without extracting.
 
 **Q: Are my cloud credentials stored securely?**
 A: Network passwords are encrypted before database storage with Android Keystore-backed AES-GCM. Cloud OAuth tokens stay in memory unless you choose Stay signed in, which stores account tokens in Keystore-encrypted app preferences.
