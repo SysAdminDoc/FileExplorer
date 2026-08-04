@@ -29,6 +29,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,6 +47,8 @@ import com.explorer.fileexplorer.core.ui.BreadcrumbBar
 import com.explorer.fileexplorer.core.ui.FileGridItem
 import com.explorer.fileexplorer.core.ui.FileListItem
 import com.explorer.fileexplorer.feature.security.SecurityEntryPoint
+import com.google.android.gms.cast.framework.CastButtonFactory
+import androidx.mediarouter.app.MediaRouteButton
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.launch
 import java.io.File
@@ -194,6 +197,7 @@ fun BrowserScreen(
                         onPermanentDelete = viewModel::permanentlyDeleteSelected,
                         onShare = viewModel::shareSelected,
                         onSendNearby = viewModel::sendNearbySelected,
+                        onCast = viewModel::castSelected,
                         onEncrypt = viewModel::encryptSelected,
                         onDecrypt = viewModel::requestDecryptSelected,
                         onCompress = viewModel::showCompressDialog,
@@ -470,6 +474,7 @@ private fun BrowserTopBar(
             }
             if (canPaste) { IconButton(onClick = onPaste) { Icon(Icons.Filled.ContentPaste, "Paste") } }
             IconButton(onClick = onSearchClick) { Icon(Icons.Filled.Search, "Search") }
+            CastRouteButton()
             IconButton(onClick = onSortClick) { Icon(Icons.AutoMirrored.Filled.Sort, "Sort") }
             IconButton(onClick = onViewToggle) {
                 Icon(if (viewMode == ViewMode.LIST) Icons.Filled.GridView else Icons.Filled.ViewList, "Toggle View")
@@ -523,6 +528,7 @@ private fun SelectionTopBar(
     onClear: () -> Unit, onSelectAll: () -> Unit,
     onCopy: () -> Unit, onCut: () -> Unit, onDelete: () -> Unit, onPermanentDelete: () -> Unit, onShare: () -> Unit,
     onSendNearby: () -> Unit,
+    onCast: () -> Unit,
     onEncrypt: () -> Unit, onDecrypt: () -> Unit,
     onCompress: () -> Unit, onWatchIntegrity: () -> Unit, onTag: () -> Unit, onBatchRename: () -> Unit,
     onRename: () -> Unit, onProperties: () -> Unit,
@@ -565,6 +571,8 @@ private fun SelectionTopBar(
                         leadingIcon = { Icon(Icons.Filled.Share, null) })
                     DropdownMenuItem(text = { Text("Send with Quick Share") }, onClick = { onSendNearby(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.NearMe, null) })
+                    DropdownMenuItem(text = { Text("Cast media") }, onClick = { onCast(); moreExpanded = false },
+                        leadingIcon = { Icon(Icons.Filled.Cast, null) })
                     DropdownMenuItem(text = { Text("Encrypt files") }, onClick = { onEncrypt(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.Lock, null) })
                     DropdownMenuItem(text = { Text("Decrypt files") }, onClick = { onDecrypt(); moreExpanded = false },
@@ -583,6 +591,20 @@ private fun SelectionTopBar(
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer))
+}
+
+@Composable
+private fun CastRouteButton() {
+    AndroidView(
+        factory = { viewContext ->
+            MediaRouteButton(viewContext).also { button ->
+                runCatching {
+                    CastButtonFactory.setUpMediaRouteButton(viewContext.applicationContext, button)
+                }
+            }
+        },
+        modifier = Modifier.size(48.dp),
+    )
 }
 
 @Composable

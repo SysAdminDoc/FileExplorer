@@ -30,6 +30,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added Room-backed file tags, browser assignment and management, and AND-combination tag filters in Search.
 - Added USB OTG browsing through UsbManager mass-storage detection, persisted SAF tree grants, and DocumentFile read/write operations.
 - Added a dedicated Quick Share action that sends local and SAF-backed files through the Android Sharesheet with complete URI grant metadata.
+- Added Chromecast media casting for selected local and SAF-backed photos, videos, and audio using a temporary range-capable LAN stream.
 - Added a root-only encrypted-volume workflow for mounting and unmounting existing gocryptfs or EncFS volumes with protected passphrase handling.
 
 ## [v1.3.3] - 2026-06-30

@@ -147,6 +147,7 @@ class BrowserViewModel @Inject constructor(
     private val integrityRepository: IntegrityRepository,
     private val tagRepository: TagRepository,
     private val transferQueueManager: TransferQueueManager,
+    private val castMediaSender: CastMediaSender,
     private val bookmarkDao: BookmarkDao,
     private val recentFileDao: RecentFileDao,
     private val directoryViewPreferenceDao: DirectoryViewPreferenceDao,
@@ -877,6 +878,19 @@ class BrowserViewModel @Inject constructor(
     fun shareSelected() { viewModelScope.launch { _events.emit(BrowserEvent.ShareFiles(getSelectedFileItems())) } }
     fun sendNearbySelected() {
         viewModelScope.launch { _events.emit(BrowserEvent.SendNearbyFiles(getSelectedFileItems())) }
+    }
+
+    fun castSelected() {
+        val items = getSelectedFileItems()
+        if (items.size != 1) {
+            viewModelScope.launch { _events.emit(BrowserEvent.Toast("Select one photo, video, or audio file to cast")) }
+            return
+        }
+        viewModelScope.launch {
+            castMediaSender.cast(items.first())
+                .onSuccess { _events.emit(BrowserEvent.Toast("Casting ${items.first().name}")) }
+                .onFailure { error -> _events.emit(BrowserEvent.Toast("Cast failed: ${error.message}")) }
+        }
     }
 
     fun encryptSelected() {

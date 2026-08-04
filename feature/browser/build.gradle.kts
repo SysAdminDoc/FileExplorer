@@ -43,6 +43,7 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation)
+    implementation(libs.google.cast.framework)
 
     implementation(libs.coroutines.core)
     implementation(libs.coroutines.android)

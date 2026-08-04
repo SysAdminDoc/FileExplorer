@@ -77,13 +77,6 @@ already have rclone configured; importing saves re-entering credentials.
 - **Impact:** 2/5 (niche but sticky). **Effort:** 2/5.
 - **Source:** Existing ROADMAP item; rclone community.
 
-### L-16: Media casting (Chromecast)
-Cast local media (photo/video/audio) to Chromecast or DLNA receivers directly from the file
-browser. Solid Explorer offers this as a paid plugin.
-
-- **Impact:** 2/5. **Effort:** 3/5.
-- **Source:** Solid Explorer Chromecast plugin.
-
 ### L-17: i18n / multi-language support
 Externalize all user-facing strings to `strings.xml` with initial translations for the top 10
 Android locales (en, es, pt-BR, de, fr, ja, ko, zh-CN, ru, ar). Compose already supports RTL

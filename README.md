@@ -36,6 +36,7 @@ cd FileExplorer
 | DocumentsProvider | SAF access to the local storage root with browsing, search, recent files, and document mutations | Complete |
 | USB OTG | UsbManager mass-storage detection, persistent SAF tree access, and DocumentFile read/write browsing | Requires configuration |
 | Quick Share | Selection menu action backed by the Android Sharesheet for nearby-device delivery | Requires Quick Share or another compatible receiver |
+| Media casting | Cast a selected local or SAF-backed photo, video, or audio file through Chromecast's Cast dialog | Requires Chromecast / Google Cast services |
 | Share Server | Authenticated HTTP web access and passive FTP sharing with foreground service and Quick Settings start/stop | Complete |
 | File Encryption | AES-256-GCM encryption with an Android Keystore key and biometric-gated decryption from the browser | Complete |
 | Shizuku Android/data and obb | Optional UserService backend for scoped browsing and file operations under Android/data and Android/obb | Optional |
@@ -202,6 +203,7 @@ Cloud providers require OAuth configuration. Each is optional and the app works 
 | File tags | Browser selection → More → Set tags; drawer → Tags; Search → tag chips | Apply normalized tags and combine multiple tags with filename or regex search |
 | USB OTG | Drawer → USB OTG → Choose USB folder | Connect a mass-storage device, choose its SAF folder, then browse and mutate it with persisted access |
 | Quick Share | Select files → More → Send with Quick Share | Opens the Android Sharesheet with read grants so Quick Share can send one or many files |
+| Media casting | Top-bar Cast button → select receiver; select one media file → More → Cast media | Streams the selected local/SAF item over a temporary LAN URL and loads it in the Cast receiver |
 | Encrypted volumes | Security → Encrypted volumes | Requires root, an installed gocryptfs or EncFS binary, FUSE support, and existing cipher directories |
 
 ## Theme
