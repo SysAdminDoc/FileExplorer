@@ -14,6 +14,7 @@ android {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
     }
+    buildFeatures { aidl = true }
 }
 dependencies {
     implementation(project(":core:model"))
@@ -28,4 +29,9 @@ dependencies {
     implementation(libs.libsu.core)
     implementation(libs.libsu.service)
     implementation(libs.libsu.nio)
+
+    // Optional privileged access through Shizuku or Sui
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
+    testImplementation(kotlin("test"))
 }

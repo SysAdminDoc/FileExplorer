@@ -15,6 +15,7 @@ import com.explorer.fileexplorer.core.designsystem.AccentOrange
 import com.explorer.fileexplorer.core.designsystem.AccentRed
 import com.explorer.fileexplorer.core.model.StorageVolume
 import com.explorer.fileexplorer.core.storage.RootState
+import com.explorer.fileexplorer.core.storage.ShizukuPaths
 
 @Composable
 fun NavigationDrawerContent(
@@ -26,6 +27,7 @@ fun NavigationDrawerContent(
     onToggleRoot: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenNetwork: () -> Unit,
+    onOpenShizuku: () -> Unit,
     onOpenServer: () -> Unit,
     onOpenCloud: () -> Unit,
     onOpenSecurity: () -> Unit,
@@ -160,6 +162,15 @@ fun NavigationDrawerContent(
             // Network
             NavigationDrawerItem(label = { Text("Network") }, selected = false,
                 onClick = onOpenNetwork, icon = { Icon(Icons.Filled.Lan, null) },
+                modifier = Modifier.padding(horizontal = 12.dp))
+
+            NavigationDrawerItem(label = { Text("Shizuku Access") }, selected = false,
+                onClick = onOpenShizuku, icon = { Icon(Icons.Filled.AdminPanelSettings, null) },
+                modifier = Modifier.padding(horizontal = 12.dp))
+
+            NavigationDrawerItem(label = { Text("Android/data") }, selected = false,
+                onClick = { onNavigate(ShizukuPaths.ANDROID_DATA_ROOT) },
+                icon = { Icon(Icons.Filled.Folder, null) },
                 modifier = Modifier.padding(horizontal = 12.dp))
 
             // Share server

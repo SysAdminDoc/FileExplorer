@@ -58,16 +58,6 @@ For operations exceeding 6 hours, consider chunking or using WorkManager.
 
 ## Next (v1.5.0 -- v1.7.0)
 
-
-### X-09: Shizuku support for Android/data access
-Shizuku enables privileged operations without root by delegating to a debug shell service.
-Allows reading `/Android/data/` and `/Android/obb/` on Android 11+ without
-`MANAGE_EXTERNAL_STORAGE`. Solid Explorer v3.4.10 added Shizuku support. Growing community
-demand since scoped storage enforcement.
-
-- **Impact:** 4/5. **Effort:** 3/5.
-- **Source:** github.com/RikkaApps/Shizuku; Solid Explorer v3.4.10 changelog; Reddit r/Android discussions.
-
 ### X-10: Large screen / foldable / DeX layout
 3-column layout on tablets and foldables (tree + list + preview). Keyboard shortcuts,
 right-click context menus, trackpad scrolling. Android 14/15 large screen guidance.

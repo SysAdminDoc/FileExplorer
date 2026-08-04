@@ -40,9 +40,11 @@ import java.io.File
 @Composable
 fun BrowserScreen(
     viewModel: BrowserViewModel = hiltViewModel(),
+    initialPath: String? = null,
     onOpenSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenNetwork: () -> Unit = {},
+    onOpenShizuku: () -> Unit = {},
     onOpenServer: () -> Unit = {},
     onOpenCloud: () -> Unit = {},
     onOpenSecurity: () -> Unit = {},
@@ -63,6 +65,10 @@ fun BrowserScreen(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var showSortMenu by remember { mutableStateOf(false) }
+
+    LaunchedEffect(initialPath) {
+        initialPath?.takeIf { it.isNotBlank() }?.let(viewModel::navigateTo)
+    }
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
@@ -114,6 +120,7 @@ fun BrowserScreen(
                 onToggleRoot = { viewModel.toggleRootMode() },
                 onOpenSettings = { scope.launch { drawerState.close() }; onOpenSettings() },
                 onOpenNetwork = { scope.launch { drawerState.close() }; onOpenNetwork() },
+                onOpenShizuku = { scope.launch { drawerState.close() }; onOpenShizuku() },
                 onOpenServer = { scope.launch { drawerState.close() }; onOpenServer() },
                 onOpenCloud = { scope.launch { drawerState.close() }; onOpenCloud() },
                 onOpenSecurity = { scope.launch { drawerState.close() }; onOpenSecurity() },

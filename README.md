@@ -35,6 +35,7 @@ cd FileExplorer
 | DocumentsProvider | SAF access to the local storage root with browsing, search, recent files, and document mutations | Complete |
 | Share Server | Authenticated HTTP web access and passive FTP sharing with foreground service and Quick Settings start/stop | Complete |
 | File Encryption | AES-256-GCM encryption with an Android Keystore key and biometric-gated decryption from the browser | Complete |
+| Shizuku Android/data and obb | Optional UserService backend for scoped browsing and file operations under Android/data and Android/obb | Optional |
 | File Operations | Copy, move, trash, restore, permanent delete, rename, create. Foreground service with progress notification | Complete |
 | Trash Bin | `.FileExplorer-Trash/` per storage volume, 30-day default purge, configurable TTL, restore and empty-trash screen | Complete |
 | Search | Streaming results via Coroutine Flow, regex support, search history | Complete |
@@ -134,6 +135,7 @@ Cloud providers require OAuth configuration. Each is optional and the app works 
 | Secure delete | Security screen | 3-pass overwrite before deletion |
 | Vault | Security screen | Protected private storage area |
 | File encryption | Browser selection → More | Encrypt files to `.encrypted`; biometric authentication is required to decrypt |
+| Shizuku access | Shizuku Access screen / drawer | Optional Android/data and Android/obb backend; requires a separately started Shizuku or Sui service and granted permission |
 | Share server | Share Server screen / Quick Settings | Authenticated HTTP or FTP access to a selected local folder |
 
 ## Theme
@@ -156,6 +158,7 @@ OLED remains available as the high-contrast AMOLED option, while System follows 
 - Android SDK 36, JDK 17
 - Device or emulator running Android 8.0+ (API 26)
 - Rooted device for root features (optional)
+- Shizuku or Sui for optional Android/data and Android/obb access (optional)
 
 ## Permissions
 
