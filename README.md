@@ -44,6 +44,7 @@ cd FileExplorer
 | Bookmarks | Bookmark any directory, persisted in Room DB, accessible from drawer | Complete |
 | Recent Files | Track opened files, quick access from drawer | Complete |
 | Root Access | libsu 6.0.0, browse /data /system /vendor, SELinux context, chmod/chown, remount | Complete |
+| Root Module Browser | List Magisk, KernelSU, and APatch modules, toggle disable markers, and install trusted ZIPs through the detected manager | Complete |
 | Archives | Browse ZIP/7z/TAR/RAR as virtual folders. RAR extraction is read-only; ZIP supports AES-256 passwords | Complete |
 | SMB/CIFS | Windows network shares via smbj 0.13.0 with domain auth | Complete |
 | SFTP | SSH file transfer via sshj 0.40.0 with known_hosts verification, password + private key auth | Complete |

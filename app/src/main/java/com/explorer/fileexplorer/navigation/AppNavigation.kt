@@ -23,6 +23,7 @@ import com.explorer.fileexplorer.feature.security.SecurityScreen
 import com.explorer.fileexplorer.feature.settings.SettingsScreen
 import com.explorer.fileexplorer.feature.transfer.TransferQueueScreen
 import com.explorer.fileexplorer.feature.browser.ShizukuScreen
+import com.explorer.fileexplorer.feature.browser.RootModulesScreen
 
 object Routes {
     const val BROWSER = "browser"
@@ -42,6 +43,7 @@ object Routes {
     const val TRASH = "trash"
     const val ANALYZER = "analyzer"
     const val TRANSFERS = "transfers"
+    const val ROOT_MODULES = "root-modules"
 
     fun editorRoute(filePath: String) = "editor/${java.net.URLEncoder.encode(filePath, "UTF-8")}"
     fun hexEditorRoute(filePath: String) = "hex/${java.net.URLEncoder.encode(filePath, "UTF-8")}"
@@ -65,6 +67,7 @@ fun AppNavigation(
                 onOpenCollections = { navController.navigate(Routes.COLLECTIONS) },
                 onOpenSecurity = { navController.navigate(Routes.SECURITY) },
                 onOpenApps = { navController.navigate(Routes.APPS) },
+                onOpenRootModules = { navController.navigate(Routes.ROOT_MODULES) },
                 onOpenTrash = { navController.navigate(Routes.TRASH) },
                 onOpenAnalyzer = { navController.navigate(Routes.ANALYZER) },
                 onOpenTransfers = { navController.navigate(Routes.TRANSFERS) },
@@ -90,6 +93,7 @@ fun AppNavigation(
                 onOpenCollections = { navController.navigate(Routes.COLLECTIONS) },
                 onOpenSecurity = { navController.navigate(Routes.SECURITY) },
                 onOpenApps = { navController.navigate(Routes.APPS) },
+                onOpenRootModules = { navController.navigate(Routes.ROOT_MODULES) },
                 onOpenTrash = { navController.navigate(Routes.TRASH) },
                 onOpenAnalyzer = { navController.navigate(Routes.ANALYZER) },
                 onOpenTransfers = { navController.navigate(Routes.TRANSFERS) },
@@ -122,6 +126,7 @@ fun AppNavigation(
         composable(Routes.CLOUD) { CloudScreen(onNavigateBack = { navController.popBackStack() }) }
         composable(Routes.SECURITY) { SecurityScreen(onNavigateBack = { navController.popBackStack() }) }
         composable(Routes.APPS) { AppsScreen(onNavigateBack = { navController.popBackStack() }) }
+        composable(Routes.ROOT_MODULES) { RootModulesScreen(onNavigateBack = { navController.popBackStack() }) }
         composable(Routes.TRASH) { TrashScreen(onNavigateBack = { navController.popBackStack() }) }
         composable(Routes.ANALYZER) { StorageAnalyzerScreen(onNavigateBack = { navController.popBackStack() }) }
         composable(Routes.TRANSFERS) { TransferQueueScreen(onNavigateBack = { navController.popBackStack() }) }

@@ -54,6 +54,7 @@ fun BrowserScreen(
     onOpenCollections: () -> Unit = {},
     onOpenSecurity: () -> Unit = {},
     onOpenApps: () -> Unit = {},
+    onOpenRootModules: () -> Unit = {},
     onOpenTrash: () -> Unit = {},
     onOpenAnalyzer: () -> Unit = {},
     onOpenTransfers: () -> Unit = {},
@@ -135,6 +136,7 @@ fun BrowserScreen(
                 onOpenCloud = { scope.launch { drawerState.close() }; onOpenCloud() },
                 onOpenSecurity = { scope.launch { drawerState.close() }; onOpenSecurity() },
                 onOpenApps = { scope.launch { drawerState.close() }; onOpenApps() },
+                onOpenRootModules = { scope.launch { drawerState.close() }; onOpenRootModules() },
                 onOpenTrash = { scope.launch { drawerState.close() }; onOpenTrash() },
                 onOpenAnalyzer = { scope.launch { drawerState.close() }; onOpenAnalyzer() },
                 onOpenTransfers = { scope.launch { drawerState.close() }; onOpenTransfers() })

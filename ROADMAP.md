@@ -77,13 +77,6 @@ already have rclone configured; importing saves re-entering credentials.
 - **Impact:** 2/5 (niche but sticky). **Effort:** 2/5.
 - **Source:** Existing ROADMAP item; rclone community.
 
-### L-09: Magisk / KernelSU / APatch module browser
-List installed modules, toggle state, install from ZIP. KernelSU-Next uses libsu internally.
-APatch bypasses SELinux via KernelPatch (libsu optional).
-
-- **Impact:** 2/5 (root niche). **Effort:** 3/5.
-- **Source:** Existing ROADMAP item; libsu v6 docs; KernelSU-Next source.
-
 ### L-10: Tasker / Automate intent actions
 Expose copy, move, zip, upload as intent actions with extras for source/destination/format.
 Enables automation workflows.

@@ -33,6 +33,7 @@ fun NavigationDrawerContent(
     onOpenCloud: () -> Unit,
     onOpenSecurity: () -> Unit,
     onOpenApps: () -> Unit,
+    onOpenRootModules: () -> Unit,
     onOpenTrash: () -> Unit,
     onOpenAnalyzer: () -> Unit,
     onOpenTransfers: () -> Unit,
@@ -162,6 +163,10 @@ fun NavigationDrawerContent(
                         icon = { Icon(Icons.Filled.Folder, null, tint = AccentOrange) },
                         modifier = Modifier.padding(horizontal = 24.dp))
                 }
+
+                NavigationDrawerItem(label = { Text("Root Modules") }, selected = false,
+                    onClick = onOpenRootModules, icon = { Icon(Icons.Filled.Extension, null, tint = AccentOrange) },
+                    modifier = Modifier.padding(horizontal = 12.dp))
             }
 
             // Network
