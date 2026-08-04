@@ -31,6 +31,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.window.PopupProperties
 import coil3.compose.AsyncImage
 import com.explorer.fileexplorer.core.database.BookmarkEntity
+import com.explorer.fileexplorer.core.database.RecentLocationEntity
 import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.model.StorageVolume
@@ -107,6 +108,7 @@ internal fun LargeScreenBrowserContent(
                 modifier = Modifier.width(224.dp),
                 volumes = state.volumes,
                 bookmarks = state.bookmarks,
+                recentLocations = state.recentLocations,
                 rootState = state.rootState,
                 rootEnabled = state.rootEnabled,
                 currentPath = state.currentPath,
@@ -183,6 +185,7 @@ private fun LargePlacesPane(
     modifier: Modifier,
     volumes: List<StorageVolume>,
     bookmarks: List<BookmarkEntity>,
+    recentLocations: List<RecentLocationEntity>,
     rootState: RootState,
     rootEnabled: Boolean,
     currentPath: String,
@@ -238,6 +241,25 @@ private fun LargePlacesPane(
                         icon = Icons.Filled.Bookmark,
                         selected = currentPath == bookmark.path,
                         onClick = { onNavigate(bookmark.path) },
+                    )
+                }
+            }
+            if (recentLocations.isNotEmpty()) {
+                item {
+                    Text(
+                        stringResource(DesignSystemR.string.recent_locations).uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                    )
+                }
+                items(recentLocations, key = { "recent:${it.path}" }) { location ->
+                    LargePlaceItem(
+                        title = location.name,
+                        subtitle = location.path,
+                        icon = Icons.Filled.History,
+                        selected = currentPath == location.path,
+                        onClick = { onNavigate(location.path) },
                     )
                 }
             }

@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.explorer.fileexplorer.core.database.BookmarkEntity
+import com.explorer.fileexplorer.core.database.RecentLocationEntity
 import com.explorer.fileexplorer.core.database.SavedSearchEntity
 import com.explorer.fileexplorer.core.designsystem.AccentOrange
 import com.explorer.fileexplorer.core.designsystem.AccentRed
@@ -28,12 +29,14 @@ fun NavigationDrawerContent(
     usbDevices: List<UsbDeviceInfo>,
     usbRoots: List<UsbStorageRoot>,
     bookmarks: List<BookmarkEntity>,
+    recentLocations: List<RecentLocationEntity>,
     savedSearches: List<SavedSearchEntity>,
     rootState: RootState,
     rootEnabled: Boolean,
     onNavigate: (String) -> Unit,
     onOpenUsbPicker: () -> Unit,
     onOpenCollections: () -> Unit,
+    onOpenRecentLocation: (RecentLocationEntity) -> Unit,
     onOpenSavedSearch: (SavedSearchEntity) -> Unit,
     onOpenTags: () -> Unit,
     onToggleRoot: () -> Unit,
@@ -174,6 +177,32 @@ fun NavigationDrawerContent(
                         selected = false,
                         onClick = { onOpenSavedSearch(savedSearch) },
                         icon = { Icon(Icons.Filled.Bookmark, null) },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                }
+            }
+
+            if (recentLocations.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text(stringResource(DesignSystemR.string.recent_locations).uppercase(), style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
+                for (location in recentLocations) {
+                    NavigationDrawerItem(
+                        label = {
+                            Column {
+                                Text(location.name)
+                                Text(
+                                    location.path,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                )
+                            }
+                        },
+                        selected = false,
+                        onClick = { onOpenRecentLocation(location) },
+                        icon = { Icon(Icons.Filled.History, null) },
                         modifier = Modifier.padding(horizontal = 12.dp),
                     )
                 }

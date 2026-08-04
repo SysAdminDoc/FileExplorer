@@ -47,6 +47,14 @@ data class RecentFileEntity(
     @ColumnInfo(name = "accessed_at") val accessedAt: Long = System.currentTimeMillis(),
 )
 
+@Entity(tableName = "recent_locations")
+data class RecentLocationEntity(
+    @PrimaryKey
+    @ColumnInfo(name = "path") val path: String,
+    @ColumnInfo(name = "name") val name: String,
+    @ColumnInfo(name = "visited_at") val visitedAt: Long = System.currentTimeMillis(),
+)
+
 @Entity(tableName = "search_history")
 data class SearchHistoryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

@@ -94,6 +94,24 @@ interface RecentFileDao {
 }
 
 @Dao
+interface RecentLocationDao {
+    @Query("SELECT * FROM recent_locations ORDER BY visited_at DESC LIMIT :limit")
+    fun getRecentFlow(limit: Int = 20): Flow<List<RecentLocationEntity>>
+
+    @Query("SELECT * FROM recent_locations ORDER BY visited_at DESC LIMIT :limit")
+    suspend fun getRecent(limit: Int = 20): List<RecentLocationEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(location: RecentLocationEntity)
+
+    @Query("DELETE FROM recent_locations WHERE path = :path")
+    suspend fun deleteByPath(path: String)
+
+    @Query("DELETE FROM recent_locations")
+    suspend fun clearAll()
+}
+
+@Dao
 interface SearchHistoryDao {
     @Query("SELECT * FROM search_history ORDER BY searched_at DESC LIMIT :limit")
     fun getHistoryFlow(limit: Int = 20): Flow<List<SearchHistoryEntity>>

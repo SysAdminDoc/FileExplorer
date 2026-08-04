@@ -77,13 +77,6 @@ already have rclone configured; importing saves re-entering credentials.
 - **Impact:** 2/5 (niche but sticky). **Effort:** 2/5.
 - **Source:** Existing ROADMAP item; rclone community.
 
-### L-21: Recent locations
-Track recently visited directories (not just recent files). Accessible from drawer.
-Separate from bookmarks — automatic, ordered by recency.
-
-- **Impact:** 2/5. **Effort:** 1/5.
-- **Source:** Existing ROADMAP item.
-
 ### L-22: F-Droid publication
 Reproducible build metadata, no proprietary dependencies in the F-Droid flavor, removal of
 Google Play Services auth (already optional). F-Droid is the primary distribution channel for

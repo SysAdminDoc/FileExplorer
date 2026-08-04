@@ -36,6 +36,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added bounded Coil thumbnail caching with configurable size, storage location, and purge controls in Settings.
 - Added opt-in recursive directory sizes in list view with coroutine-backed calculation and a bounded per-directory LRU cache.
 - Added named saved searches with regex/path recall from the navigation drawer.
+- Added automatic recent-directory tracking with a separate drawer section and Room migration.
 
 ## [v1.3.3] - 2026-06-30
 

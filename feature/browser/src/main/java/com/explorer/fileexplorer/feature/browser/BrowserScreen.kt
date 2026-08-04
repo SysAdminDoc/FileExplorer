@@ -41,6 +41,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.explorer.fileexplorer.core.data.ArchiveFormat
 import com.explorer.fileexplorer.core.database.TagEntity
+import com.explorer.fileexplorer.core.database.RecentLocationEntity
 import com.explorer.fileexplorer.core.database.SavedSearchEntity
 import com.explorer.fileexplorer.core.designsystem.AccentOrange
 import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
@@ -167,6 +168,7 @@ fun BrowserScreen(
             NavigationDrawerContent(
                 volumes = state.volumes, usbDevices = state.usbDevices, usbRoots = state.usbRoots,
                 bookmarks = state.bookmarks,
+                recentLocations = state.recentLocations,
                 savedSearches = state.savedSearches,
                 rootState = state.rootState, rootEnabled = state.rootEnabled,
                 onNavigate = { path -> viewModel.navigateTo(path); scope.launch { drawerState.close() } },
@@ -175,6 +177,10 @@ fun BrowserScreen(
                     usbTreePicker.launch(null)
                 },
                 onOpenCollections = { scope.launch { drawerState.close() }; onOpenCollections() },
+                onOpenRecentLocation = { location: RecentLocationEntity ->
+                    scope.launch { drawerState.close() }
+                    viewModel.navigateTo(location.path)
+                },
                 onOpenSavedSearch = { savedSearch ->
                     scope.launch { drawerState.close() }
                     onOpenSavedSearch(savedSearch)

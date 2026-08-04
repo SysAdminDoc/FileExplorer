@@ -17,6 +17,7 @@ import javax.inject.Singleton
     entities = [
         BookmarkEntity::class,
         RecentFileEntity::class,
+        RecentLocationEntity::class,
         SearchHistoryEntity::class,
         SavedSearchEntity::class,
         ConnectionEntity::class,
@@ -25,12 +26,13 @@ import javax.inject.Singleton
         TagEntity::class,
         FileTagEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun bookmarkDao(): BookmarkDao
     abstract fun recentFileDao(): RecentFileDao
+    abstract fun recentLocationDao(): RecentLocationDao
     abstract fun searchHistoryDao(): SearchHistoryDao
     abstract fun savedSearchDao(): SavedSearchDao
     abstract fun connectionDao(): ConnectionDao
@@ -50,11 +52,18 @@ object DatabaseModule {
             context,
             AppDatabase::class.java,
             "file_explorer.db"
-        ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build()
+        ).addMigrations(
+            MIGRATION_2_3,
+            MIGRATION_3_4,
+            MIGRATION_4_5,
+            MIGRATION_5_6,
+            MIGRATION_6_7,
+        ).build()
     }
 
     @Provides fun provideBookmarkDao(db: AppDatabase): BookmarkDao = db.bookmarkDao()
     @Provides fun provideRecentFileDao(db: AppDatabase): RecentFileDao = db.recentFileDao()
+    @Provides fun provideRecentLocationDao(db: AppDatabase): RecentLocationDao = db.recentLocationDao()
     @Provides fun provideSearchHistoryDao(db: AppDatabase): SearchHistoryDao = db.searchHistoryDao()
     @Provides fun provideSavedSearchDao(db: AppDatabase): SavedSearchDao = db.savedSearchDao()
     @Provides fun provideConnectionDao(db: AppDatabase): ConnectionDao = db.connectionDao()
@@ -146,5 +155,20 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
             """.trimIndent(),
         )
         db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_saved_searches_name` ON `saved_searches` (`name`)")
+    }
+}
+
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `recent_locations` (
+                `path` TEXT NOT NULL,
+                `name` TEXT NOT NULL,
+                `visited_at` INTEGER NOT NULL,
+                PRIMARY KEY(`path`)
+            )
+            """.trimIndent(),
+        )
     }
 }

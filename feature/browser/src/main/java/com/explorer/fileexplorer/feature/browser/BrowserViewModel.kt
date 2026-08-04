@@ -31,6 +31,8 @@ import com.explorer.fileexplorer.core.database.DirectoryViewPreferenceCodec
 import com.explorer.fileexplorer.core.database.DirectoryViewPreferenceDao
 import com.explorer.fileexplorer.core.database.RecentFileDao
 import com.explorer.fileexplorer.core.database.RecentFileEntity
+import com.explorer.fileexplorer.core.database.RecentLocationDao
+import com.explorer.fileexplorer.core.database.RecentLocationEntity
 import com.explorer.fileexplorer.core.database.SavedSearchDao
 import com.explorer.fileexplorer.core.database.SavedSearchEntity
 import com.explorer.fileexplorer.core.database.TagEntity
@@ -72,6 +74,7 @@ data class BrowserUiState(
     val usbRoots: List<UsbStorageRoot> = emptyList(),
     val isRefreshingUsb: Boolean = false,
     val bookmarks: List<BookmarkEntity> = emptyList(),
+    val recentLocations: List<RecentLocationEntity> = emptyList(),
     val savedSearches: List<SavedSearchEntity> = emptyList(),
     val tags: List<TagEntity> = emptyList(),
     val showTagDialog: Boolean = false,
@@ -167,6 +170,7 @@ class BrowserViewModel @Inject constructor(
     private val bookmarkDao: BookmarkDao,
     private val savedSearchDao: SavedSearchDao,
     private val recentFileDao: RecentFileDao,
+    private val recentLocationDao: RecentLocationDao,
     private val directoryViewPreferenceDao: DirectoryViewPreferenceDao,
 ) : ViewModel() {
 
@@ -186,6 +190,7 @@ class BrowserViewModel @Inject constructor(
         loadVolumes()
         refreshUsbStorage()
         observeBookmarks()
+        observeRecentLocations()
         observeSavedSearches()
         observeTags()
         observeRootState()
@@ -397,6 +402,7 @@ class BrowserViewModel @Inject constructor(
                         insideArchive = false, archivePath = null, archiveInternalPath = "",
                         selinuxContext = selinux)
                 }
+                recordRecentLocation(path)
                 scheduleDirectorySizes(path, sorted, repo, secondary = false)
             }
         }
@@ -469,6 +475,7 @@ class BrowserViewModel @Inject constructor(
                             secondaryError = null,
                         )
                     }
+                    recordRecentLocation(path)
                     scheduleDirectorySizes(path, sorted, repository, secondary = true)
                 }
             } catch (e: Exception) {
@@ -710,6 +717,7 @@ class BrowserViewModel @Inject constructor(
                         historyIndex = historyIndex,
                     )
                 }
+                recordRecentLocation(path)
                 scheduleDirectorySizes(path, sorted, repository, secondary = false)
             }
         }
@@ -1240,10 +1248,26 @@ class BrowserViewModel @Inject constructor(
     }
     private fun trashVolumeRoots(): List<String> = storageVolumeHelper.getStorageVolumes().map { it.path }.distinct()
     private fun observeBookmarks() { viewModelScope.launch { bookmarkDao.getAllFlow().collect { b -> _state.update { it.copy(bookmarks = b) } } } }
+    private fun observeRecentLocations() {
+        viewModelScope.launch {
+            recentLocationDao.getRecentFlow().collect { locations ->
+                _state.update { it.copy(recentLocations = locations) }
+            }
+        }
+    }
     private fun observeSavedSearches() {
         viewModelScope.launch {
             savedSearchDao.getAllFlow().collect { searches -> _state.update { it.copy(savedSearches = searches) } }
         }
+    }
+    private suspend fun recordRecentLocation(path: String) {
+        val normalizedPath = path.trimEnd('/').ifBlank { "/" }
+        recentLocationDao.upsert(
+            RecentLocationEntity(
+                path = normalizedPath,
+                name = normalizedPath.substringAfterLast('/').ifBlank { normalizedPath },
+            ),
+        )
     }
     private fun observeTags() { viewModelScope.launch { tagRepository.tags.collect { tags -> _state.update { it.copy(tags = tags) } } } }
     private fun getSelectedFileItems(): List<FileItem> { val s = _state.value.selectedItems; return _state.value.files.filter { it.path in s } }
