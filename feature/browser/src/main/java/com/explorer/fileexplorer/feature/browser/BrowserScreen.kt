@@ -156,6 +156,7 @@ fun BrowserScreen(
                         onEncrypt = viewModel::encryptSelected,
                         onDecrypt = viewModel::requestDecryptSelected,
                         onCompress = viewModel::showCompressDialog,
+                        onWatchIntegrity = viewModel::watchSelectedIntegrity,
                         onBatchRename = viewModel::showBatchRenameDialog,
                         onRename = { state.files.firstOrNull { it.path in state.selectedItems }?.let { viewModel.showRename(it) } },
                         onProperties = { state.files.firstOrNull { it.path in state.selectedItems }?.let { viewModel.showProperties(it) } },
@@ -470,7 +471,8 @@ private fun SelectionTopBar(
     onClear: () -> Unit, onSelectAll: () -> Unit,
     onCopy: () -> Unit, onCut: () -> Unit, onDelete: () -> Unit, onPermanentDelete: () -> Unit, onShare: () -> Unit,
     onEncrypt: () -> Unit, onDecrypt: () -> Unit,
-    onCompress: () -> Unit, onBatchRename: () -> Unit, onRename: () -> Unit, onProperties: () -> Unit,
+    onCompress: () -> Unit, onWatchIntegrity: () -> Unit, onBatchRename: () -> Unit,
+    onRename: () -> Unit, onProperties: () -> Unit,
     onHexView: () -> Unit,
 ) {
     TopAppBar(
@@ -502,6 +504,8 @@ private fun SelectionTopBar(
                         leadingIcon = { Icon(Icons.Filled.DeleteForever, null) })
                     DropdownMenuItem(text = { Text("Compress") }, onClick = { onCompress(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.FolderZip, null) })
+                    DropdownMenuItem(text = { Text("Watch for changes") }, onClick = { onWatchIntegrity(); moreExpanded = false },
+                        leadingIcon = { Icon(Icons.Filled.VerifiedUser, null) })
                     DropdownMenuItem(text = { Text("Share") }, onClick = { onShare(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.Share, null) })
                     DropdownMenuItem(text = { Text("Encrypt files") }, onClick = { onEncrypt(); moreExpanded = false },

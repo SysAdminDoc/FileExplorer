@@ -26,6 +26,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added configurable swipe-left/right actions for browser list rows, including safe delete confirmation and cut-to-move.
 - Added a root-only module browser for Magisk, KernelSU, and APatch, with module status toggles and manager-backed ZIP installation.
 - Added exported Tasker / Automate intent actions for copy, move, archive creation, and saved-connection network uploads, with request completion broadcasts.
+- Added Room-backed integrity watches for files and directory trees, with browser selection support, periodic WorkManager scans, drift statuses, and notifications.
 
 ## [v1.3.3] - 2026-06-30
 

@@ -77,13 +77,6 @@ already have rclone configured; importing saves re-entering credentials.
 - **Impact:** 2/5 (niche but sticky). **Effort:** 2/5.
 - **Source:** Existing ROADMAP item; rclone community.
 
-### L-11: File integrity database (ransomware tripwire)
-Track SHA-256 of user-selected paths. Alert on drift (hash mismatch = possible tampering).
-Periodically recompute via WorkManager. No competitor offers this.
-
-- **Impact:** 3/5 (novel, high-value for security-conscious users). **Effort:** 3/5.
-- **Source:** Existing ROADMAP item; novel feature (leapfrog).
-
 ### L-12: Tag-based file organization
 User-defined tags applied to files, stored in Room DB, searchable via tag combinations.
 TagSpaces is the only Android app offering this. Emerging community request.

@@ -16,6 +16,7 @@ import com.explorer.fileexplorer.core.data.SecureDelete
 import com.explorer.fileexplorer.feature.security.FileEncryptionManager
 import com.explorer.fileexplorer.feature.security.FileEncryptionBatchResult
 import com.explorer.fileexplorer.feature.security.SecurityRepository
+import com.explorer.fileexplorer.feature.security.IntegrityRepository
 import com.explorer.fileexplorer.feature.transfer.TransferQueueManager
 import com.explorer.fileexplorer.core.database.BookmarkDao
 import com.explorer.fileexplorer.core.database.BookmarkEntity
@@ -128,6 +129,7 @@ class BrowserViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val securityRepository: SecurityRepository,
     private val fileEncryptionManager: FileEncryptionManager,
+    private val integrityRepository: IntegrityRepository,
     private val transferQueueManager: TransferQueueManager,
     private val bookmarkDao: BookmarkDao,
     private val recentFileDao: RecentFileDao,
@@ -588,6 +590,27 @@ class BrowserViewModel @Inject constructor(
             archiveHelper.createArchive(outputPath, items.map { it.path }, format, password)
                 .onSuccess { _events.emit(BrowserEvent.Toast("Archive created")); clearSelection(); refresh() }
                 .onFailure { e -> _events.emit(BrowserEvent.Toast("Compress failed: ${e.message}")) }
+        }
+    }
+
+    fun watchSelectedIntegrity() {
+        val paths = getSelectedFileItems().map { it.path }
+        if (paths.isEmpty()) return
+        viewModelScope.launch {
+            var watched = 0
+            var failed = 0
+            paths.forEach { path ->
+                integrityRepository.addPath(path)
+                    .onSuccess { watched++ }
+                    .onFailure { failed++ }
+            }
+            _events.emit(
+                BrowserEvent.Toast(
+                    if (failed == 0) "Watching $watched path(s) for changes"
+                    else "Watching $watched path(s); $failed could not be added",
+                ),
+            )
+            clearSelection()
         }
     }
 

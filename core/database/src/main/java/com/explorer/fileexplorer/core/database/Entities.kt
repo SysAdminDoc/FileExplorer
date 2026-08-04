@@ -58,3 +58,17 @@ data class DirectoryViewPreferenceEntity(
     @ColumnInfo(name = "visible_columns") val visibleColumns: String = "SIZE,DATE",
     @ColumnInfo(name = "updated_at") val updatedAt: Long = System.currentTimeMillis(),
 )
+
+@Entity(tableName = "integrity_entries")
+data class IntegrityEntryEntity(
+    @PrimaryKey
+    @ColumnInfo(name = "path") val path: String,
+    @ColumnInfo(name = "sha256") val sha256: String,
+    @ColumnInfo(name = "size") val size: Long,
+    @ColumnInfo(name = "modified_at") val modifiedAt: Long,
+    @ColumnInfo(name = "is_directory") val isDirectory: Boolean,
+    @ColumnInfo(name = "added_at") val addedAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(name = "last_checked_at") val lastCheckedAt: Long? = null,
+    @ColumnInfo(name = "status") val status: String = "OK",
+    @ColumnInfo(name = "last_error") val lastError: String? = null,
+)

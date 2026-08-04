@@ -116,3 +116,21 @@ interface DirectoryViewPreferenceDao {
     @Query("DELETE FROM directory_view_preferences WHERE path = :path")
     suspend fun deleteByPath(path: String)
 }
+
+@Dao
+interface IntegrityDao {
+    @Query("SELECT * FROM integrity_entries ORDER BY path ASC")
+    fun getAllFlow(): Flow<List<IntegrityEntryEntity>>
+
+    @Query("SELECT * FROM integrity_entries ORDER BY path ASC")
+    suspend fun getAll(): List<IntegrityEntryEntity>
+
+    @Query("SELECT * FROM integrity_entries WHERE path = :path")
+    suspend fun getByPath(path: String): IntegrityEntryEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entry: IntegrityEntryEntity)
+
+    @Query("DELETE FROM integrity_entries WHERE path = :path")
+    suspend fun deleteByPath(path: String)
+}

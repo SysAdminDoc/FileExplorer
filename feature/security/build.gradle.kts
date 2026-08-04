@@ -20,6 +20,7 @@ android {
 dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:data"))
+    implementation(project(":core:database"))
     implementation(project(":core:designsystem"))
     implementation(libs.core.ktx)
     implementation(libs.lifecycle.runtime)
@@ -35,5 +36,6 @@ dependencies {
     implementation(libs.biometric)
     implementation(libs.security.crypto)
     implementation(libs.datastore.preferences)
+    implementation(libs.workmanager)
     testImplementation(kotlin("test"))
 }

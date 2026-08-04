@@ -6,6 +6,7 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -24,7 +25,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
-import com.explorer.fileexplorer.core.data.FileRepository
+import com.explorer.fileexplorer.core.database.IntegrityEntryEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -259,12 +260,15 @@ data class SecurityUiState(
     val canUseBiometrics: Boolean = false,
     val checksumResult: String? = null,
     val isComputing: Boolean = false,
+    val integrityEntries: List<IntegrityEntryEntity> = emptyList(),
+    val isScanningIntegrity: Boolean = false,
 )
 
 @HiltViewModel
 class SecurityViewModel @Inject constructor(
     private val securityRepo: SecurityRepository,
     private val vaultManager: VaultManager,
+    private val integrityRepository: IntegrityRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SecurityUiState())
@@ -278,6 +282,11 @@ class SecurityViewModel @Inject constructor(
         viewModelScope.launch {
             securityRepo.settings.collect { settings ->
                 _state.update { it.copy(settings = settings) }
+            }
+        }
+        viewModelScope.launch {
+            integrityRepository.entries.collect { entries ->
+                _state.update { it.copy(integrityEntries = entries) }
             }
         }
     }
@@ -294,6 +303,37 @@ class SecurityViewModel @Inject constructor(
                 .onFailure { e -> _toasts.emit("Checksum failed: ${e.message}"); _state.update { it.copy(isComputing = false) } }
         }
     }
+
+    fun addIntegrityPath(path: String) {
+        viewModelScope.launch {
+            integrityRepository.addPath(path)
+                .onSuccess { _toasts.emit("Watching ${it.path}") }
+                .onFailure { error -> _toasts.emit("Watch failed: ${error.message}") }
+        }
+    }
+
+    fun removeIntegrityPath(path: String) {
+        viewModelScope.launch {
+            integrityRepository.removePath(path)
+            _toasts.emit("Removed integrity watch")
+        }
+    }
+
+    fun scanIntegrityNow() {
+        if (_state.value.isScanningIntegrity) return
+        viewModelScope.launch {
+            _state.update { it.copy(isScanningIntegrity = true) }
+            integrityRepository.scanNow()
+                .onSuccess { summary ->
+                    _toasts.emit(
+                        "Integrity scan: ${summary.checked} checked, " +
+                            "${summary.changed} changed, ${summary.missing} missing",
+                    )
+                }
+                .onFailure { error -> _toasts.emit("Integrity scan failed: ${error.message}") }
+            _state.update { it.copy(isScanningIntegrity = false) }
+        }
+    }
 }
 
 // -- Screen --
@@ -306,8 +346,18 @@ fun SecurityScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-
+    var showIntegrityPathDialog by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { viewModel.toasts.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() } }
+
+    if (showIntegrityPathDialog) {
+        IntegrityPathDialog(
+            onConfirm = { path ->
+                showIntegrityPathDialog = false
+                viewModel.addIntegrityPath(path)
+            },
+            onDismiss = { showIntegrityPathDialog = false },
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -403,6 +453,52 @@ fun SecurityScreen(
                 }
             }
 
+            item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
+            item {
+                ListItem(
+                    headlineContent = { Text("Integrity Watch") },
+                    supportingContent = {
+                        Text("Track SHA-256 fingerprints and alert when watched paths change or disappear")
+                    },
+                    leadingContent = { Icon(Icons.Filled.VerifiedUser, null) },
+                    trailingContent = {
+                        IconButton(onClick = { showIntegrityPathDialog = true }) {
+                            Icon(Icons.Filled.Add, "Watch path")
+                        }
+                    },
+                )
+            }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = { showIntegrityPathDialog = true },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("Add path") }
+                    Button(
+                        onClick = viewModel::scanIntegrityNow,
+                        enabled = state.integrityEntries.isNotEmpty() && !state.isScanningIntegrity,
+                        modifier = Modifier.weight(1f),
+                    ) { Text(if (state.isScanningIntegrity) "Scanning..." else "Scan now") }
+                }
+            }
+            if (state.integrityEntries.isEmpty()) {
+                item {
+                    Text(
+                        "No watched paths. Add a path here or select files in the browser and choose Watch for changes.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+            } else {
+                items(state.integrityEntries, key = { it.path }) { entry ->
+                    IntegrityEntryRow(entry = entry, onRemove = { viewModel.removeIntegrityPath(entry.path) })
+                }
+            }
+
             // Info
             item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             item {
@@ -424,4 +520,52 @@ fun SecurityScreen(
             item { Spacer(Modifier.height(32.dp)) }
         }
     }
+}
+
+@Composable
+private fun IntegrityEntryRow(entry: IntegrityEntryEntity, onRemove: () -> Unit) {
+    val statusColor = when (entry.status) {
+        IntegrityStatuses.OK -> MaterialTheme.colorScheme.primary
+        IntegrityStatuses.CHANGED, IntegrityStatuses.MISSING -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    ListItem(
+        headlineContent = { Text(entry.path, maxLines = 1) },
+        supportingContent = {
+            Text(
+                buildString {
+                    append(entry.status)
+                    entry.lastCheckedAt?.let { append(" · checked ${java.util.Date(it)}") }
+                    entry.lastError?.let { append(" · $it") }
+                },
+                color = statusColor,
+                maxLines = 2,
+            )
+        },
+        leadingContent = { Icon(Icons.Filled.Fingerprint, null, tint = statusColor) },
+        trailingContent = {
+            IconButton(onClick = onRemove) { Icon(Icons.Filled.Close, "Remove watch") }
+        },
+    )
+}
+
+@Composable
+private fun IntegrityPathDialog(onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+    var path by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Watch path") },
+        text = {
+            OutlinedTextField(
+                value = path,
+                onValueChange = { path = it },
+                label = { Text("Absolute file or directory path") },
+                singleLine = true,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { if (path.isNotBlank()) onConfirm(path.trim()) }) { Text("Watch") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

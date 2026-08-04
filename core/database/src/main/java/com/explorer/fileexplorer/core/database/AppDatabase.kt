@@ -20,8 +20,9 @@ import javax.inject.Singleton
         SearchHistoryEntity::class,
         ConnectionEntity::class,
         DirectoryViewPreferenceEntity::class,
+        IntegrityEntryEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -30,6 +31,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun searchHistoryDao(): SearchHistoryDao
     abstract fun connectionDao(): ConnectionDao
     abstract fun directoryViewPreferenceDao(): DirectoryViewPreferenceDao
+    abstract fun integrityDao(): IntegrityDao
 }
 
 @Module
@@ -43,7 +45,7 @@ object DatabaseModule {
             context,
             AppDatabase::class.java,
             "file_explorer.db"
-        ).addMigrations(MIGRATION_2_3).build()
+        ).addMigrations(MIGRATION_2_3, MIGRATION_3_4).build()
     }
 
     @Provides fun provideBookmarkDao(db: AppDatabase): BookmarkDao = db.bookmarkDao()
@@ -53,6 +55,7 @@ object DatabaseModule {
     @Provides
     fun provideDirectoryViewPreferenceDao(db: AppDatabase): DirectoryViewPreferenceDao =
         db.directoryViewPreferenceDao()
+    @Provides fun provideIntegrityDao(db: AppDatabase): IntegrityDao = db.integrityDao()
 }
 
 val MIGRATION_2_3 = object : Migration(2, 3) {
@@ -67,6 +70,27 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
                 `folders_first` INTEGER NOT NULL,
                 `visible_columns` TEXT NOT NULL,
                 `updated_at` INTEGER NOT NULL,
+                PRIMARY KEY(`path`)
+            )
+            """.trimIndent(),
+        )
+    }
+}
+
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `integrity_entries` (
+                `path` TEXT NOT NULL,
+                `sha256` TEXT NOT NULL,
+                `size` INTEGER NOT NULL,
+                `modified_at` INTEGER NOT NULL,
+                `is_directory` INTEGER NOT NULL,
+                `added_at` INTEGER NOT NULL,
+                `last_checked_at` INTEGER,
+                `status` TEXT NOT NULL,
+                `last_error` TEXT,
                 PRIMARY KEY(`path`)
             )
             """.trimIndent(),
