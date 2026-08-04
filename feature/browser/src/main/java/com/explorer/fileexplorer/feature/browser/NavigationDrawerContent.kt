@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.explorer.fileexplorer.core.database.BookmarkEntity
+import com.explorer.fileexplorer.core.database.SavedSearchEntity
 import com.explorer.fileexplorer.core.designsystem.AccentOrange
 import com.explorer.fileexplorer.core.designsystem.AccentRed
 import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
@@ -27,11 +28,13 @@ fun NavigationDrawerContent(
     usbDevices: List<UsbDeviceInfo>,
     usbRoots: List<UsbStorageRoot>,
     bookmarks: List<BookmarkEntity>,
+    savedSearches: List<SavedSearchEntity>,
     rootState: RootState,
     rootEnabled: Boolean,
     onNavigate: (String) -> Unit,
     onOpenUsbPicker: () -> Unit,
     onOpenCollections: () -> Unit,
+    onOpenSavedSearch: (SavedSearchEntity) -> Unit,
     onOpenTags: () -> Unit,
     onToggleRoot: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -147,6 +150,32 @@ fun NavigationDrawerContent(
                         onClick = { onNavigate(bookmark.path) },
                         icon = { Icon(Icons.Filled.Bookmark, null) },
                         modifier = Modifier.padding(horizontal = 12.dp))
+                }
+            }
+
+            if (savedSearches.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text(stringResource(DesignSystemR.string.saved_searches).uppercase(), style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
+                for (savedSearch in savedSearches) {
+                    NavigationDrawerItem(
+                        label = {
+                            Column {
+                                Text(savedSearch.name)
+                                Text(
+                                    savedSearch.query,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                )
+                            }
+                        },
+                        selected = false,
+                        onClick = { onOpenSavedSearch(savedSearch) },
+                        icon = { Icon(Icons.Filled.Bookmark, null) },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
                 }
             }
 

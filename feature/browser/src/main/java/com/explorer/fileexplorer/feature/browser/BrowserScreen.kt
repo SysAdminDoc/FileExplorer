@@ -41,6 +41,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.explorer.fileexplorer.core.data.ArchiveFormat
 import com.explorer.fileexplorer.core.database.TagEntity
+import com.explorer.fileexplorer.core.database.SavedSearchEntity
 import com.explorer.fileexplorer.core.designsystem.AccentOrange
 import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.model.*
@@ -61,6 +62,7 @@ fun BrowserScreen(
     viewModel: BrowserViewModel = hiltViewModel(),
     initialPath: String? = null,
     onOpenSearch: () -> Unit = {},
+    onOpenSavedSearch: (SavedSearchEntity) -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenNetwork: () -> Unit = {},
     onOpenShizuku: () -> Unit = {},
@@ -165,6 +167,7 @@ fun BrowserScreen(
             NavigationDrawerContent(
                 volumes = state.volumes, usbDevices = state.usbDevices, usbRoots = state.usbRoots,
                 bookmarks = state.bookmarks,
+                savedSearches = state.savedSearches,
                 rootState = state.rootState, rootEnabled = state.rootEnabled,
                 onNavigate = { path -> viewModel.navigateTo(path); scope.launch { drawerState.close() } },
                 onOpenUsbPicker = {
@@ -172,6 +175,10 @@ fun BrowserScreen(
                     usbTreePicker.launch(null)
                 },
                 onOpenCollections = { scope.launch { drawerState.close() }; onOpenCollections() },
+                onOpenSavedSearch = { savedSearch ->
+                    scope.launch { drawerState.close() }
+                    onOpenSavedSearch(savedSearch)
+                },
                 onOpenTags = { scope.launch { drawerState.close() }; onOpenTags() },
                 onToggleRoot = { viewModel.toggleRootMode() },
                 onOpenSettings = { scope.launch { drawerState.close() }; onOpenSettings() },

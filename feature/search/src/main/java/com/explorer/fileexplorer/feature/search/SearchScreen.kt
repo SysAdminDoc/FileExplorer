@@ -26,6 +26,8 @@ import com.explorer.fileexplorer.core.data.LocalFileRepository
 import com.explorer.fileexplorer.core.data.TagRepository
 import com.explorer.fileexplorer.core.database.SearchHistoryDao
 import com.explorer.fileexplorer.core.database.SearchHistoryEntity
+import com.explorer.fileexplorer.core.database.SavedSearchDao
+import com.explorer.fileexplorer.core.database.SavedSearchEntity
 import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.database.TagEntity
 import com.explorer.fileexplorer.core.model.FileItem
@@ -53,6 +55,7 @@ data class SearchUiState(
 class SearchViewModel @Inject constructor(
     private val fileRepository: LocalFileRepository,
     private val searchHistoryDao: SearchHistoryDao,
+    private val savedSearchDao: SavedSearchDao,
     private val tagRepository: TagRepository,
 ) : ViewModel() {
 
@@ -75,6 +78,10 @@ class SearchViewModel @Inject constructor(
 
     fun updateQuery(query: String) { _state.update { it.copy(query = query) } }
     fun setSearchPath(path: String) { _state.update { it.copy(searchPath = path) } }
+    fun applySavedSearch(query: String, path: String, useRegex: Boolean) {
+        _state.update { it.copy(query = query, searchPath = path, useRegex = useRegex) }
+        search()
+    }
     fun toggleRegex() { _state.update { it.copy(useRegex = !it.useRegex) } }
     fun toggleHidden() { _state.update { it.copy(includeHidden = !it.includeHidden) } }
     fun toggleTag(tagName: String) {
@@ -126,12 +133,31 @@ class SearchViewModel @Inject constructor(
     fun clearHistory() {
         viewModelScope.launch { searchHistoryDao.clearAll() }
     }
+
+    fun saveSearch(name: String) {
+        val current = _state.value
+        val cleanName = name.trim()
+        val query = current.query.trim()
+        if (cleanName.isEmpty() || query.isEmpty()) return
+        viewModelScope.launch {
+            savedSearchDao.upsert(
+                SavedSearchEntity(
+                    name = cleanName,
+                    query = query,
+                    scopePath = current.searchPath,
+                    useRegex = current.useRegex,
+                ),
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
     currentPath: String = Environment.getExternalStorageDirectory().absolutePath,
+    initialQuery: String? = null,
+    initialUseRegex: Boolean = false,
     onNavigateBack: () -> Unit = {},
     onOpenFile: (FileItem) -> Unit = {},
     onNavigateToFolder: (String) -> Unit = {},
@@ -139,8 +165,13 @@ fun SearchScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val focusRequester = remember { FocusRequester() }
+    var showSaveDialog by remember { mutableStateOf(false) }
+    var savedSearchName by remember { mutableStateOf("") }
 
-    LaunchedEffect(currentPath) { viewModel.setSearchPath(currentPath) }
+    LaunchedEffect(currentPath, initialQuery, initialUseRegex) {
+        if (initialQuery != null) viewModel.applySavedSearch(initialQuery, currentPath, initialUseRegex)
+        else viewModel.setSearchPath(currentPath)
+    }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
     Scaffold(
@@ -168,6 +199,10 @@ fun SearchScreen(
                     }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(DesignSystemR.string.back)) }
                 },
                 actions = {
+                    IconButton(
+                        enabled = state.query.isNotBlank(),
+                        onClick = { showSaveDialog = true },
+                    ) { Icon(Icons.Filled.BookmarkAdd, stringResource(DesignSystemR.string.save_search)) }
                     IconButton(onClick = viewModel::search) { Icon(Icons.Filled.Search, stringResource(DesignSystemR.string.search)) }
                 },
             )
@@ -258,5 +293,36 @@ fun SearchScreen(
                 }
             }
         }
+    }
+
+    if (showSaveDialog) {
+        AlertDialog(
+            onDismissRequest = { showSaveDialog = false },
+            title = { Text(stringResource(DesignSystemR.string.save_search)) },
+            text = {
+                OutlinedTextField(
+                    value = savedSearchName,
+                    onValueChange = { savedSearchName = it },
+                    label = { Text(stringResource(DesignSystemR.string.saved_search_name)) },
+                    placeholder = { Text(stringResource(DesignSystemR.string.saved_search_name_hint)) },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = savedSearchName.isNotBlank() && state.query.isNotBlank(),
+                    onClick = {
+                        viewModel.saveSearch(savedSearchName)
+                        savedSearchName = ""
+                        showSaveDialog = false
+                    },
+                ) { Text(stringResource(DesignSystemR.string.save)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSaveDialog = false }) {
+                    Text(stringResource(DesignSystemR.string.cancel))
+                }
+            },
+        )
     }
 }

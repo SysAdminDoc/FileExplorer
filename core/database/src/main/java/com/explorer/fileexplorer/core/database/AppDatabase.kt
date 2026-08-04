@@ -18,19 +18,21 @@ import javax.inject.Singleton
         BookmarkEntity::class,
         RecentFileEntity::class,
         SearchHistoryEntity::class,
+        SavedSearchEntity::class,
         ConnectionEntity::class,
         DirectoryViewPreferenceEntity::class,
         IntegrityEntryEntity::class,
         TagEntity::class,
         FileTagEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun bookmarkDao(): BookmarkDao
     abstract fun recentFileDao(): RecentFileDao
     abstract fun searchHistoryDao(): SearchHistoryDao
+    abstract fun savedSearchDao(): SavedSearchDao
     abstract fun connectionDao(): ConnectionDao
     abstract fun directoryViewPreferenceDao(): DirectoryViewPreferenceDao
     abstract fun integrityDao(): IntegrityDao
@@ -48,12 +50,13 @@ object DatabaseModule {
             context,
             AppDatabase::class.java,
             "file_explorer.db"
-        ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
+        ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build()
     }
 
     @Provides fun provideBookmarkDao(db: AppDatabase): BookmarkDao = db.bookmarkDao()
     @Provides fun provideRecentFileDao(db: AppDatabase): RecentFileDao = db.recentFileDao()
     @Provides fun provideSearchHistoryDao(db: AppDatabase): SearchHistoryDao = db.searchHistoryDao()
+    @Provides fun provideSavedSearchDao(db: AppDatabase): SavedSearchDao = db.savedSearchDao()
     @Provides fun provideConnectionDao(db: AppDatabase): ConnectionDao = db.connectionDao()
     @Provides
     fun provideDirectoryViewPreferenceDao(db: AppDatabase): DirectoryViewPreferenceDao =
@@ -125,5 +128,23 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
         )
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_file_tags_tag_name` ON `file_tags` (`tag_name`)")
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_file_tags_path` ON `file_tags` (`path`)")
+    }
+}
+
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `saved_searches` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `name` TEXT NOT NULL,
+                `query` TEXT NOT NULL,
+                `scope_path` TEXT NOT NULL,
+                `use_regex` INTEGER NOT NULL,
+                `created_at` INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_saved_searches_name` ON `saved_searches` (`name`)")
     }
 }

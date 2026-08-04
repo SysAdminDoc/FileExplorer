@@ -103,6 +103,10 @@
     <string name="found_count">%1$d found...</string>
     <string name="results_count">%1$d results</string>
     <string name="recent_searches">Recent searches</string>
+    <string name="saved_searches">Saved searches</string>
+    <string name="save_search">Save search</string>
+    <string name="saved_search_name">Search name</string>
+    <string name="saved_search_name_hint">e.g. Large files</string>
     <string name="no_connections">No connections</string>
     <string name="add_connection">Add Connection</string>
     <string name="no_cloud_accounts">No cloud accounts</string>

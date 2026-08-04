@@ -55,6 +55,19 @@ data class SearchHistoryEntity(
     @ColumnInfo(name = "searched_at") val searchedAt: Long = System.currentTimeMillis(),
 )
 
+@Entity(
+    tableName = "saved_searches",
+    indices = [Index(value = ["name"], unique = true)],
+)
+data class SavedSearchEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(name = "name") val name: String,
+    @ColumnInfo(name = "query") val query: String,
+    @ColumnInfo(name = "scope_path") val scopePath: String,
+    @ColumnInfo(name = "use_regex") val useRegex: Boolean = false,
+    @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
+)
+
 @Entity(tableName = "network_connections")
 data class ConnectionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

@@ -30,6 +30,7 @@ object Routes {
     const val BROWSER = "browser"
     const val BROWSER_AT_PATH = "browser/{path}"
     const val SEARCH = "search"
+    const val SAVED_SEARCH = "search/saved/{query}/{scopePath}/{useRegex}"
     const val TAGS = "tags"
     const val COLLECTIONS = "collections"
     const val SETTINGS = "settings"
@@ -51,6 +52,8 @@ object Routes {
     fun hexEditorRoute(filePath: String) = "hex/${java.net.URLEncoder.encode(filePath, "UTF-8")}"
     fun previewRoute(filePath: String) = "preview/${java.net.URLEncoder.encode(filePath, "UTF-8")}"
     fun browserAtPath(path: String) = "browser/${java.net.URLEncoder.encode(path, "UTF-8")}"
+    fun savedSearchRoute(query: String, scopePath: String, useRegex: Boolean) =
+        "search/saved/${java.net.URLEncoder.encode(query, "UTF-8")}/${java.net.URLEncoder.encode(scopePath, "UTF-8")}/$useRegex"
 }
 
 @Composable
@@ -61,6 +64,9 @@ fun AppNavigation(
         composable(Routes.BROWSER) {
             BrowserScreen(
                 onOpenSearch = { navController.navigate(Routes.SEARCH) },
+                onOpenSavedSearch = { search ->
+                    navController.navigate(Routes.savedSearchRoute(search.query, search.scopePath, search.useRegex))
+                },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenNetwork = { navController.navigate(Routes.NETWORK) },
                 onOpenShizuku = { navController.navigate(Routes.SHIZUKU) },
@@ -88,6 +94,9 @@ fun AppNavigation(
                     backStackEntry.arguments?.getString("path") ?: "", "UTF-8",
                 ),
                 onOpenSearch = { navController.navigate(Routes.SEARCH) },
+                onOpenSavedSearch = { search ->
+                    navController.navigate(Routes.savedSearchRoute(search.query, search.scopePath, search.useRegex))
+                },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenNetwork = { navController.navigate(Routes.NETWORK) },
                 onOpenShizuku = { navController.navigate(Routes.SHIZUKU) },
@@ -109,6 +118,27 @@ fun AppNavigation(
 
         composable(Routes.SEARCH) {
             SearchScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToFolder = { navController.popBackStack() },
+            )
+        }
+
+        composable(
+            route = Routes.SAVED_SEARCH,
+            arguments = listOf(
+                navArgument("query") { type = NavType.StringType },
+                navArgument("scopePath") { type = NavType.StringType },
+                navArgument("useRegex") { type = NavType.BoolType },
+            ),
+        ) { backStackEntry ->
+            SearchScreen(
+                currentPath = java.net.URLDecoder.decode(
+                    backStackEntry.arguments?.getString("scopePath") ?: "", "UTF-8",
+                ),
+                initialQuery = java.net.URLDecoder.decode(
+                    backStackEntry.arguments?.getString("query") ?: "", "UTF-8",
+                ),
+                initialUseRegex = backStackEntry.arguments?.getBoolean("useRegex") ?: false,
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToFolder = { navController.popBackStack() },
             )

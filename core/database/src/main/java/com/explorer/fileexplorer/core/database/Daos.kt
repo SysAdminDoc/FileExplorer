@@ -115,6 +115,30 @@ interface SearchHistoryDao {
 }
 
 @Dao
+interface SavedSearchDao {
+    @Query("SELECT * FROM saved_searches ORDER BY name COLLATE NOCASE ASC")
+    fun getAllFlow(): Flow<List<SavedSearchEntity>>
+
+    @Query("SELECT * FROM saved_searches ORDER BY name COLLATE NOCASE ASC")
+    suspend fun getAll(): List<SavedSearchEntity>
+
+    @Query("DELETE FROM saved_searches WHERE name = :name")
+    suspend fun deleteByName(name: String)
+
+    @Query("DELETE FROM saved_searches WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(search: SavedSearchEntity): Long
+
+    @Transaction
+    suspend fun upsert(search: SavedSearchEntity) {
+        deleteByName(search.name)
+        insert(search)
+    }
+}
+
+@Dao
 interface ConnectionDao {
     @Query("SELECT * FROM network_connections ORDER BY last_connected DESC")
     fun getAllFlow(): Flow<List<ConnectionEntity>>

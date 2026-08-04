@@ -77,13 +77,6 @@ already have rclone configured; importing saves re-entering credentials.
 - **Impact:** 2/5 (niche but sticky). **Effort:** 2/5.
 - **Source:** Existing ROADMAP item; rclone community.
 
-### L-20: Saved searches
-Named regex + path filter combinations pinned to the navigation drawer. Quick recall for
-frequently used search patterns.
-
-- **Impact:** 2/5. **Effort:** 2/5.
-- **Source:** Existing ROADMAP item.
-
 ### L-21: Recent locations
 Track recently visited directories (not just recent files). Accessible from drawer.
 Separate from bookmarks — automatic, ordered by recency.
