@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -40,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.explorer.fileexplorer.core.data.TagRepository
 import com.explorer.fileexplorer.core.database.TagEntity
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -100,10 +102,10 @@ fun TagsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Tags") },
+                title = { Text(stringResource(DesignSystemR.string.tags)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.Filled.ArrowBack, contentDescription = stringResource(DesignSystemR.string.back))
                     }
                 },
             )
@@ -116,7 +118,7 @@ fun TagsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                "Create tags here, then apply them to selected files from the browser. Search can combine multiple tags.",
+                stringResource(DesignSystemR.string.tag_description),
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
@@ -129,7 +131,7 @@ fun TagsScreen(
                 OutlinedTextField(
                     value = newTag,
                     onValueChange = { newTag = it },
-                    label = { Text("Tag name") },
+                    label = { Text(stringResource(DesignSystemR.string.tag_name)) },
                     singleLine = true,
                     modifier = Modifier.weight(1f),
                 )
@@ -141,11 +143,11 @@ fun TagsScreen(
                         }
                     },
                     modifier = Modifier.padding(top = 8.dp),
-                ) { Text("Add") }
+                ) { Text(stringResource(DesignSystemR.string.add)) }
             }
             if (state.tags.isEmpty()) {
                 Text(
-                    "No tags yet",
+                    stringResource(DesignSystemR.string.no_tags),
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.padding(24.dp),
                 )
@@ -160,7 +162,7 @@ fun TagsScreen(
                             leadingContent = { Icon(Icons.Filled.Label, contentDescription = null) },
                             trailingContent = {
                                 IconButton(onClick = { viewModel.deleteTag(tag) }) {
-                                    Icon(Icons.Filled.Delete, contentDescription = "Delete tag")
+                                    Icon(Icons.Filled.Delete, contentDescription = stringResource(DesignSystemR.string.delete_tag))
                                 }
                             },
                         )

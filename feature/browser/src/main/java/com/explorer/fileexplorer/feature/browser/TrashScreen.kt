@@ -23,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -31,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.explorer.fileexplorer.core.data.LocalTrashManager
 import com.explorer.fileexplorer.core.data.TrashItem
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.storage.StorageVolumeHelper
 import com.explorer.fileexplorer.core.ui.FileIcon
@@ -208,28 +210,32 @@ fun TrashScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(if (state.selectionMode) "${state.selectedCount} selected" else "Trash")
+                    Text(if (state.selectionMode) {
+                        stringResource(DesignSystemR.string.selected_count, state.selectedCount)
+                    } else {
+                        stringResource(DesignSystemR.string.trash)
+                    })
                 },
                 navigationIcon = {
                     IconButton(onClick = if (state.selectionMode) viewModel::clearSelection else onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(DesignSystemR.string.back))
                     }
                 },
                 actions = {
                     if (state.selectionMode) {
                         IconButton(onClick = viewModel::restoreSelected) {
-                            Icon(Icons.Filled.RestoreFromTrash, "Restore")
+                            Icon(Icons.Filled.RestoreFromTrash, stringResource(DesignSystemR.string.restore))
                         }
                         IconButton(onClick = viewModel::deleteSelectedPermanently) {
-                            Icon(Icons.Filled.DeleteForever, "Delete permanently")
+                            Icon(Icons.Filled.DeleteForever, stringResource(DesignSystemR.string.delete_permanently))
                         }
                     } else {
                         IconButton(onClick = viewModel::refresh) {
-                            Icon(Icons.Filled.Refresh, "Refresh")
+                            Icon(Icons.Filled.Refresh, stringResource(DesignSystemR.string.refresh))
                         }
                         if (state.items.isNotEmpty()) {
                             IconButton(onClick = viewModel::emptyTrash) {
-                                Icon(Icons.Filled.DeleteSweep, "Empty Trash")
+                            Icon(Icons.Filled.DeleteSweep, stringResource(DesignSystemR.string.empty_trash))
                             }
                         }
                     }
@@ -239,8 +245,8 @@ fun TrashScreen(
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
             ListItem(
-                headlineContent = { Text("Auto-purge after ${state.ttlDays} days") },
-                supportingContent = { Text("Change retention in Settings") },
+                headlineContent = { Text(stringResource(DesignSystemR.string.auto_purge_after_days, state.ttlDays)) },
+                supportingContent = { Text(stringResource(DesignSystemR.string.change_retention_settings)) },
             )
             if (state.isLoading) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -277,7 +283,7 @@ private fun EmptyTrashState(error: String?) {
             )
             Spacer(Modifier.height(16.dp))
             Text(
-                error ?: "Trash is empty",
+                error ?: stringResource(DesignSystemR.string.trash_empty),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -314,7 +320,7 @@ private fun TrashListItem(
                 if (selectionMode && selected) {
                     Icon(
                         Icons.Filled.CheckCircle,
-                        contentDescription = "Selected",
+                        contentDescription = stringResource(DesignSystemR.string.selected),
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(28.dp),
                     )

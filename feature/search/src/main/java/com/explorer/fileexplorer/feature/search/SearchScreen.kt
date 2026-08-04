@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -25,6 +26,7 @@ import com.explorer.fileexplorer.core.data.LocalFileRepository
 import com.explorer.fileexplorer.core.data.TagRepository
 import com.explorer.fileexplorer.core.database.SearchHistoryDao
 import com.explorer.fileexplorer.core.database.SearchHistoryEntity
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.database.TagEntity
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.ui.FileListItem
@@ -148,7 +150,7 @@ fun SearchScreen(
                     OutlinedTextField(
                         value = state.query,
                         onValueChange = viewModel::updateQuery,
-                        placeholder = { Text("Search files...") },
+                        placeholder = { Text(stringResource(DesignSystemR.string.search_files_hint)) },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -163,10 +165,10 @@ fun SearchScreen(
                     IconButton(onClick = {
                         viewModel.cancelSearch()
                         onNavigateBack()
-                    }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                    }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(DesignSystemR.string.back)) }
                 },
                 actions = {
-                    IconButton(onClick = viewModel::search) { Icon(Icons.Filled.Search, "Search") }
+                    IconButton(onClick = viewModel::search) { Icon(Icons.Filled.Search, stringResource(DesignSystemR.string.search)) }
                 },
             )
         },
@@ -181,19 +183,19 @@ fun SearchScreen(
                 FilterChip(
                     selected = state.useRegex,
                     onClick = viewModel::toggleRegex,
-                    label = { Text("Regex") },
+                    label = { Text(stringResource(DesignSystemR.string.regex)) },
                 )
                 FilterChip(
                     selected = state.includeHidden,
                     onClick = viewModel::toggleHidden,
-                    label = { Text("Hidden") },
+                    label = { Text(stringResource(DesignSystemR.string.hidden)) },
                 )
                 Spacer(Modifier.weight(1f))
                 if (state.isSearching) {
-                    Text("${state.results.size} found...", style = MaterialTheme.typography.labelMedium)
+                    Text(stringResource(DesignSystemR.string.found_count, state.results.size), style = MaterialTheme.typography.labelMedium)
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                 } else if (state.results.isNotEmpty()) {
-                    Text("${state.results.size} results", style = MaterialTheme.typography.labelMedium)
+                    Text(stringResource(DesignSystemR.string.results_count, state.results.size), style = MaterialTheme.typography.labelMedium)
                 }
             }
 
@@ -206,7 +208,7 @@ fun SearchScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Tags", style = MaterialTheme.typography.labelMedium)
+                    Text(stringResource(DesignSystemR.string.tags), style = MaterialTheme.typography.labelMedium)
                     state.availableTags.forEach { tag ->
                         FilterChip(
                             selected = tag.name in state.selectedTags,
@@ -215,7 +217,7 @@ fun SearchScreen(
                         )
                     }
                     if (state.selectedTags.isNotEmpty()) {
-                        TextButton(onClick = viewModel::clearTagFilters) { Text("Clear") }
+                        TextButton(onClick = viewModel::clearTagFilters) { Text(stringResource(DesignSystemR.string.clear)) }
                     }
                 }
             }
@@ -228,8 +230,8 @@ fun SearchScreen(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("Recent searches", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
-                        TextButton(onClick = viewModel::clearHistory) { Text("Clear") }
+                        Text(stringResource(DesignSystemR.string.recent_searches), style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                        TextButton(onClick = viewModel::clearHistory) { Text(stringResource(DesignSystemR.string.clear)) }
                     }
                     LazyColumn {
                         items(state.history) { entry ->

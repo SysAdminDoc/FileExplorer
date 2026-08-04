@@ -38,10 +38,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -235,7 +237,7 @@ fun DocumentPreviewScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(DesignSystemR.string.back))
                     }
                 },
             )
@@ -267,11 +269,11 @@ private fun PdfPreviewContent(state: DocumentPreviewUiState, viewModel: Document
             horizontalArrangement = Arrangement.Center,
         ) {
             IconButton(onClick = viewModel::previousPage, enabled = state.pdfPage > 0) {
-                Icon(Icons.Filled.ChevronLeft, "Previous page")
+                Icon(Icons.Filled.ChevronLeft, stringResource(DesignSystemR.string.previous_page))
             }
-            Text("Page ${state.pdfPage + 1} of ${state.pdfPageCount}", style = MaterialTheme.typography.labelLarge)
+            Text(stringResource(DesignSystemR.string.pdf_page_count, state.pdfPage + 1, state.pdfPageCount), style = MaterialTheme.typography.labelLarge)
             IconButton(onClick = viewModel::nextPage, enabled = state.pdfPage + 1 < state.pdfPageCount) {
-                Icon(Icons.Filled.ChevronRight, "Next page")
+                Icon(Icons.Filled.ChevronRight, stringResource(DesignSystemR.string.next_page))
             }
         }
         HorizontalDivider()
@@ -282,7 +284,7 @@ private fun PdfPreviewContent(state: DocumentPreviewUiState, viewModel: Document
             ) {
                 Image(
                     bitmap = bitmap.asImageBitmap(),
-                    contentDescription = "PDF page ${state.pdfPage + 1}",
+                    contentDescription = stringResource(DesignSystemR.string.pdf_page, state.pdfPage + 1),
                     contentScale = ContentScale.FillWidth,
                     modifier = Modifier.fillMaxWidth().padding(8.dp),
                 )
@@ -294,7 +296,7 @@ private fun PdfPreviewContent(state: DocumentPreviewUiState, viewModel: Document
 @Composable
 private fun DocxPreviewContent(paragraphs: List<String>) {
     if (paragraphs.isEmpty()) {
-        EmptyPreviewMessage("The DOCX contains no readable text")
+        EmptyPreviewMessage(stringResource(DesignSystemR.string.docx_no_text))
         return
     }
     LazyColumn(
@@ -311,7 +313,7 @@ private fun DocxPreviewContent(paragraphs: List<String>) {
 @Composable
 private fun XlsxPreviewContent(rows: List<List<String>>) {
     if (rows.isEmpty()) {
-        EmptyPreviewMessage("The XLSX contains no readable cells")
+        EmptyPreviewMessage(stringResource(DesignSystemR.string.xlsx_no_cells))
         return
     }
     LazyColumn(

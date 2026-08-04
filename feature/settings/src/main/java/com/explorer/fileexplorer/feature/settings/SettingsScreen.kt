@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
@@ -25,6 +26,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.explorer.fileexplorer.core.data.LocalTrashManager
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.designsystem.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -51,12 +53,12 @@ object SettingsKeys {
     val SWIPE_RIGHT_ACTION = stringPreferencesKey("swipe_right_action")
 }
 
-enum class SwipeAction(val label: String, val description: String) {
-    NONE("No action", "Leave the row in place"),
-    DELETE("Delete", "Move the item to Trash"),
-    SHARE("Share", "Open the system share sheet"),
-    COMPRESS("Compress", "Open the archive dialog for the item"),
-    MOVE("Move", "Cut the item, then paste it in a destination folder"),
+enum class SwipeAction(@androidx.annotation.StringRes val labelRes: Int, @androidx.annotation.StringRes val descriptionRes: Int) {
+    NONE(DesignSystemR.string.no_action, DesignSystemR.string.leave_row_in_place),
+    DELETE(DesignSystemR.string.delete, DesignSystemR.string.move_item_to_trash_description),
+    SHARE(DesignSystemR.string.share, DesignSystemR.string.open_system_share_sheet),
+    COMPRESS(DesignSystemR.string.compress, DesignSystemR.string.open_archive_dialog),
+    MOVE(DesignSystemR.string.move, DesignSystemR.string.cut_then_paste),
     ;
 
     companion object {
@@ -173,10 +175,10 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text(stringResource(DesignSystemR.string.settings)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(DesignSystemR.string.back))
                     }
                 },
             )
@@ -189,7 +191,7 @@ fun SettingsScreen(
         ) {
             // Theme section
             Text(
-                text = "THEME",
+                text = stringResource(DesignSystemR.string.theme).uppercase(),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -204,29 +206,29 @@ fun SettingsScreen(
 
             // Display section
             Text(
-                text = "DISPLAY",
+                text = stringResource(DesignSystemR.string.display).uppercase(),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             )
 
             SettingsToggle(
-                title = "Show hidden files",
-                subtitle = "Display files starting with a dot",
+                title = stringResource(DesignSystemR.string.show_hidden_files),
+                subtitle = stringResource(DesignSystemR.string.display_dotfiles),
                 checked = state.showHidden,
                 onToggle = viewModel::toggleShowHidden,
             )
 
             SettingsToggle(
-                title = "Folders first",
-                subtitle = "Always show folders before files",
+                title = stringResource(DesignSystemR.string.folders_first),
+                subtitle = stringResource(DesignSystemR.string.always_show_folders),
                 checked = state.foldersFirst,
                 onToggle = viewModel::toggleFoldersFirst,
             )
 
             SettingsToggle(
-                title = "Compact density",
-                subtitle = "Reduce spacing for more visible files per screen",
+                title = stringResource(DesignSystemR.string.compact_density),
+                subtitle = stringResource(DesignSystemR.string.reduce_spacing),
                 checked = state.compactDensity,
                 onToggle = viewModel::toggleCompactDensity,
             )
@@ -235,15 +237,15 @@ fun SettingsScreen(
 
             // Behavior section
             Text(
-                text = "BEHAVIOR",
+                text = stringResource(DesignSystemR.string.behavior).uppercase(),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             )
 
             SettingsToggle(
-                title = "Confirm delete",
-                subtitle = "Show confirmation before deleting files",
+                title = stringResource(DesignSystemR.string.confirm_delete),
+                subtitle = stringResource(DesignSystemR.string.confirm_before_delete),
                 checked = state.confirmDelete,
                 onToggle = viewModel::toggleConfirmDelete,
             )
@@ -256,19 +258,19 @@ fun SettingsScreen(
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
             Text(
-                text = "GESTURES",
+                text = stringResource(DesignSystemR.string.gestures).uppercase(),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             )
 
             SwipeActionSelector(
-                title = "Swipe left",
+                title = stringResource(DesignSystemR.string.swipe_left),
                 current = state.swipeLeftAction,
                 onSelect = viewModel::setSwipeLeftAction,
             )
             SwipeActionSelector(
-                title = "Swipe right",
+                title = stringResource(DesignSystemR.string.swipe_right),
                 current = state.swipeRightAction,
                 onSelect = viewModel::setSwipeRightAction,
             )
@@ -277,7 +279,7 @@ fun SettingsScreen(
 
             // Backup
             Text(
-                text = "BACKUP",
+                text = stringResource(DesignSystemR.string.backup).uppercase(),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -297,22 +299,22 @@ fun SettingsScreen(
             }
 
             ListItem(
-                headlineContent = { Text("Export bookmarks") },
-                supportingContent = { Text("Save bookmarks and settings to a JSON file") },
+                headlineContent = { Text(stringResource(DesignSystemR.string.export_bookmarks)) },
+                supportingContent = { Text(stringResource(DesignSystemR.string.save_bookmarks_settings)) },
                 leadingContent = { Icon(Icons.Filled.FileUpload, null) },
                 modifier = Modifier.clickable { exportLauncher.launch("fileexplorer-backup.json") },
             )
 
             ListItem(
-                headlineContent = { Text("Import bookmarks") },
-                supportingContent = { Text("Restore from a previously exported backup") },
+                headlineContent = { Text(stringResource(DesignSystemR.string.import_bookmarks)) },
+                supportingContent = { Text(stringResource(DesignSystemR.string.restore_backup)) },
                 leadingContent = { Icon(Icons.Filled.FileDownload, null) },
                 modifier = Modifier.clickable { importLauncher.launch(arrayOf("application/json")) },
             )
 
             ListItem(
-                headlineContent = { Text("Export diagnostic log") },
-                supportingContent = { Text("Share error logs for troubleshooting") },
+                headlineContent = { Text(stringResource(DesignSystemR.string.export_diagnostic_log)) },
+                supportingContent = { Text(stringResource(DesignSystemR.string.share_error_logs)) },
                 leadingContent = { Icon(Icons.Filled.FileUpload, null) },
                 modifier = Modifier.clickable { viewModel.shareDiagnosticLog(appContext) },
             )
@@ -321,15 +323,15 @@ fun SettingsScreen(
 
             // About
             Text(
-                text = "ABOUT",
+                text = stringResource(DesignSystemR.string.about).uppercase(),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             )
 
             ListItem(
-                headlineContent = { Text("Version") },
-                supportingContent = { Text("1.4.0") },
+                headlineContent = { Text(stringResource(DesignSystemR.string.version)) },
+                supportingContent = { Text(stringResource(DesignSystemR.string.version_value)) },
             )
         }
     }
@@ -359,7 +361,7 @@ private fun SwipeActionSelector(
 ) {
     ListItem(
         headlineContent = { Text(title) },
-        supportingContent = { Text(current.description) },
+        supportingContent = { Text(stringResource(current.descriptionRes)) },
     )
     FlowRow(
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
@@ -370,7 +372,7 @@ private fun SwipeActionSelector(
             FilterChip(
                 selected = current == action,
                 onClick = { onSelect(action) },
-                label = { Text(action.label) },
+                label = { Text(stringResource(action.labelRes)) },
             )
         }
     }
@@ -384,8 +386,8 @@ private fun TrashTtlSelector(
 ) {
     val options = listOf(7, 14, 30, 60, 90)
     ListItem(
-        headlineContent = { Text("Trash auto-purge") },
-        supportingContent = { Text("Delete trash after $currentDays days") },
+        headlineContent = { Text(stringResource(DesignSystemR.string.trash_auto_purge)) },
+        supportingContent = { Text(stringResource(DesignSystemR.string.delete_trash_after_days, currentDays)) },
     )
     FlowRow(
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
@@ -396,7 +398,7 @@ private fun TrashTtlSelector(
             FilterChip(
                 selected = currentDays == days,
                 onClick = { onSelect(days) },
-                label = { Text("${days}d") },
+                label = { Text(stringResource(DesignSystemR.string.days_short, days)) },
             )
         }
     }
@@ -408,11 +410,11 @@ private fun ThemeSelector(
     onSelect: (ThemeMode) -> Unit,
 ) {
     val options = listOf(
-        ThemeMode.SYSTEM to ("System default" to "Follow device light/dark setting"),
-        ThemeMode.LIGHT to ("Light" to "Standard Material 3 light surfaces"),
-        ThemeMode.DARK to ("Dark" to "Deep dark with cyan accent (current default)"),
-        ThemeMode.OLED to ("OLED / True Black" to "Pure-black background, AMOLED power savings"),
-        ThemeMode.DYNAMIC to ("Material You" to "Wallpaper-derived colors (Android 12+)"),
+        ThemeMode.SYSTEM to (stringResource(DesignSystemR.string.system_default) to stringResource(DesignSystemR.string.follow_device_theme)),
+        ThemeMode.LIGHT to (stringResource(DesignSystemR.string.light) to stringResource(DesignSystemR.string.standard_light_surfaces)),
+        ThemeMode.DARK to (stringResource(DesignSystemR.string.dark) to stringResource(DesignSystemR.string.deep_dark_surfaces)),
+        ThemeMode.OLED to (stringResource(DesignSystemR.string.oled_true_black) to stringResource(DesignSystemR.string.pure_black_background)),
+        ThemeMode.DYNAMIC to (stringResource(DesignSystemR.string.material_you) to stringResource(DesignSystemR.string.wallpaper_colors)),
     )
     Column {
         options.forEach { (mode, labels) ->

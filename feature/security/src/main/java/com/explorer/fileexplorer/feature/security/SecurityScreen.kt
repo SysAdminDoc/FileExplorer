@@ -18,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -34,6 +35,7 @@ import com.explorer.fileexplorer.core.data.EncryptedVolumeManager
 import com.explorer.fileexplorer.core.data.EncryptedVolumeMount
 import com.explorer.fileexplorer.core.data.EncryptedVolumeRequest
 import com.explorer.fileexplorer.core.database.IntegrityEntryEntity
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -455,21 +457,21 @@ fun SecurityScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Security") },
-                navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } })
+            TopAppBar(title = { Text(stringResource(DesignSystemR.string.security)) },
+                navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(DesignSystemR.string.back)) } })
         },
     ) { padding ->
         LazyColumn(Modifier.padding(padding).fillMaxSize()) {
             // App Lock
             item {
-                Text("APP LOCK", style = MaterialTheme.typography.labelSmall,
+                Text(stringResource(DesignSystemR.string.app_lock).uppercase(), style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
             }
             item {
                 ListItem(
-                    headlineContent = { Text("Biometric Lock") },
-                    supportingContent = { Text("Require biometric authentication to open app") },
+                    headlineContent = { Text(stringResource(DesignSystemR.string.biometric_lock)) },
+                    supportingContent = { Text(stringResource(DesignSystemR.string.require_biometric)) },
                     leadingContent = { Icon(Icons.Filled.Fingerprint, null) },
                     trailingContent = {
                         Switch(checked = state.settings.appLockEnabled,
@@ -480,7 +482,7 @@ fun SecurityScreen(
             }
             if (!state.canUseBiometrics) {
                 item {
-                    Text("  Biometrics not available on this device",
+                    Text("  ${stringResource(DesignSystemR.string.biometrics_unavailable)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.padding(horizontal = 16.dp))
@@ -490,14 +492,14 @@ fun SecurityScreen(
             // Vault
             item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             item {
-                Text("ENCRYPTED VAULT", style = MaterialTheme.typography.labelSmall,
+                Text(stringResource(DesignSystemR.string.encrypted_vault).uppercase(), style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
             }
             item {
                 ListItem(
-                    headlineContent = { Text("Enable Vault") },
-                    supportingContent = { Text("Protected storage for sensitive files, accessible only with biometrics") },
+                    headlineContent = { Text(stringResource(DesignSystemR.string.enable_vault)) },
+                    supportingContent = { Text(stringResource(DesignSystemR.string.vault_description)) },
                     leadingContent = { Icon(Icons.Filled.Lock, null) },
                     trailingContent = { Switch(checked = state.settings.vaultEnabled, onCheckedChange = { viewModel.toggleVault() }) },
                 )
@@ -506,30 +508,30 @@ fun SecurityScreen(
             // Secure Delete
             item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             item {
-                Text("FILE SECURITY", style = MaterialTheme.typography.labelSmall,
+                Text(stringResource(DesignSystemR.string.file_security).uppercase(), style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
             }
             item {
                 ListItem(
-                    headlineContent = { Text("Secure Delete") },
-                    supportingContent = { Text("Overwrite files before deletion (3-pass DoD 5220.22-M)") },
+                    headlineContent = { Text(stringResource(DesignSystemR.string.secure_delete)) },
+                    supportingContent = { Text(stringResource(DesignSystemR.string.secure_delete_description)) },
                     leadingContent = { Icon(Icons.Filled.DeleteForever, null) },
                     trailingContent = { Switch(checked = state.settings.secureDeleteEnabled, onCheckedChange = { viewModel.toggleSecureDelete() }) },
                 )
             }
             item {
                 ListItem(
-                    headlineContent = { Text("Checksum Verification") },
-                    supportingContent = { Text("Verify file integrity with MD5, SHA-1, SHA-256, SHA-512") },
+                    headlineContent = { Text(stringResource(DesignSystemR.string.checksum_verification)) },
+                    supportingContent = { Text(stringResource(DesignSystemR.string.checksum_description)) },
                     leadingContent = { Icon(Icons.Filled.Verified, null) },
                 )
             }
             item {
                 ListItem(
-                    headlineContent = { Text("File Encryption") },
+                    headlineContent = { Text(stringResource(DesignSystemR.string.file_encryption)) },
                     supportingContent = {
-                        Text("Select files in Browser, open More, then Encrypt files. Decryption requires biometric authentication.")
+                        Text(stringResource(DesignSystemR.string.file_encryption_description))
                     },
                     leadingContent = { Icon(Icons.Filled.EnhancedEncryption, null) },
                 )
@@ -550,14 +552,14 @@ fun SecurityScreen(
             item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             item {
                 ListItem(
-                    headlineContent = { Text("Integrity Watch") },
+                    headlineContent = { Text(stringResource(DesignSystemR.string.integrity_watch)) },
                     supportingContent = {
-                        Text("Track SHA-256 fingerprints and alert when watched paths change or disappear")
+                        Text(stringResource(DesignSystemR.string.integrity_watch_description))
                     },
                     leadingContent = { Icon(Icons.Filled.VerifiedUser, null) },
                     trailingContent = {
                         IconButton(onClick = { showIntegrityPathDialog = true }) {
-                            Icon(Icons.Filled.Add, "Watch path")
+                            Icon(Icons.Filled.Add, stringResource(DesignSystemR.string.watch_path))
                         }
                     },
                 )
@@ -570,7 +572,7 @@ fun SecurityScreen(
                     OutlinedButton(
                         onClick = { showIntegrityPathDialog = true },
                         modifier = Modifier.weight(1f),
-                    ) { Text("Add path") }
+                    ) { Text(stringResource(DesignSystemR.string.add_path)) }
                     Button(
                         onClick = viewModel::scanIntegrityNow,
                         enabled = state.integrityEntries.isNotEmpty() && !state.isScanningIntegrity,
@@ -596,22 +598,22 @@ fun SecurityScreen(
             // Encrypted volumes
             item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             item {
-                Text("ENCRYPTED VOLUMES", style = MaterialTheme.typography.labelSmall,
+                Text(stringResource(DesignSystemR.string.encrypted_volumes).uppercase(), style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
             }
             item {
                 ListItem(
-                    headlineContent = { Text("Encrypted volumes") },
+                    headlineContent = { Text(stringResource(DesignSystemR.string.encrypted_volumes)) },
                     supportingContent = {
-                        Text("Mount existing gocryptfs or EncFS volumes through the root environment")
+                        Text(stringResource(DesignSystemR.string.encrypted_volumes_description))
                     },
                     leadingContent = { Icon(Icons.Filled.EnhancedEncryption, null) },
                     trailingContent = {
                         IconButton(
                             onClick = viewModel::refreshEncryptedVolumes,
                             enabled = !state.isLoadingEncryptedVolumes && !state.isMountingEncryptedVolume,
-                        ) { Icon(Icons.Filled.Refresh, "Refresh encrypted volumes") }
+                        ) { Icon(Icons.Filled.Refresh, stringResource(DesignSystemR.string.refresh)) }
                     },
                 )
             }
@@ -624,7 +626,7 @@ fun SecurityScreen(
                         onClick = viewModel::showEncryptedVolumeDialog,
                         enabled = state.encryptedFormats.isNotEmpty() && !state.isMountingEncryptedVolume,
                         modifier = Modifier.weight(1f),
-                    ) { Text("Mount volume") }
+                    ) { Text(stringResource(DesignSystemR.string.mount_volume)) }
                 }
             }
             if (state.isLoadingEncryptedVolumes) {
@@ -667,15 +669,15 @@ fun SecurityScreen(
             // Info
             item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             item {
-                Text("ABOUT", style = MaterialTheme.typography.labelSmall,
+                Text(stringResource(DesignSystemR.string.about).uppercase(), style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
             }
             item {
                 ListItem(
-                    headlineContent = { Text("Security Model") },
+                    headlineContent = { Text(stringResource(DesignSystemR.string.security_model)) },
                     supportingContent = {
-                        Text("Vault files are AES-256-GCM encrypted with Android Keystore-backed keys. " +
+                        Text(stringResource(DesignSystemR.string.security_model_description) + " " +
                                 "Secure delete uses DoD 5220.22-M 3-pass overwrite. " +
                                 "Checksums computed using java.security.MessageDigest.")
                     },
@@ -690,16 +692,20 @@ fun SecurityScreen(
 @Composable
 private fun EncryptedVolumeMountRow(mount: EncryptedVolumeMount, onUnmount: () -> Unit) {
     ListItem(
-        headlineContent = { Text("${mount.format.label}: ${mount.mountPath}", maxLines = 1) },
+        headlineContent = { Text(stringResource(DesignSystemR.string.volume_title, mount.format.label, mount.mountPath), maxLines = 1) },
         supportingContent = {
             Text(
-                "Cipher: ${mount.cipherPath} · ${if (mount.readOnly) "read-only" else "read/write"}",
+                stringResource(
+                    DesignSystemR.string.volume_details,
+                    mount.cipherPath,
+                    if (mount.readOnly) stringResource(DesignSystemR.string.read_only) else stringResource(DesignSystemR.string.read_write),
+                ),
                 maxLines = 2,
             )
         },
         leadingContent = { Icon(Icons.Filled.Lock, null) },
         trailingContent = {
-            IconButton(onClick = onUnmount) { Icon(Icons.Filled.Eject, "Unmount volume") }
+            IconButton(onClick = onUnmount) { Icon(Icons.Filled.Eject, stringResource(DesignSystemR.string.unmount_volume)) }
         },
     )
 }
@@ -721,7 +727,7 @@ private fun EncryptedVolumeDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Mount encrypted volume") },
+        title = { Text(stringResource(DesignSystemR.string.mount_encrypted_volume)) },
         text = {
             Column(
                 modifier = Modifier
@@ -729,7 +735,7 @@ private fun EncryptedVolumeDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text("Format", style = MaterialTheme.typography.labelLarge)
+                Text(stringResource(DesignSystemR.string.format), style = MaterialTheme.typography.labelLarge)
                 Row(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -745,23 +751,23 @@ private fun EncryptedVolumeDialog(
                 OutlinedTextField(
                     value = cipherPath,
                     onValueChange = { cipherPath = it },
-                    label = { Text("Cipher directory") },
-                    supportingText = { Text("Absolute path to an existing encrypted volume") },
+                    label = { Text(stringResource(DesignSystemR.string.cipher_directory)) },
+                    supportingText = { Text(stringResource(DesignSystemR.string.cipher_directory_description)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = mountPath,
                     onValueChange = { mountPath = it },
-                    label = { Text("Empty mount directory") },
-                    supportingText = { Text("Files already in this directory are rejected") },
+                    label = { Text(stringResource(DesignSystemR.string.empty_mount_directory)) },
+                    supportingText = { Text(stringResource(DesignSystemR.string.empty_mount_directory_description)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = passphrase,
                     onValueChange = { passphrase = it },
-                    label = { Text("Passphrase") },
+                    label = { Text(stringResource(DesignSystemR.string.passphrase)) },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -771,11 +777,11 @@ private fun EncryptedVolumeDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text("Read-only mount")
+                    Text(stringResource(DesignSystemR.string.read_only_mount))
                     Switch(checked = readOnly, onCheckedChange = { readOnly = it })
                 }
                 Text(
-                    "Only existing volumes are supported. The passphrase is sent through a temporary protected file and is not included in the root command.",
+                    stringResource(DesignSystemR.string.encrypted_volume_mount_note),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -790,9 +796,9 @@ private fun EncryptedVolumeDialog(
                     onConfirm(format, cipherPath.trim(), mountPath.trim(), readOnly, secret)
                 },
                 enabled = canSubmit,
-            ) { Text(if (isMounting) "Mounting..." else "Mount") }
+            ) { Text(if (isMounting) stringResource(DesignSystemR.string.mounting) else stringResource(DesignSystemR.string.mount_volume)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !isMounting) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !isMounting) { Text(stringResource(DesignSystemR.string.cancel)) } },
     )
 }
 
@@ -818,7 +824,7 @@ private fun IntegrityEntryRow(entry: IntegrityEntryEntity, onRemove: () -> Unit)
         },
         leadingContent = { Icon(Icons.Filled.Fingerprint, null, tint = statusColor) },
         trailingContent = {
-            IconButton(onClick = onRemove) { Icon(Icons.Filled.Close, "Remove watch") }
+            IconButton(onClick = onRemove) { Icon(Icons.Filled.Close, stringResource(DesignSystemR.string.remove_watch)) }
         },
     )
 }
@@ -828,18 +834,18 @@ private fun IntegrityPathDialog(onConfirm: (String) -> Unit, onDismiss: () -> Un
     var path by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Watch path") },
+        title = { Text(stringResource(DesignSystemR.string.watch_path)) },
         text = {
             OutlinedTextField(
                 value = path,
                 onValueChange = { path = it },
-                label = { Text("Absolute file or directory path") },
+                label = { Text(stringResource(DesignSystemR.string.absolute_file_or_directory_path)) },
                 singleLine = true,
             )
         },
         confirmButton = {
-            TextButton(onClick = { if (path.isNotBlank()) onConfirm(path.trim()) }) { Text("Watch") }
+            TextButton(onClick = { if (path.isNotBlank()) onConfirm(path.trim()) }) { Text(stringResource(DesignSystemR.string.watch)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(DesignSystemR.string.cancel)) } },
     )
 }

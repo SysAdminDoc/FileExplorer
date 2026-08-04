@@ -37,6 +37,7 @@ cd FileExplorer
 | USB OTG | UsbManager mass-storage detection, persistent SAF tree access, and DocumentFile read/write browsing | Requires configuration |
 | Quick Share | Selection menu action backed by the Android Sharesheet for nearby-device delivery | Requires Quick Share or another compatible receiver |
 | Media casting | Cast a selected local or SAF-backed photo, video, or audio file through Chromecast's Cast dialog | Requires Chromecast / Google Cast services |
+| Localization | Shared Android string resources with English plus Spanish, Brazilian Portuguese, German, French, Japanese, Korean, Simplified Chinese, Russian, and Arabic locale variants | Core visible surfaces localized |
 | Share Server | Authenticated HTTP web access and passive FTP sharing with foreground service and Quick Settings start/stop | Complete |
 | File Encryption | AES-256-GCM encryption with an Android Keystore key and biometric-gated decryption from the browser | Complete |
 | Shizuku Android/data and obb | Optional UserService backend for scoped browsing and file operations under Android/data and Android/obb | Optional |
@@ -71,6 +72,13 @@ cd FileExplorer
 | Hex Editor | Paginated hexadecimal view with byte editing up to 64 MiB and read-only larger-file inspection | Complete |
 | Gesture Actions | Configurable swipe-left/right actions for delete, share, compress, and cut-to-move | Complete |
 | Automation Intents | Exported Tasker / Automate actions for copy, move, archive creation, and network upload | Complete |
+
+## Language support
+
+The app follows the Android system language. English is the fallback, with bundled
+resources for Spanish, Brazilian Portuguese, German, French, Japanese, Korean,
+Simplified Chinese, Russian, and Arabic. Android handles right-to-left layout for
+Arabic through the existing RTL manifest support.
 
 ## Automation intents
 

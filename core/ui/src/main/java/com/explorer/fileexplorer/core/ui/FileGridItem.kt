@@ -21,12 +21,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.explorer.fileexplorer.core.model.FileColumn
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -57,7 +59,7 @@ fun FileGridItem(
                 if (selectionMode && isSelected) {
                     Icon(
                         imageVector = Icons.Filled.CheckCircle,
-                        contentDescription = "Selected",
+                        contentDescription = stringResource(DesignSystemR.string.select),
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(32.dp),
                     )

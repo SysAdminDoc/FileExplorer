@@ -47,7 +47,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -162,10 +164,10 @@ fun ShareServerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Share Server") },
+                title = { Text(stringResource(DesignSystemR.string.share_server)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(DesignSystemR.string.back))
                     }
                 },
             )
@@ -185,17 +187,17 @@ fun ShareServerScreen(
                 value = state.rootPath,
                 onValueChange = viewModel::setRootPath,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Shared folder") },
+                label = { Text(stringResource(DesignSystemR.string.shared_folder)) },
                 leadingIcon = { Icon(Icons.Filled.Folder, null) },
                 singleLine = true,
                 enabled = !running,
-                supportingText = { Text("The server cannot leave this folder.") },
+                supportingText = { Text(stringResource(DesignSystemR.string.server_cannot_leave_folder)) },
             )
 
-            Text("Protocols", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(DesignSystemR.string.protocols), style = MaterialTheme.typography.titleMedium)
             ProtocolToggle(
-                title = "HTTP web access",
-                subtitle = "Browse, download, upload, rename, and delete from a browser",
+                title = stringResource(DesignSystemR.string.http_web_access),
+                subtitle = stringResource(DesignSystemR.string.http_web_access_description),
                 checked = state.config.httpEnabled,
                 enabled = !running,
                 onCheckedChange = viewModel::setHttpEnabled,
@@ -205,14 +207,14 @@ fun ShareServerScreen(
                     value = state.httpPortText,
                     onValueChange = viewModel::setHttpPort,
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("HTTP port") },
+                    label = { Text(stringResource(DesignSystemR.string.http_port)) },
                     singleLine = true,
                     enabled = !running,
                 )
             }
             ProtocolToggle(
-                title = "FTP access",
-                subtitle = "Connect with a desktop file manager or FTP client",
+                title = stringResource(DesignSystemR.string.ftp_access),
+                subtitle = stringResource(DesignSystemR.string.ftp_access_description),
                 checked = state.config.ftpEnabled,
                 enabled = !running,
                 onCheckedChange = viewModel::setFtpEnabled,
@@ -222,19 +224,19 @@ fun ShareServerScreen(
                     value = state.ftpPortText,
                     onValueChange = viewModel::setFtpPort,
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("FTP port") },
+                    label = { Text(stringResource(DesignSystemR.string.ftp_port)) },
                     singleLine = true,
                     enabled = !running,
                 )
             }
 
             HorizontalDivider()
-            Text("Authentication", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(DesignSystemR.string.authentication), style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(
                 value = state.username,
                 onValueChange = viewModel::setUsername,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Username") },
+                label = { Text(stringResource(DesignSystemR.string.username)) },
                 leadingIcon = { Icon(Icons.Filled.Lock, null) },
                 singleLine = true,
                 enabled = !running,
@@ -243,7 +245,7 @@ fun ShareServerScreen(
                 value = state.password,
                 onValueChange = viewModel::setPassword,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Password") },
+                label = { Text(stringResource(DesignSystemR.string.password)) },
                 singleLine = true,
                 enabled = !running,
                 visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
@@ -251,13 +253,13 @@ fun ShareServerScreen(
                     IconButton(onClick = { showPassword = !showPassword }) {
                         Icon(
                             if (showPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                            "Show password",
+                            stringResource(DesignSystemR.string.show_password),
                         )
                     }
                 },
             )
             Text(
-                "Authentication is required for every HTTP and FTP connection.",
+                stringResource(DesignSystemR.string.authentication_required_connections),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -286,17 +288,17 @@ fun ShareServerScreen(
                     Button(onClick = viewModel::stop, modifier = Modifier.weight(1f)) {
                         Icon(Icons.Filled.Stop, null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Stop server")
+                        Text(stringResource(DesignSystemR.string.stop_server))
                     }
                 } else {
                     Button(onClick = viewModel::start, modifier = Modifier.weight(1f)) {
                         Icon(Icons.Filled.PlayArrow, null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Start server")
+                        Text(stringResource(DesignSystemR.string.start_server))
                     }
                 }
                 OutlinedButton(onClick = onNavigateBack, modifier = Modifier.weight(1f)) {
-                    Text("Done")
+                    Text(stringResource(DesignSystemR.string.done))
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -326,17 +328,17 @@ private fun ShareServerStatusCard(status: ShareServerStatus) {
             headlineContent = {
                 Text(
                     when (status.state) {
-                        ShareServerState.STARTING -> "Starting"
-                        ShareServerState.RUNNING -> "Running"
-                        ShareServerState.FAILED -> "Could not start"
-                        ShareServerState.STOPPED -> "Stopped"
+                        ShareServerState.STARTING -> stringResource(DesignSystemR.string.starting)
+                        ShareServerState.RUNNING -> stringResource(DesignSystemR.string.running)
+                        ShareServerState.FAILED -> stringResource(DesignSystemR.string.could_not_start)
+                        ShareServerState.STOPPED -> stringResource(DesignSystemR.string.stopped)
                     },
                 )
             },
             supportingContent = {
                 Column {
                     if (status.addresses.isEmpty()) {
-                        Text("Start the server to receive local network addresses.")
+                        Text(stringResource(DesignSystemR.string.start_server_for_addresses))
                     } else {
                         SelectionContainer {
                             Column {

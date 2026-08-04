@@ -36,11 +36,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.ui.FileListItem
 import java.io.File
 
@@ -59,15 +61,15 @@ fun CollectionsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(selected?.title ?: "Collections") },
+                title = { Text(selected?.title ?: stringResource(DesignSystemR.string.collections)) },
                 navigationIcon = {
                     IconButton(onClick = if (selected == null) onNavigateBack else viewModel::closeCategory) {
-                        Icon(Icons.Filled.ArrowBack, "Back")
+                        Icon(Icons.Filled.ArrowBack, stringResource(DesignSystemR.string.back))
                     }
                 },
                 actions = {
                     IconButton(onClick = viewModel::refresh) {
-                        Icon(Icons.Filled.Refresh, "Refresh")
+                        Icon(Icons.Filled.Refresh, stringResource(DesignSystemR.string.refresh))
                     }
                 },
             )
@@ -119,12 +121,12 @@ private fun CollectionSummaryList(
                 ListItem(
                     headlineContent = { Text(summary.category.title) },
                     supportingContent = {
-                        Text("${summary.itemCount} items · ${formatCollectionBytes(summary.totalBytes)}")
+                        Text(stringResource(DesignSystemR.string.collection_item_summary, summary.itemCount, formatCollectionBytes(summary.totalBytes)))
                     },
                     leadingContent = {
                         Icon(collectionIcon(summary.category), contentDescription = null, modifier = Modifier.size(32.dp))
                     },
-                    trailingContent = { Text("Open", color = MaterialTheme.colorScheme.primary) },
+                    trailingContent = { Text(stringResource(DesignSystemR.string.open), color = MaterialTheme.colorScheme.primary) },
                 )
             }
         }
@@ -138,7 +140,7 @@ private fun CollectionFiles(
 ) {
     if (files.isEmpty()) {
         Text(
-            text = "No indexed files in this collection",
+            text = stringResource(DesignSystemR.string.no_indexed_files),
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.padding(24.dp),
         )

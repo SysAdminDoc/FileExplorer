@@ -46,8 +46,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -86,10 +88,10 @@ fun TransferQueueScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Transfer Queue") },
+                title = { Text(stringResource(DesignSystemR.string.transfer_queue)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(DesignSystemR.string.back))
                     }
                 },
                 actions = {
@@ -97,7 +99,7 @@ fun TransferQueueScreen(
                         onClick = viewModel::clearFinished,
                         enabled = tasks.any { it.isTerminal },
                     ) {
-                        Icon(Icons.Filled.DeleteSweep, contentDescription = "Clear finished")
+                        Icon(Icons.Filled.DeleteSweep, contentDescription = stringResource(DesignSystemR.string.clear))
                     }
                 },
             )
@@ -107,7 +109,7 @@ fun TransferQueueScreen(
             Box(
                 modifier = Modifier.padding(padding).fillMaxSize(),
                 contentAlignment = Alignment.Center,
-            ) { Text("No transfers queued", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            ) { Text(stringResource(DesignSystemR.string.no_transfers_queued), color = MaterialTheme.colorScheme.onSurfaceVariant) }
         } else {
             LazyColumn(
                 modifier = Modifier.padding(padding).fillMaxSize(),
@@ -170,10 +172,10 @@ private fun TransferQueueTaskCard(
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )
-                Text(task.state.displayName(), style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(task.state.displayNameRes()), style = MaterialTheme.typography.labelMedium)
             }
             Text(
-                text = "Destination: ${task.destination.ifBlank { "Same storage" }}",
+                text = "Destination: ${task.destination.ifBlank { stringResource(DesignSystemR.string.destination_same_storage) }}",
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -181,7 +183,8 @@ private fun TransferQueueTaskCard(
             if (task.totalBytes > 0) {
                 LinearProgressIndicator(progress = { task.progress }, modifier = Modifier.fillMaxWidth())
                 Text(
-                    "${formatBytes(task.transferredBytes)} / ${formatBytes(task.totalBytes)} · ${task.completedSources}/${task.sourcePaths.size} complete",
+                    "${formatBytes(task.transferredBytes)} / ${formatBytes(task.totalBytes)} · " +
+                        stringResource(DesignSystemR.string.transfer_complete_count, task.completedSources, task.sourcePaths.size),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -192,22 +195,22 @@ private fun TransferQueueTaskCard(
             task.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (task.state == TransferQueueState.PAUSED) {
-                    IconButton(onClick = onResume) { Icon(Icons.Filled.PlayArrow, "Resume") }
+                    IconButton(onClick = onResume) { Icon(Icons.Filled.PlayArrow, stringResource(DesignSystemR.string.resume)) }
                 } else if (task.state == TransferQueueState.QUEUED || task.state == TransferQueueState.RUNNING) {
-                    IconButton(onClick = onPause) { Icon(Icons.Filled.Pause, "Pause") }
+                    IconButton(onClick = onPause) { Icon(Icons.Filled.Pause, stringResource(DesignSystemR.string.pause)) }
                 }
-                if (!task.isTerminal) IconButton(onClick = onCancel) { Icon(Icons.Filled.Close, "Cancel") }
+                if (!task.isTerminal) IconButton(onClick = onCancel) { Icon(Icons.Filled.Close, stringResource(DesignSystemR.string.cancel)) }
                 IconButton(onClick = onMoveUp, enabled = canMoveUp && task.state == TransferQueueState.QUEUED) {
-                    Icon(Icons.Filled.ArrowUpward, "Move up")
+                    Icon(Icons.Filled.ArrowUpward, stringResource(DesignSystemR.string.move_up))
                 }
                 IconButton(onClick = onMoveDown, enabled = canMoveDown && task.state == TransferQueueState.QUEUED) {
-                    Icon(Icons.Filled.ArrowDownward, "Move down")
+                    Icon(Icons.Filled.ArrowDownward, stringResource(DesignSystemR.string.move_down))
                 }
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = onEditLimit, enabled = !task.isTerminal) {
                     Icon(Icons.Filled.Speed, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.size(4.dp))
-                    Text(if (task.bandwidthLimitBytesPerSecond > 0) "${task.bandwidthLimitBytesPerSecond / 1024} KB/s" else "Unlimited")
+                    Text(if (task.bandwidthLimitBytesPerSecond > 0) "${task.bandwidthLimitBytesPerSecond / 1024} KB/s" else stringResource(DesignSystemR.string.unlimited))
                 }
             }
         }
@@ -226,18 +229,18 @@ private fun BandwidthLimitDialog(
     val limit = value.toLongOrNull()
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Bandwidth limit") },
+        title = { Text(stringResource(DesignSystemR.string.bandwidth_limit)) },
         text = {
             OutlinedTextField(
                 value = value,
                 onValueChange = { value = it },
-                label = { Text("KB/s (blank for unlimited)") },
+                label = { Text(stringResource(DesignSystemR.string.kb_s_blank_unlimited)) },
                 singleLine = true,
-                supportingText = { Text("Applies to this queued task") },
+                supportingText = { Text(stringResource(DesignSystemR.string.operation_applied_to_task)) },
             )
         },
-        confirmButton = { TextButton(onClick = { onConfirm(limit ?: 0L) }, enabled = value.isBlank() || limit != null && limit >= 0) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = { onConfirm(limit ?: 0L) }, enabled = value.isBlank() || limit != null && limit >= 0) { Text(stringResource(DesignSystemR.string.save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(DesignSystemR.string.cancel)) } },
     )
 }
 
@@ -249,11 +252,11 @@ private fun ConflictResolutionDialog(
     var applyToAll by remember(conflict) { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = {},
-        title = { Text("File conflict") },
+        title = { Text(stringResource(DesignSystemR.string.file_conflict)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Incoming: ${conflict.sourcePath}", maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text("Existing: ${conflict.destinationPath}", maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(DesignSystemR.string.incoming, conflict.sourcePath), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(DesignSystemR.string.existing, conflict.destinationPath), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (conflict.isText && conflict.diffPreview.isNotBlank()) {
                     HorizontalDivider()
                     SelectionContainer {
@@ -266,29 +269,29 @@ private fun ConflictResolutionDialog(
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = applyToAll, onCheckedChange = { applyToAll = it })
-                    Text("Apply this choice to all conflicts")
+                    Text(stringResource(DesignSystemR.string.apply_choice_to_all))
                 }
             }
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                TextButton(onClick = { onResolve(TransferConflictAction.SKIP, applyToAll) }) { Text("Skip") }
-                TextButton(onClick = { onResolve(TransferConflictAction.REPLACE, applyToAll) }) { Text("Replace") }
-                TextButton(onClick = { onResolve(TransferConflictAction.RENAME, applyToAll) }) { Text("Rename") }
-                TextButton(onClick = { onResolve(TransferConflictAction.KEEP_BOTH, applyToAll) }) { Text("Keep both") }
+                TextButton(onClick = { onResolve(TransferConflictAction.SKIP, applyToAll) }) { Text(stringResource(DesignSystemR.string.skip)) }
+                TextButton(onClick = { onResolve(TransferConflictAction.REPLACE, applyToAll) }) { Text(stringResource(DesignSystemR.string.replace)) }
+                TextButton(onClick = { onResolve(TransferConflictAction.RENAME, applyToAll) }) { Text(stringResource(DesignSystemR.string.rename)) }
+                TextButton(onClick = { onResolve(TransferConflictAction.KEEP_BOTH, applyToAll) }) { Text(stringResource(DesignSystemR.string.keep_both)) }
             }
         },
     )
 }
 
-private fun TransferQueueState.displayName(): String = when (this) {
-    TransferQueueState.QUEUED -> "Queued"
-    TransferQueueState.RUNNING -> "Running"
-    TransferQueueState.PAUSED -> "Paused"
-    TransferQueueState.WAITING_CONFLICT -> "Needs decision"
-    TransferQueueState.COMPLETED -> "Complete"
-    TransferQueueState.FAILED -> "Failed"
-    TransferQueueState.CANCELLED -> "Cancelled"
+private fun TransferQueueState.displayNameRes(): Int = when (this) {
+    TransferQueueState.QUEUED -> DesignSystemR.string.queued
+    TransferQueueState.RUNNING -> DesignSystemR.string.running
+    TransferQueueState.PAUSED -> DesignSystemR.string.paused
+    TransferQueueState.WAITING_CONFLICT -> DesignSystemR.string.needs_decision
+    TransferQueueState.COMPLETED -> DesignSystemR.string.complete
+    TransferQueueState.FAILED -> DesignSystemR.string.failed
+    TransferQueueState.CANCELLED -> DesignSystemR.string.cancelled
 }
 
 private fun formatBytes(bytes: Long): String = when {

@@ -21,11 +21,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.explorer.fileexplorer.core.data.BatchRenameEngine
 import com.explorer.fileexplorer.core.data.BatchRenameOptions
 import com.explorer.fileexplorer.core.data.BatchRenamePreviewItem
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.model.FileItem
 
 @Composable
@@ -62,22 +64,22 @@ fun BatchRenameDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Batch rename") },
+        title = { Text(stringResource(DesignSystemR.string.batch_rename)) },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 OutlinedTextField(
                     value = template,
                     onValueChange = { template = it },
-                    label = { Text("Template") },
-                    supportingText = { Text("Tokens: {name}, {ext}, {counter}, {date}, {parent}, {group1}") },
+                    label = { Text(stringResource(DesignSystemR.string.batch_rename_template)) },
+                    supportingText = { Text(stringResource(DesignSystemR.string.batch_rename_tokens)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = regex,
                     onValueChange = { regex = it },
-                    label = { Text("Optional regex pattern") },
-                    supportingText = { Text("Capture groups can be used as {group1}, {group2}, ...") },
+                    label = { Text(stringResource(DesignSystemR.string.optional_regex_pattern)) },
+                    supportingText = { Text(stringResource(DesignSystemR.string.capture_groups_hint)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -85,27 +87,27 @@ fun BatchRenameDialog(
                     OutlinedTextField(
                         value = counterStart,
                         onValueChange = { counterStart = it },
-                        label = { Text("Start") },
+                        label = { Text(stringResource(DesignSystemR.string.start)) },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
                     OutlinedTextField(
                         value = counterPadding,
                         onValueChange = { counterPadding = it },
-                        label = { Text("Padding") },
+                        label = { Text(stringResource(DesignSystemR.string.padding)) },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
                     OutlinedTextField(
                         value = datePattern,
                         onValueChange = { datePattern = it },
-                        label = { Text("Date format") },
+                        label = { Text(stringResource(DesignSystemR.string.date_format)) },
                         singleLine = true,
                         modifier = Modifier.weight(1.5f),
                     )
                 }
                 Spacer(Modifier.height(12.dp))
-                Text("Live preview (${items.size} items)", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(DesignSystemR.string.live_preview_count, items.size), style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.height(4.dp))
                 LazyColumn(
                     modifier = Modifier
@@ -127,9 +129,9 @@ fun BatchRenameDialog(
             TextButton(
                 onClick = { onConfirm(options) },
                 enabled = preview.isValid && !numberError,
-            ) { Text("Rename") }
+            ) { Text(stringResource(DesignSystemR.string.rename)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(DesignSystemR.string.cancel)) } },
     )
 }
 

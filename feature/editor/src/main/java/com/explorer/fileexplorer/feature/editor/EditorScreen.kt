@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -29,6 +30,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -278,24 +280,24 @@ fun EditorScreen(
                 title = {
                     Column {
                         Text(state.title, maxLines = 1, style = MaterialTheme.typography.titleMedium)
-                        Text("${state.encoding.name()} | ${state.lineCount} lines | ${formatSize(state.fileSize)}",
+                        Text(stringResource(DesignSystemR.string.editor_status, state.encoding.name(), state.lineCount, formatSize(state.fileSize)),
                             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
-                navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+                navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(DesignSystemR.string.back)) } },
                 actions = {
                     if (!state.readOnly) {
-                        IconButton(onClick = viewModel::undo, enabled = state.canUndo) { Icon(Icons.AutoMirrored.Filled.Undo, "Undo") }
-                        IconButton(onClick = viewModel::redo, enabled = state.canRedo) { Icon(Icons.AutoMirrored.Filled.Redo, "Redo") }
-                        IconButton(onClick = viewModel::save, enabled = state.isModified) { Icon(Icons.Filled.Save, "Save") }
+                        IconButton(onClick = viewModel::undo, enabled = state.canUndo) { Icon(Icons.AutoMirrored.Filled.Undo, stringResource(DesignSystemR.string.undo)) }
+                        IconButton(onClick = viewModel::redo, enabled = state.canRedo) { Icon(Icons.AutoMirrored.Filled.Redo, stringResource(DesignSystemR.string.redo)) }
+                        IconButton(onClick = viewModel::save, enabled = state.isModified) { Icon(Icons.Filled.Save, stringResource(DesignSystemR.string.save)) }
                     }
-                    IconButton(onClick = viewModel::toggleFind) { Icon(Icons.Filled.Search, "Find") }
+                    IconButton(onClick = viewModel::toggleFind) { Icon(Icons.Filled.Search, stringResource(DesignSystemR.string.find)) }
                     var moreExpanded by remember { mutableStateOf(false) }
-                    IconButton(onClick = { moreExpanded = true }) { Icon(Icons.Filled.MoreVert, "More") }
+                    IconButton(onClick = { moreExpanded = true }) { Icon(Icons.Filled.MoreVert, stringResource(DesignSystemR.string.more)) }
                     DropdownMenu(expanded = moreExpanded, onDismissRequest = { moreExpanded = false }) {
-                        DropdownMenuItem(text = { Text(if (state.wordWrap) "Disable word wrap" else "Enable word wrap") },
+                        DropdownMenuItem(text = { Text(stringResource(if (state.wordWrap) DesignSystemR.string.disable_word_wrap else DesignSystemR.string.enable_word_wrap)) },
                             onClick = { viewModel.toggleWordWrap(); moreExpanded = false })
-                        DropdownMenuItem(text = { Text(if (state.showLineNumbers) "Hide line numbers" else "Show line numbers") },
+                        DropdownMenuItem(text = { Text(stringResource(if (state.showLineNumbers) DesignSystemR.string.hide_line_numbers else DesignSystemR.string.show_line_numbers)) },
                             onClick = { viewModel.toggleLineNumbers(); moreExpanded = false })
                     }
                 },
@@ -309,18 +311,18 @@ fun EditorScreen(
                     Column(Modifier.padding(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             OutlinedTextField(value = state.findQuery, onValueChange = viewModel::setFindQuery,
-                                label = { Text("Find") }, singleLine = true, modifier = Modifier.weight(1f),
+                                label = { Text(stringResource(DesignSystemR.string.find)) }, singleLine = true, modifier = Modifier.weight(1f),
                                 textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp))
                             Spacer(Modifier.width(8.dp))
-                            Text("${state.findMatches} matches", style = MaterialTheme.typography.labelSmall)
+                            Text(stringResource(DesignSystemR.string.matches_count, state.findMatches), style = MaterialTheme.typography.labelSmall)
                         }
                         if (!state.readOnly) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                                 OutlinedTextField(value = state.replaceQuery, onValueChange = viewModel::setReplaceQuery,
-                                    label = { Text("Replace") }, singleLine = true, modifier = Modifier.weight(1f),
+                                    label = { Text(stringResource(DesignSystemR.string.replace)) }, singleLine = true, modifier = Modifier.weight(1f),
                                     textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp))
                                 Spacer(Modifier.width(8.dp))
-                                FilledTonalButton(onClick = viewModel::replaceAll) { Text("All") }
+                                FilledTonalButton(onClick = viewModel::replaceAll) { Text(stringResource(DesignSystemR.string.all)) }
                             }
                         }
                     }
@@ -330,7 +332,7 @@ fun EditorScreen(
             // Read-only banner
             if (state.readOnly) {
                 Surface(color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f), modifier = Modifier.fillMaxWidth()) {
-                    Text("Read-only", style = MaterialTheme.typography.labelSmall,
+                    Text(stringResource(DesignSystemR.string.read_only), style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                 }
             }

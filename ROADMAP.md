@@ -77,15 +77,6 @@ already have rclone configured; importing saves re-entering credentials.
 - **Impact:** 2/5 (niche but sticky). **Effort:** 2/5.
 - **Source:** Existing ROADMAP item; rclone community.
 
-### L-17: i18n / multi-language support
-Externalize all user-facing strings to `strings.xml` with initial translations for the top 10
-Android locales (en, es, pt-BR, de, fr, ja, ko, zh-CN, ru, ar). Compose already supports RTL
-via `supportsRtl="true"` in the manifest. No competitor OSS FM supports more than 5 languages
-well; Solid Explorer supports ~40.
-
-- **Impact:** 3/5 (distribution reach). **Effort:** 3/5.
-- **Source:** Solid Explorer localization; Google Play global audience data.
-
 ### L-18: Thumbnail cache control
 Size cap, storage location, and purge button in Settings. Coil 3.x provides disk cache
 configuration. Prevents thumbnail cache from growing unbounded on devices with limited storage.

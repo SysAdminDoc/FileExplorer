@@ -11,9 +11,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.explorer.fileexplorer.core.designsystem.FileExplorerTheme
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.designsystem.ThemeMode
 import com.explorer.fileexplorer.core.storage.PermissionHelper
 import com.explorer.fileexplorer.feature.settings.SettingsRepository
@@ -85,13 +87,13 @@ private fun PermissionScreen(onGrantPermission: () -> Unit) {
         )
         Spacer(Modifier.height(24.dp))
         Text(
-            text = "Storage Access Required",
+            text = stringResource(DesignSystemR.string.storage_access_title),
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            text = "File Explorer needs access to all files on your device to browse, manage, and organize your storage.",
+            text = stringResource(DesignSystemR.string.storage_access_message),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -100,11 +102,11 @@ private fun PermissionScreen(onGrantPermission: () -> Unit) {
             onClick = onGrantPermission,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Grant Storage Access")
+            Text(stringResource(DesignSystemR.string.grant_storage_access))
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            text = "This will open Android Settings where you can allow file access.",
+            text = stringResource(DesignSystemR.string.storage_access_settings),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

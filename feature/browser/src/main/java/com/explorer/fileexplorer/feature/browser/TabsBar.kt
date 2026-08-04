@@ -24,6 +24,8 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import kotlin.math.abs
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -85,7 +87,7 @@ internal fun BrowserTabsBar(
                 }
             }
             IconButton(onClick = onAdd) {
-                Icon(Icons.Filled.Add, contentDescription = "New tab")
+                Icon(Icons.Filled.Add, contentDescription = stringResource(DesignSystemR.string.new_tab))
             }
         }
     }
@@ -157,7 +159,7 @@ private fun TabChip(
                 modifier = Modifier.weight(1f),
             )
             IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Filled.Close, contentDescription = "Close $label tab", modifier = Modifier.size(16.dp))
+                Icon(Icons.Filled.Close, contentDescription = stringResource(DesignSystemR.string.close_tab, label), modifier = Modifier.size(16.dp))
             }
         }
     }

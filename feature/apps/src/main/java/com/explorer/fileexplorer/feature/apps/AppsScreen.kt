@@ -24,8 +24,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import androidx.core.content.FileProvider
 import androidx.core.graphics.drawable.toBitmap
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -231,11 +233,11 @@ fun AppsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Apps (${state.appCount})") },
-                navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+                title = { Text(stringResource(DesignSystemR.string.apps_count, state.appCount)) },
+                navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(DesignSystemR.string.back)) } },
                 actions = {
                     var sortExpanded by remember { mutableStateOf(false) }
-                    IconButton(onClick = { sortExpanded = true }) { Icon(Icons.AutoMirrored.Filled.Sort, "Sort") }
+                    IconButton(onClick = { sortExpanded = true }) { Icon(Icons.AutoMirrored.Filled.Sort, stringResource(DesignSystemR.string.sort)) }
                     DropdownMenu(expanded = sortExpanded, onDismissRequest = { sortExpanded = false }) {
                         AppSort.entries.forEach { sort ->
                             DropdownMenuItem(
@@ -248,7 +250,7 @@ fun AppsScreen(
                                 })
                         }
                     }
-                    IconButton(onClick = viewModel::refresh) { Icon(Icons.Filled.Refresh, "Refresh") }
+                    IconButton(onClick = viewModel::refresh) { Icon(Icons.Filled.Refresh, stringResource(DesignSystemR.string.refresh)) }
                 },
             )
         },
@@ -256,7 +258,7 @@ fun AppsScreen(
         Column(Modifier.padding(padding)) {
             // Search
             OutlinedTextField(value = state.searchQuery, onValueChange = viewModel::setSearch,
-                placeholder = { Text("Search apps...") }, singleLine = true,
+                placeholder = { Text(stringResource(DesignSystemR.string.search_apps_hint)) }, singleLine = true,
                 leadingIcon = { Icon(Icons.Filled.Search, null) },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp))
 
@@ -305,7 +307,7 @@ private fun AppListItem(app: AppInfo, onOpen: () -> Unit, onDetails: () -> Unit)
     ListItem(
         headlineContent = { Text(app.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         supportingContent = {
-            Text("${app.packageName} | ${formatApkSize(app.apkSize)}",
+            Text(stringResource(DesignSystemR.string.app_package_size, app.packageName, formatApkSize(app.apkSize)),
                 style = MaterialTheme.typography.bodySmall, maxLines = 1,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         },
@@ -318,9 +320,9 @@ private fun AppListItem(app: AppInfo, onOpen: () -> Unit, onDetails: () -> Unit)
         trailingContent = {
             Row {
                 if (!app.isSystem) {
-                    IconButton(onClick = onOpen) { Icon(Icons.Filled.Launch, "Open", modifier = Modifier.size(20.dp)) }
+                    IconButton(onClick = onOpen) { Icon(Icons.Filled.Launch, stringResource(DesignSystemR.string.open), modifier = Modifier.size(20.dp)) }
                 }
-                IconButton(onClick = onDetails) { Icon(Icons.Filled.Info, "Details", modifier = Modifier.size(20.dp)) }
+                IconButton(onClick = onDetails) { Icon(Icons.Filled.Info, stringResource(DesignSystemR.string.details), modifier = Modifier.size(20.dp)) }
             }
         },
     )
@@ -349,36 +351,36 @@ private fun AppDetailsSheet(
             }
             Spacer(Modifier.height(16.dp))
 
-            DetailRow("Version", "${app.versionName} (${app.versionCode})")
-            DetailRow("APK Size", formatApkSize(app.apkSize))
-            DetailRow("APK Path", app.apkPath)
-            DetailRow("Type", if (app.isSystem) "System" else "User")
-            DetailRow("Status", if (app.isEnabled) "Enabled" else "Disabled")
-            DetailRow("Target SDK", app.targetSdk.toString())
-            DetailRow("Min SDK", app.minSdk.toString())
-            DetailRow("Installed", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(app.firstInstalled)))
-            DetailRow("Updated", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(app.lastUpdated)))
+            DetailRow(stringResource(DesignSystemR.string.app_version), "${app.versionName} (${app.versionCode})")
+            DetailRow(stringResource(DesignSystemR.string.apk_size), formatApkSize(app.apkSize))
+            DetailRow(stringResource(DesignSystemR.string.apk_path), app.apkPath)
+            DetailRow(stringResource(DesignSystemR.string.app_type), stringResource(if (app.isSystem) DesignSystemR.string.system_type else DesignSystemR.string.user_type))
+            DetailRow(stringResource(DesignSystemR.string.status), stringResource(if (app.isEnabled) DesignSystemR.string.enabled else DesignSystemR.string.disabled))
+            DetailRow(stringResource(DesignSystemR.string.target_sdk), app.targetSdk.toString())
+            DetailRow(stringResource(DesignSystemR.string.min_sdk), app.minSdk.toString())
+            DetailRow(stringResource(DesignSystemR.string.installed), java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(app.firstInstalled)))
+            DetailRow(stringResource(DesignSystemR.string.updated), java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(app.lastUpdated)))
 
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(onClick = onOpen, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Filled.Launch, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Open")
+                    Icon(Icons.Filled.Launch, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text(stringResource(DesignSystemR.string.open))
                 }
                 OutlinedButton(onClick = onSettings, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Filled.Settings, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Settings")
+                    Icon(Icons.Filled.Settings, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text(stringResource(DesignSystemR.string.settings))
                 }
             }
             OutlinedButton(onClick = onAnalyze, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                Icon(Icons.Filled.Analytics, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Analyze APK")
+                Icon(Icons.Filled.Analytics, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text(stringResource(DesignSystemR.string.analyze_apk))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 OutlinedButton(onClick = onShareApk, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Filled.Share, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Share APK")
+                    Icon(Icons.Filled.Share, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text(stringResource(DesignSystemR.string.share_apk))
                 }
                 if (!app.isSystem) {
                     OutlinedButton(onClick = onUninstall, modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
-                        Icon(Icons.Filled.Delete, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Uninstall")
+                        Icon(Icons.Filled.Delete, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text(stringResource(DesignSystemR.string.uninstall))
                     }
                 }
             }

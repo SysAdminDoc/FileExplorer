@@ -43,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -52,6 +53,7 @@ import androidx.lifecycle.viewModelScope
 import com.explorer.fileexplorer.core.data.RootModule
 import com.explorer.fileexplorer.core.data.RootModuleRepository
 import com.explorer.fileexplorer.core.data.RootModuleSnapshot
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -187,22 +189,22 @@ fun RootModulesScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Root Modules") },
+                title = { Text(stringResource(DesignSystemR.string.root_modules)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(DesignSystemR.string.back))
                     }
                 },
                 actions = {
                     IconButton(onClick = viewModel::refresh, enabled = !state.isLoading && !state.isInstalling) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh modules")
+                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(DesignSystemR.string.refresh_modules))
                     }
                 },
             )
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                text = { Text("Install ZIP") },
+                text = { Text(stringResource(DesignSystemR.string.install_zip)) },
                 icon = { Icon(Icons.Filled.Archive, contentDescription = null) },
                 onClick = {
                     if (!state.isLoading && !state.isInstalling) {
@@ -233,7 +235,7 @@ fun RootModulesScreen(
                 }
             } else if (state.error != null) {
                 Button(onClick = viewModel::refresh, modifier = Modifier.padding(horizontal = 16.dp)) {
-                    Text("Retry")
+                    Text(stringResource(DesignSystemR.string.retry))
                 }
             } else if (state.modules.isEmpty()) {
                 EmptyRootModules()
@@ -269,7 +271,7 @@ private fun RootModulesHeader(
             if (!isLoading) Text("$moduleCount", style = MaterialTheme.typography.titleMedium)
         }
         Text(
-            "Install trusted module ZIPs, then enable or disable installed modules. Changes commonly apply after reboot.",
+            stringResource(DesignSystemR.string.root_module_description),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp),
@@ -293,9 +295,9 @@ private fun EmptyRootModules() {
     ) {
         Icon(Icons.Filled.Info, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.height(12.dp))
-        Text("No installed modules", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(DesignSystemR.string.no_installed_modules), style = MaterialTheme.typography.titleMedium)
         Text(
-            "Choose Install ZIP to install a module through the detected root manager.",
+            stringResource(DesignSystemR.string.root_module_install_hint),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp),
@@ -340,11 +342,11 @@ private fun RootModuleCard(module: RootModule, onEnabledChange: (Boolean) -> Uni
                 HorizontalDivider(modifier = Modifier.padding(top = 4.dp))
                 Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     if (module.pendingRemoval) {
-                        Text("Pending removal after reboot", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                        Text(stringResource(DesignSystemR.string.pending_removal_reboot), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                     }
                     if (module.skipMount) {
                         if (module.pendingRemoval) Spacer(Modifier.width(12.dp))
-                        Text("Mount skipped", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(DesignSystemR.string.mount_skipped), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

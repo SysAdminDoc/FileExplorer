@@ -9,10 +9,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.explorer.fileexplorer.core.database.BookmarkEntity
 import com.explorer.fileexplorer.core.designsystem.AccentOrange
 import com.explorer.fileexplorer.core.designsystem.AccentRed
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.model.StorageVolume
 import com.explorer.fileexplorer.core.data.UsbDeviceInfo
 import com.explorer.fileexplorer.core.data.UsbStorageRoot
@@ -46,7 +48,7 @@ fun NavigationDrawerContent(
 ) {
     ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surface) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(vertical = 12.dp)) {
-            Text("File Explorer", style = MaterialTheme.typography.headlineMedium,
+            Text(stringResource(DesignSystemR.string.app_name), style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp))
 
@@ -54,7 +56,7 @@ fun NavigationDrawerContent(
             Spacer(Modifier.height(8.dp))
 
             // Storage volumes
-            Text("STORAGE", style = MaterialTheme.typography.labelSmall,
+            Text(stringResource(DesignSystemR.string.storage).uppercase(), style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
 
@@ -79,7 +81,7 @@ fun NavigationDrawerContent(
 
             if (usbDevices.isNotEmpty() || usbRoots.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                Text("USB OTG", style = MaterialTheme.typography.labelSmall,
+                Text(stringResource(DesignSystemR.string.usb_otg), style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
                 for (root in usbRoots) {
@@ -95,30 +97,30 @@ fun NavigationDrawerContent(
                         label = { Text(device.name) }, selected = false,
                         onClick = onOpenUsbPicker,
                         icon = { Icon(Icons.Filled.Usb, null) },
-                        badge = { Text("Choose folder", style = MaterialTheme.typography.labelSmall) },
+                        badge = { Text(stringResource(DesignSystemR.string.choose_folder), style = MaterialTheme.typography.labelSmall) },
                         modifier = Modifier.padding(horizontal = 12.dp),
                     )
                 }
                 OutlinedButton(
                     onClick = onOpenUsbPicker,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp),
-                ) { Text("Choose USB folder") }
+                ) { Text(stringResource(DesignSystemR.string.choose_usb_folder)) }
             }
 
             Spacer(Modifier.height(8.dp))
 
             // Quick links
-            Text("QUICK ACCESS", style = MaterialTheme.typography.labelSmall,
+            Text(stringResource(DesignSystemR.string.quick_access).uppercase(), style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
 
             val quickLinks = listOf(
-                Triple("Downloads", Icons.Filled.Download, "/storage/emulated/0/Download"),
+                Triple(stringResource(DesignSystemR.string.downloads), Icons.Filled.Download, "/storage/emulated/0/Download"),
                 Triple("DCIM", Icons.Filled.CameraAlt, "/storage/emulated/0/DCIM"),
-                Triple("Pictures", Icons.Filled.Image, "/storage/emulated/0/Pictures"),
-                Triple("Documents", Icons.Filled.Description, "/storage/emulated/0/Documents"),
-                Triple("Music", Icons.Filled.MusicNote, "/storage/emulated/0/Music"),
-                Triple("Movies", Icons.Filled.Movie, "/storage/emulated/0/Movies"))
+                Triple(stringResource(DesignSystemR.string.pictures), Icons.Filled.Image, "/storage/emulated/0/Pictures"),
+                Triple(stringResource(DesignSystemR.string.documents), Icons.Filled.Description, "/storage/emulated/0/Documents"),
+                Triple(stringResource(DesignSystemR.string.music), Icons.Filled.MusicNote, "/storage/emulated/0/Music"),
+                Triple(stringResource(DesignSystemR.string.movies), Icons.Filled.Movie, "/storage/emulated/0/Movies"))
 
             for ((name, icon, path) in quickLinks) {
                 NavigationDrawerItem(label = { Text(name) }, selected = false,
@@ -126,18 +128,18 @@ fun NavigationDrawerContent(
                     modifier = Modifier.padding(horizontal = 12.dp))
             }
 
-            NavigationDrawerItem(label = { Text("Collections") }, selected = false,
+            NavigationDrawerItem(label = { Text(stringResource(DesignSystemR.string.collections)) }, selected = false,
                 onClick = onOpenCollections, icon = { Icon(Icons.Filled.CollectionsBookmark, null) },
                 modifier = Modifier.padding(horizontal = 12.dp))
 
-            NavigationDrawerItem(label = { Text("Tags") }, selected = false,
+            NavigationDrawerItem(label = { Text(stringResource(DesignSystemR.string.tags)) }, selected = false,
                 onClick = onOpenTags, icon = { Icon(Icons.Filled.Label, null) },
                 modifier = Modifier.padding(horizontal = 12.dp))
 
             // Bookmarks
             if (bookmarks.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                Text("BOOKMARKS", style = MaterialTheme.typography.labelSmall,
+                Text(stringResource(DesignSystemR.string.bookmarks).uppercase(), style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
                 for (bookmark in bookmarks) {
@@ -156,11 +158,11 @@ fun NavigationDrawerContent(
             NavigationDrawerItem(
                 label = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Root (/)")
+                        Text(stringResource(DesignSystemR.string.root))
                         if (rootEnabled) {
                             Spacer(Modifier.width(8.dp))
                             Surface(color = AccentOrange.copy(alpha = 0.2f), shape = MaterialTheme.shapes.small) {
-                                Text("ROOT", style = MaterialTheme.typography.labelSmall,
+                                Text(stringResource(DesignSystemR.string.root_badge), style = MaterialTheme.typography.labelSmall,
                                     color = AccentOrange,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                             }
@@ -176,7 +178,7 @@ fun NavigationDrawerContent(
             // Root toggle
             if (rootState == RootState.GRANTED) {
                 NavigationDrawerItem(
-                    label = { Text(if (rootEnabled) "Disable Root Mode" else "Enable Root Mode") },
+                    label = { Text(stringResource(if (rootEnabled) DesignSystemR.string.disable_root_mode else DesignSystemR.string.enable_root_mode)) },
                     selected = false,
                     onClick = onToggleRoot,
                     icon = { Icon(Icons.Filled.AdminPanelSettings, null,
@@ -191,10 +193,10 @@ fun NavigationDrawerContent(
             // Root quick paths
             if (rootEnabled) {
                 val rootPaths = listOf(
-                    "System" to "/system",
-                    "Data" to "/data",
-                    "Vendor" to "/vendor",
-                    "EFS" to "/efs")
+                    stringResource(DesignSystemR.string.system) to "/system",
+                    stringResource(DesignSystemR.string.data) to "/data",
+                    stringResource(DesignSystemR.string.vendor) to "/vendor",
+                    stringResource(DesignSystemR.string.efs) to "/efs")
                 for ((name, path) in rootPaths) {
                     NavigationDrawerItem(label = { Text(name) }, selected = false,
                         onClick = { onNavigate(path) },
@@ -202,62 +204,62 @@ fun NavigationDrawerContent(
                         modifier = Modifier.padding(horizontal = 24.dp))
                 }
 
-                NavigationDrawerItem(label = { Text("Root Modules") }, selected = false,
+                NavigationDrawerItem(label = { Text(stringResource(DesignSystemR.string.root_modules)) }, selected = false,
                     onClick = onOpenRootModules, icon = { Icon(Icons.Filled.Extension, null, tint = AccentOrange) },
                     modifier = Modifier.padding(horizontal = 12.dp))
             }
 
             // Network
-            NavigationDrawerItem(label = { Text("Network") }, selected = false,
+            NavigationDrawerItem(label = { Text(stringResource(DesignSystemR.string.network)) }, selected = false,
                 onClick = onOpenNetwork, icon = { Icon(Icons.Filled.Lan, null) },
                 modifier = Modifier.padding(horizontal = 12.dp))
 
-            NavigationDrawerItem(label = { Text("Shizuku Access") }, selected = false,
+            NavigationDrawerItem(label = { Text(stringResource(DesignSystemR.string.shizuku_access)) }, selected = false,
                 onClick = onOpenShizuku, icon = { Icon(Icons.Filled.AdminPanelSettings, null) },
                 modifier = Modifier.padding(horizontal = 12.dp))
 
-            NavigationDrawerItem(label = { Text("Android/data") }, selected = false,
+            NavigationDrawerItem(label = { Text(stringResource(DesignSystemR.string.android_data)) }, selected = false,
                 onClick = { onNavigate(ShizukuPaths.ANDROID_DATA_ROOT) },
                 icon = { Icon(Icons.Filled.Folder, null) },
                 modifier = Modifier.padding(horizontal = 12.dp))
 
             // Share server
-            NavigationDrawerItem(label = { Text("Share Server") }, selected = false,
+            NavigationDrawerItem(label = { Text(stringResource(DesignSystemR.string.share_server)) }, selected = false,
                 onClick = onOpenServer, icon = { Icon(Icons.Filled.WifiTethering, null) },
                 modifier = Modifier.padding(horizontal = 12.dp))
 
             // Cloud Storage
-            NavigationDrawerItem(label = { Text("Cloud Storage") }, selected = false,
+            NavigationDrawerItem(label = { Text(stringResource(DesignSystemR.string.cloud_storage)) }, selected = false,
                 onClick = onOpenCloud, icon = { Icon(Icons.Filled.Cloud, null) },
                 modifier = Modifier.padding(horizontal = 12.dp))
 
             // Security
-            NavigationDrawerItem(label = { Text("Security") }, selected = false,
+            NavigationDrawerItem(label = { Text(stringResource(DesignSystemR.string.security)) }, selected = false,
                 onClick = onOpenSecurity, icon = { Icon(Icons.Filled.Security, null) },
                 modifier = Modifier.padding(horizontal = 12.dp))
 
             // Trash
-            NavigationDrawerItem(label = { Text("Trash") }, selected = false,
+            NavigationDrawerItem(label = { Text(stringResource(DesignSystemR.string.trash)) }, selected = false,
                 onClick = onOpenTrash, icon = { Icon(Icons.Filled.DeleteSweep, null) },
                 modifier = Modifier.padding(horizontal = 12.dp))
 
             // Storage analyzer
-            NavigationDrawerItem(label = { Text("Storage Analyzer") }, selected = false,
+            NavigationDrawerItem(label = { Text(stringResource(DesignSystemR.string.storage_analyzer)) }, selected = false,
                 onClick = onOpenAnalyzer, icon = { Icon(Icons.Filled.Analytics, null) },
                 modifier = Modifier.padding(horizontal = 12.dp))
 
             // Transfer queue
-            NavigationDrawerItem(label = { Text("Transfer Queue") }, selected = false,
+            NavigationDrawerItem(label = { Text(stringResource(DesignSystemR.string.transfer_queue)) }, selected = false,
                 onClick = onOpenTransfers, icon = { Icon(Icons.Filled.SwapHoriz, null) },
                 modifier = Modifier.padding(horizontal = 12.dp))
 
             // App Manager
-            NavigationDrawerItem(label = { Text("App Manager") }, selected = false,
+            NavigationDrawerItem(label = { Text(stringResource(DesignSystemR.string.app_manager)) }, selected = false,
                 onClick = onOpenApps, icon = { Icon(Icons.Filled.Apps, null) },
                 modifier = Modifier.padding(horizontal = 12.dp))
 
             // Settings
-            NavigationDrawerItem(label = { Text("Settings") }, selected = false,
+            NavigationDrawerItem(label = { Text(stringResource(DesignSystemR.string.settings)) }, selected = false,
                 onClick = onOpenSettings, icon = { Icon(Icons.Filled.Settings, null) },
                 modifier = Modifier.padding(horizontal = 12.dp))
         }

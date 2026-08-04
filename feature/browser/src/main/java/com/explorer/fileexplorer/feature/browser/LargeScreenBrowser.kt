@@ -27,9 +27,11 @@ import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.window.PopupProperties
 import coil3.compose.AsyncImage
 import com.explorer.fileexplorer.core.database.BookmarkEntity
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.model.StorageVolume
 import com.explorer.fileexplorer.core.storage.RootState
@@ -148,7 +150,7 @@ internal fun LargeScreenBrowserContent(
             val item = contextItem
             if (item != null) {
                 DropdownMenuItem(
-                    text = { Text("Open") },
+                    text = { Text(stringResource(DesignSystemR.string.open)) },
                     leadingIcon = { Icon(Icons.Filled.OpenInNew, null) },
                     onClick = {
                         contextItem = null
@@ -156,7 +158,7 @@ internal fun LargeScreenBrowserContent(
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text("Select") },
+                    text = { Text(stringResource(DesignSystemR.string.select)) },
                     leadingIcon = { Icon(Icons.Filled.CheckCircle, null) },
                     onClick = {
                         contextItem = null
@@ -164,7 +166,7 @@ internal fun LargeScreenBrowserContent(
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text("Properties") },
+                    text = { Text(stringResource(DesignSystemR.string.properties)) },
                     leadingIcon = { Icon(Icons.Filled.Info, null) },
                     onClick = {
                         contextItem = null
@@ -311,7 +313,7 @@ private fun LargeFilePane(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Files", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(DesignSystemR.string.files), style = MaterialTheme.typography.titleMedium)
                 Text(
                     state.currentPath,
                     style = MaterialTheme.typography.labelSmall,
@@ -321,10 +323,10 @@ private fun LargeFilePane(
                 )
             }
             IconButton(onClick = onNavigateUp) {
-                Icon(Icons.Filled.ArrowUpward, "Up one folder")
+                Icon(Icons.Filled.ArrowUpward, stringResource(DesignSystemR.string.up_one_folder))
             }
             IconButton(onClick = onRefresh) {
-                Icon(Icons.Filled.Refresh, "Refresh")
+                Icon(Icons.Filled.Refresh, stringResource(DesignSystemR.string.refresh))
             }
         }
         BrowserTabsBar(
@@ -431,7 +433,7 @@ private fun LargePreviewPane(
                         modifier = Modifier.size(48.dp),
                     )
                     Spacer(Modifier.height(12.dp))
-                    Text("Select a file to preview", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(DesignSystemR.string.select_file_to_preview), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         } else {
@@ -481,7 +483,7 @@ private fun FilePreview(item: FileItem) {
         item.groupName?.let { PreviewProperty("Group", it) }
         if (textPreview != null) {
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-            Text("Text preview", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(DesignSystemR.string.text_preview), style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(8.dp))
             Text(
                 textPreview!!,

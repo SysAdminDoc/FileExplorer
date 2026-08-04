@@ -22,6 +22,8 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.ui.BreadcrumbBar
 import com.explorer.fileexplorer.core.ui.FileListItem
@@ -212,10 +214,10 @@ private fun PanePanel(
         ) {
             Text(title, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
             IconButton(onClick = onNavigateUp) {
-                Icon(Icons.Filled.ArrowUpward, contentDescription = "Up one folder")
+                Icon(Icons.Filled.ArrowUpward, contentDescription = stringResource(DesignSystemR.string.up_one_folder))
             }
             IconButton(onClick = onRefresh) {
-                Icon(Icons.Filled.Refresh, contentDescription = "Refresh pane")
+                Icon(Icons.Filled.Refresh, contentDescription = stringResource(DesignSystemR.string.refresh_pane))
             }
         }
 
@@ -241,7 +243,7 @@ private fun PanePanel(
                 ) {
                     Icon(Icons.Filled.SwapHoriz, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Release to transfer here", style = MaterialTheme.typography.labelMedium)
+                    Text(stringResource(DesignSystemR.string.release_to_transfer_here), style = MaterialTheme.typography.labelMedium)
                 }
             }
         }
@@ -316,7 +318,7 @@ internal fun DropConfirmationDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Filled.SwapHoriz, contentDescription = null) },
-        title = { Text("Transfer files") },
+        title = { Text(stringResource(DesignSystemR.string.transfer_files)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
@@ -336,11 +338,11 @@ internal fun DropConfirmationDialog(
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = onCopy) { Text("Copy") }
-                Button(onClick = onMove) { Text("Move") }
+                TextButton(onClick = onCopy) { Text(stringResource(DesignSystemR.string.copy)) }
+                Button(onClick = onMove) { Text(stringResource(DesignSystemR.string.move)) }
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(DesignSystemR.string.cancel)) } },
     )
 }
 

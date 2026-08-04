@@ -26,6 +26,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -33,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.explorer.fileexplorer.core.storage.ShizukuAvailability
 import com.explorer.fileexplorer.core.storage.ShizukuManager
 import com.explorer.fileexplorer.core.storage.ShizukuPaths
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 
@@ -55,25 +57,25 @@ fun ShizukuScreen(
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
     val title = when (status.availability) {
-        ShizukuAvailability.UNSUPPORTED -> "Unsupported Shizuku version"
-        ShizukuAvailability.NOT_RUNNING -> "Shizuku is not running"
-        ShizukuAvailability.PERMISSION_REQUIRED -> "Permission required"
-        ShizukuAvailability.READY -> "Shizuku access ready (UID ${status.uid})"
+        ShizukuAvailability.UNSUPPORTED -> stringResource(DesignSystemR.string.shizuku_unsupported_title)
+        ShizukuAvailability.NOT_RUNNING -> stringResource(DesignSystemR.string.shizuku_not_running_title)
+        ShizukuAvailability.PERMISSION_REQUIRED -> stringResource(DesignSystemR.string.shizuku_permission_required_title)
+        ShizukuAvailability.READY -> stringResource(DesignSystemR.string.shizuku_ready_title, status.uid)
     }
     val description = when (status.availability) {
-        ShizukuAvailability.UNSUPPORTED -> "This device is running a Shizuku server older than API v11."
-        ShizukuAvailability.NOT_RUNNING -> "Install and start Shizuku or Sui, then return here. Shizuku is optional."
-        ShizukuAvailability.PERMISSION_REQUIRED -> "Shizuku is running. Grant File Explorer permission to browse Android/data."
-        ShizukuAvailability.READY -> "File Explorer can browse and manage Android/data through the granted Shizuku UserService."
+        ShizukuAvailability.UNSUPPORTED -> stringResource(DesignSystemR.string.shizuku_unsupported_description)
+        ShizukuAvailability.NOT_RUNNING -> stringResource(DesignSystemR.string.shizuku_not_running_description)
+        ShizukuAvailability.PERMISSION_REQUIRED -> stringResource(DesignSystemR.string.shizuku_permission_required_description)
+        ShizukuAvailability.READY -> stringResource(DesignSystemR.string.shizuku_ready_description)
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Shizuku Access") },
+                title = { Text(stringResource(DesignSystemR.string.shizuku_access)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(DesignSystemR.string.back))
                     }
                 },
             )
@@ -102,7 +104,7 @@ fun ShizukuScreen(
                         onClick = viewModel::requestPermission,
                         modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
                     ) {
-                        Text("Grant Shizuku permission")
+                        Text(stringResource(DesignSystemR.string.grant_shizuku_permission))
                     }
                 }
             }
@@ -114,7 +116,7 @@ fun ShizukuScreen(
                     ) {
                         Icon(Icons.Filled.Folder, null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Browse Android/data")
+                    Text(stringResource(DesignSystemR.string.browse_android_data))
                 }
             }
             item {
@@ -125,17 +127,16 @@ fun ShizukuScreen(
                 ) {
                     Icon(Icons.Filled.Folder, null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Browse Android/obb")
+                    Text(stringResource(DesignSystemR.string.browse_android_obb))
                 }
             }
             item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             item {
                 Column(Modifier.padding(horizontal = 16.dp)) {
-                    Text("About Shizuku", style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(DesignSystemR.string.about_shizuku), style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Shizuku is a separate, user-started service. On non-rooted Android 11+ devices it can be started with Wireless debugging. " +
-                            "File Explorer only uses it for paths under /storage/emulated/0/Android/data and does not request or store service credentials.",
+                        stringResource(DesignSystemR.string.shizuku_about_description),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }

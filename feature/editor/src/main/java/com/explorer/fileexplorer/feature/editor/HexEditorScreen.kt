@@ -38,9 +38,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -262,13 +264,13 @@ fun HexEditorScreen(
                 title = { Text(if (state.isModified) "${state.fileName} *" else state.fileName) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(DesignSystemR.string.back))
                     }
                 },
                 actions = {
                     if (state.isModified) {
                         IconButton(onClick = viewModel::save) {
-                            Icon(Icons.Filled.Save, contentDescription = "Save")
+                            Icon(Icons.Filled.Save, contentDescription = stringResource(DesignSystemR.string.save))
                         }
                     }
                 },
@@ -326,13 +328,13 @@ fun HexEditorScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     OutlinedButton(onClick = viewModel::previousPage, enabled = state.canGoPrevious) {
-                        Icon(Icons.Filled.ChevronLeft, contentDescription = "Previous page")
-                        Text("Previous")
+                        Icon(Icons.Filled.ChevronLeft, contentDescription = stringResource(DesignSystemR.string.previous_page))
+                        Text(stringResource(DesignSystemR.string.previous))
                     }
-                    Text("${state.pageBytes.size} bytes", style = MaterialTheme.typography.labelSmall)
+                        Text(stringResource(DesignSystemR.string.bytes_count, state.pageBytes.size), style = MaterialTheme.typography.labelSmall)
                     OutlinedButton(onClick = viewModel::nextPage, enabled = state.canGoNext) {
-                        Text("Next")
-                        Icon(Icons.Filled.ChevronRight, contentDescription = "Next page")
+                        Text(stringResource(DesignSystemR.string.next))
+                        Icon(Icons.Filled.ChevronRight, contentDescription = stringResource(DesignSystemR.string.next_page))
                     }
                 }
             }
@@ -343,13 +345,13 @@ fun HexEditorScreen(
         var hexValue by remember(line.offset) { mutableStateOf(line.hex.trim()) }
         AlertDialog(
             onDismissRequest = { editingLine = null },
-            title = { Text("Edit bytes at ${formatOffset(line.offset)}") },
+            title = { Text(stringResource(DesignSystemR.string.edit_bytes_at, formatOffset(line.offset))) },
             text = {
                 OutlinedTextField(
                     value = hexValue,
                     onValueChange = { hexValue = it },
-                    label = { Text("Hex bytes") },
-                    supportingText = { Text("Use two hexadecimal digits per byte") },
+                    label = { Text(stringResource(DesignSystemR.string.hex_bytes)) },
+                    supportingText = { Text(stringResource(DesignSystemR.string.two_hex_digits_per_byte)) },
                     singleLine = false,
                 )
             },
@@ -357,9 +359,9 @@ fun HexEditorScreen(
                 TextButton(onClick = {
                     val lineIndex = state.lines.indexOfFirst { it.offset == line.offset }
                     if (lineIndex >= 0 && viewModel.updateLine(lineIndex, hexValue)) editingLine = null
-                }) { Text("Apply") }
+                }) { Text(stringResource(DesignSystemR.string.apply)) }
             },
-            dismissButton = { TextButton(onClick = { editingLine = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { editingLine = null }) { Text(stringResource(DesignSystemR.string.cancel)) } },
         )
     }
 }

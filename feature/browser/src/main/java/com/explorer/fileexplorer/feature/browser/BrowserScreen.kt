@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -41,6 +42,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.explorer.fileexplorer.core.data.ArchiveFormat
 import com.explorer.fileexplorer.core.database.TagEntity
 import com.explorer.fileexplorer.core.designsystem.AccentOrange
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.model.*
 import com.explorer.fileexplorer.core.storage.RootState
 import com.explorer.fileexplorer.core.ui.BreadcrumbBar
@@ -231,7 +233,7 @@ fun BrowserScreen(
                 if (!state.selectionMode && !state.insideArchive) {
                     FloatingActionButton(onClick = viewModel::showNewFolderDialog,
                         containerColor = MaterialTheme.colorScheme.primary) {
-                        Icon(Icons.Filled.CreateNewFolder, "New Folder")
+                        Icon(Icons.Filled.CreateNewFolder, stringResource(DesignSystemR.string.new_folder))
                     }
                 }
             },
@@ -265,7 +267,7 @@ fun BrowserScreen(
                             verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.Warning, null, tint = AccentOrange, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Root mode active", style = MaterialTheme.typography.labelMedium, color = AccentOrange)
+                            Text(stringResource(DesignSystemR.string.root_mode_active), style = MaterialTheme.typography.labelMedium, color = AccentOrange)
                             state.selinuxContext?.let { ctx ->
                                 Spacer(Modifier.weight(1f))
                                 Text(ctx, style = MaterialTheme.typography.labelSmall,
@@ -283,7 +285,7 @@ fun BrowserScreen(
                             verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.FolderZip, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Browsing archive (read-only)", style = MaterialTheme.typography.labelMedium,
+                            Text(stringResource(DesignSystemR.string.browsing_archive_read_only), style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary)
                         }
                     }
@@ -396,13 +398,13 @@ fun BrowserScreen(
 
     // Dialogs
     if (state.showNewFolderDialog) {
-        InputDialog(title = "New Folder", label = "Folder name", initial = "",
-            confirmText = "Create",
+        InputDialog(title = stringResource(DesignSystemR.string.new_folder), label = stringResource(DesignSystemR.string.folder_name), initial = "",
+            confirmText = stringResource(DesignSystemR.string.create),
             onConfirm = viewModel::createFolder, onDismiss = viewModel::dismissNewFolderDialog)
     }
     state.renameItem?.let { item ->
-        InputDialog(title = "Rename", label = "New name", initial = item.name,
-            confirmText = "Rename",
+        InputDialog(title = stringResource(DesignSystemR.string.rename), label = stringResource(DesignSystemR.string.new_name), initial = item.name,
+            confirmText = stringResource(DesignSystemR.string.rename),
             onConfirm = { newName -> viewModel.rename(item.path, newName) }, onDismiss = viewModel::dismissRename)
     }
     if (state.showBatchRenameDialog) {
@@ -435,13 +437,13 @@ fun BrowserScreen(
     state.deleteConfirmationItem?.let { item ->
         AlertDialog(
             onDismissRequest = viewModel::dismissDeleteConfirmation,
-            title = { Text("Delete ${if (item.isDirectory) "folder" else "file"}?") },
-            text = { Text("Move ${item.name} to Trash?") },
+            title = { Text(stringResource(if (item.isDirectory) DesignSystemR.string.delete_folder_title else DesignSystemR.string.delete_file_title)) },
+            text = { Text(stringResource(DesignSystemR.string.move_to_trash, item.name)) },
             confirmButton = {
-                TextButton(onClick = viewModel::confirmDeleteGesture) { Text("Delete") }
+                TextButton(onClick = viewModel::confirmDeleteGesture) { Text(stringResource(DesignSystemR.string.delete)) }
             },
             dismissButton = {
-                TextButton(onClick = viewModel::dismissDeleteConfirmation) { Text("Cancel") }
+                TextButton(onClick = viewModel::dismissDeleteConfirmation) { Text(stringResource(DesignSystemR.string.cancel)) }
             },
         )
     }
@@ -466,33 +468,33 @@ private fun BrowserTopBar(
     dualPaneEnabled: Boolean, onToggleDualPane: () -> Unit, onExtractAll: () -> Unit,
 ) {
     TopAppBar(
-        title = { Text("File Explorer", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        navigationIcon = { IconButton(onClick = onMenuClick) { Icon(Icons.Filled.Menu, "Menu") } },
+        title = { Text(stringResource(DesignSystemR.string.app_name), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        navigationIcon = { IconButton(onClick = onMenuClick) { Icon(Icons.Filled.Menu, stringResource(DesignSystemR.string.menu)) } },
         actions = {
             if (insideArchive) {
-                IconButton(onClick = onExtractAll) { Icon(Icons.Filled.Unarchive, "Extract All") }
+                IconButton(onClick = onExtractAll) { Icon(Icons.Filled.Unarchive, stringResource(DesignSystemR.string.extract_all)) }
             }
-            if (canPaste) { IconButton(onClick = onPaste) { Icon(Icons.Filled.ContentPaste, "Paste") } }
-            IconButton(onClick = onSearchClick) { Icon(Icons.Filled.Search, "Search") }
+            if (canPaste) { IconButton(onClick = onPaste) { Icon(Icons.Filled.ContentPaste, stringResource(DesignSystemR.string.paste)) } }
+            IconButton(onClick = onSearchClick) { Icon(Icons.Filled.Search, stringResource(DesignSystemR.string.search)) }
             CastRouteButton()
-            IconButton(onClick = onSortClick) { Icon(Icons.AutoMirrored.Filled.Sort, "Sort") }
+            IconButton(onClick = onSortClick) { Icon(Icons.AutoMirrored.Filled.Sort, stringResource(DesignSystemR.string.sort)) }
             IconButton(onClick = onViewToggle) {
-                Icon(if (viewMode == ViewMode.LIST) Icons.Filled.GridView else Icons.Filled.ViewList, "Toggle View")
+                Icon(if (viewMode == ViewMode.LIST) Icons.Filled.GridView else Icons.Filled.ViewList, stringResource(DesignSystemR.string.toggle_view))
             }
             IconButton(onClick = onToggleDualPane) {
                 Icon(
                     Icons.Filled.ViewColumn,
-                    if (dualPaneEnabled) "Close dual-pane view" else "Open dual-pane view",
+                    stringResource(if (dualPaneEnabled) DesignSystemR.string.close_dual_pane else DesignSystemR.string.open_dual_pane),
                 )
             }
             var moreExpanded by remember { mutableStateOf(false) }
-            IconButton(onClick = { moreExpanded = true }) { Icon(Icons.Filled.MoreVert, "More") }
+            IconButton(onClick = { moreExpanded = true }) { Icon(Icons.Filled.MoreVert, stringResource(DesignSystemR.string.more)) }
             DropdownMenu(expanded = moreExpanded, onDismissRequest = { moreExpanded = false }) {
-                DropdownMenuItem(text = { Text(if (showHidden) "Hide hidden files" else "Show hidden files") },
+                DropdownMenuItem(text = { Text(stringResource(if (showHidden) DesignSystemR.string.hide_hidden_files else DesignSystemR.string.show_hidden_files_menu)) },
                     onClick = { onToggleHidden(); moreExpanded = false }, leadingIcon = { Icon(Icons.Filled.Visibility, null) })
                 HorizontalDivider()
                 Text(
-                    "Columns",
+                    stringResource(DesignSystemR.string.columns),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -511,7 +513,7 @@ private fun BrowserTopBar(
                     )
                 }
                 if (!insideArchive) {
-                    DropdownMenuItem(text = { Text("New folder") },
+                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.new_folder)) },
                         onClick = { onNewFolder(); moreExpanded = false }, leadingIcon = { Icon(Icons.Filled.CreateNewFolder, null) })
                 }
             }
@@ -535,13 +537,13 @@ private fun SelectionTopBar(
     onHexView: () -> Unit,
 ) {
     TopAppBar(
-        title = { Text("$selectedCount selected") },
-        navigationIcon = { IconButton(onClick = onClear) { Icon(Icons.Filled.Close, "Clear") } },
+        title = { Text(stringResource(DesignSystemR.string.selected_count, selectedCount)) },
+        navigationIcon = { IconButton(onClick = onClear) { Icon(Icons.Filled.Close, stringResource(DesignSystemR.string.clear)) } },
         actions = {
-            IconButton(onClick = onSelectAll) { Icon(Icons.Filled.SelectAll, "Select All") }
+            IconButton(onClick = onSelectAll) { Icon(Icons.Filled.SelectAll, stringResource(DesignSystemR.string.select_all)) }
             if (!insideArchive) {
-                IconButton(onClick = onCopy) { Icon(Icons.Filled.ContentCopy, "Copy") }
-                IconButton(onClick = onCut) { Icon(Icons.Filled.ContentCut, "Cut") }
+                IconButton(onClick = onCopy) { Icon(Icons.Filled.ContentCopy, stringResource(DesignSystemR.string.copy)) }
+                IconButton(onClick = onCut) { Icon(Icons.Filled.ContentCut, stringResource(DesignSystemR.string.cut)) }
                 Box(
                     modifier = Modifier
                         .size(48.dp)
@@ -552,41 +554,41 @@ private fun SelectionTopBar(
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.Delete, "Delete")
+                    Icon(Icons.Filled.Delete, stringResource(DesignSystemR.string.delete))
                 }
             }
             var moreExpanded by remember { mutableStateOf(false) }
-            IconButton(onClick = { moreExpanded = true }) { Icon(Icons.Filled.MoreVert, "More") }
+            IconButton(onClick = { moreExpanded = true }) { Icon(Icons.Filled.MoreVert, stringResource(DesignSystemR.string.more)) }
             DropdownMenu(expanded = moreExpanded, onDismissRequest = { moreExpanded = false }) {
                 if (!insideArchive) {
-                    DropdownMenuItem(text = { Text("Delete permanently") }, onClick = { onPermanentDelete(); moreExpanded = false },
+                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.delete_permanently)) }, onClick = { onPermanentDelete(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.DeleteForever, null) })
-                    DropdownMenuItem(text = { Text("Compress") }, onClick = { onCompress(); moreExpanded = false },
+                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.compress)) }, onClick = { onCompress(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.FolderZip, null) })
-                    DropdownMenuItem(text = { Text("Watch for changes") }, onClick = { onWatchIntegrity(); moreExpanded = false },
+                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.watch_for_changes)) }, onClick = { onWatchIntegrity(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.VerifiedUser, null) })
-                    DropdownMenuItem(text = { Text("Set tags") }, onClick = { onTag(); moreExpanded = false },
+                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.set_tags)) }, onClick = { onTag(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.Label, null) })
-                    DropdownMenuItem(text = { Text("Share") }, onClick = { onShare(); moreExpanded = false },
+                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.share)) }, onClick = { onShare(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.Share, null) })
-                    DropdownMenuItem(text = { Text("Send with Quick Share") }, onClick = { onSendNearby(); moreExpanded = false },
+                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.send_quick_share)) }, onClick = { onSendNearby(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.NearMe, null) })
-                    DropdownMenuItem(text = { Text("Cast media") }, onClick = { onCast(); moreExpanded = false },
+                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.cast_media)) }, onClick = { onCast(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.Cast, null) })
-                    DropdownMenuItem(text = { Text("Encrypt files") }, onClick = { onEncrypt(); moreExpanded = false },
+                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.encrypt_files)) }, onClick = { onEncrypt(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.Lock, null) })
-                    DropdownMenuItem(text = { Text("Decrypt files") }, onClick = { onDecrypt(); moreExpanded = false },
+                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.decrypt_files)) }, onClick = { onDecrypt(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.LockOpen, null) })
-                    DropdownMenuItem(text = { Text("Batch rename") }, onClick = { onBatchRename(); moreExpanded = false },
+                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.batch_rename)) }, onClick = { onBatchRename(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.EditNote, null) })
                     if (selectedCount == 1) {
-                        DropdownMenuItem(text = { Text("Hex view") }, onClick = { onHexView(); moreExpanded = false },
+                        DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.hex_view)) }, onClick = { onHexView(); moreExpanded = false },
                             leadingIcon = { Icon(Icons.Filled.Code, null) })
-                        DropdownMenuItem(text = { Text("Rename") }, onClick = { onRename(); moreExpanded = false },
+                        DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.rename)) }, onClick = { onRename(); moreExpanded = false },
                             leadingIcon = { Icon(Icons.Filled.Edit, null) })
                     }
                 }
-                DropdownMenuItem(text = { Text("Properties") }, onClick = { onProperties(); moreExpanded = false },
+                DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.properties)) }, onClick = { onProperties(); moreExpanded = false },
                     leadingIcon = { Icon(Icons.Filled.Info, null) })
             }
         },
@@ -627,7 +629,7 @@ private fun InputDialog(title: String, label: String, initial: String, confirmTe
     AlertDialog(onDismissRequest = onDismiss, title = { Text(title) },
         text = { OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text(label) }, singleLine = true) },
         confirmButton = { TextButton(onClick = { if (text.isNotBlank()) onConfirm(text.trim()) }) { Text(confirmText) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(DesignSystemR.string.cancel)) } })
 }
 
 @Composable
@@ -642,15 +644,15 @@ private fun TagAssignmentDialog(
     var newTag by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Set tags") },
+        title = { Text(stringResource(DesignSystemR.string.set_tags)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "The selected tags replace the tags on every selected item.",
+                    stringResource(DesignSystemR.string.tag_replace_description),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 if (tags.isEmpty()) {
-                    Text("Create a tag below to get started.", style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(DesignSystemR.string.create_tag_prompt), style = MaterialTheme.typography.bodyMedium)
                 } else {
                     LazyColumn(modifier = Modifier.heightIn(max = 240.dp)) {
                         items(tags, key = { it.name }) { tag ->
@@ -673,7 +675,7 @@ private fun TagAssignmentDialog(
                     OutlinedTextField(
                         value = newTag,
                         onValueChange = { newTag = it },
-                        label = { Text("New tag") },
+                        label = { Text(stringResource(DesignSystemR.string.new_tag)) },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
@@ -684,12 +686,12 @@ private fun TagAssignmentDialog(
                                 newTag = ""
                             }
                         },
-                    ) { Text("Add") }
+                    ) { Text(stringResource(DesignSystemR.string.add)) }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("Apply") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(stringResource(DesignSystemR.string.apply)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(DesignSystemR.string.cancel)) } },
     )
 }
 
@@ -702,10 +704,10 @@ private fun CompressDialog(
     var format by remember { mutableStateOf(ArchiveFormat.ZIP) }
     var password by remember { mutableStateOf("") }
 
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Compress") },
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(stringResource(DesignSystemR.string.compress)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Archive name") }, singleLine = true)
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(stringResource(DesignSystemR.string.archive_name)) }, singleLine = true)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ArchiveFormat.entries.forEach { f ->
                         FilterChip(selected = format == f, onClick = { format = f },
@@ -714,16 +716,16 @@ private fun CompressDialog(
                 }
                 if (format == ArchiveFormat.ZIP) {
                     OutlinedTextField(value = password, onValueChange = { password = it },
-                        label = { Text("Password (optional)") }, singleLine = true)
+                        label = { Text(stringResource(DesignSystemR.string.password_optional)) }, singleLine = true)
                 }
             }
         },
         confirmButton = {
             TextButton(onClick = {
                 if (name.isNotBlank()) onConfirm(name.trim(), format, password.ifEmpty { null }?.toCharArray())
-            }) { Text("Compress") }
+            }) { Text(stringResource(DesignSystemR.string.compress)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(DesignSystemR.string.cancel)) } })
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -733,19 +735,19 @@ private fun PropertiesSheet(item: FileItem, selinuxContext: String?, onDismiss: 
         Column(modifier = Modifier.padding(24.dp)) {
             Text(item.name, style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.height(16.dp))
-            PropRow("Path", item.path)
-            PropRow("Size", item.displaySize)
-            PropRow("Type", item.mimeType)
-            if (item.lastModified > 0) PropRow("Modified", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(java.util.Date(item.lastModified)))
-            if (item.permissions.isNotEmpty()) PropRow("Permissions", item.permissions.joinToString(""))
-            item.ownerName?.let { PropRow("Owner", it) }
-            item.groupName?.let { PropRow("Group", it) }
-            item.symlinkTarget?.let { PropRow("Link target", it) }
-            selinuxContext?.let { PropRow("SELinux", it) }
+            PropRow(stringResource(DesignSystemR.string.file_path), item.path)
+            PropRow(stringResource(DesignSystemR.string.file_size), item.displaySize)
+            PropRow(stringResource(DesignSystemR.string.file_type), item.mimeType)
+            if (item.lastModified > 0) PropRow(stringResource(DesignSystemR.string.modified), java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(java.util.Date(item.lastModified)))
+            if (item.permissions.isNotEmpty()) PropRow(stringResource(DesignSystemR.string.permissions), item.permissions.joinToString(""))
+            item.ownerName?.let { PropRow(stringResource(DesignSystemR.string.owner), it) }
+            item.groupName?.let { PropRow(stringResource(DesignSystemR.string.group), it) }
+            item.symlinkTarget?.let { PropRow(stringResource(DesignSystemR.string.link_target), it) }
+            selinuxContext?.let { PropRow(stringResource(DesignSystemR.string.selinux), it) }
             Spacer(Modifier.height(16.dp))
             if (item.isDirectory) {
                 OutlinedButton(onClick = onBookmark, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Filled.BookmarkAdd, null); Spacer(Modifier.width(8.dp)); Text("Toggle Bookmark")
+                    Icon(Icons.Filled.BookmarkAdd, null); Spacer(Modifier.width(8.dp)); Text(stringResource(DesignSystemR.string.toggle_bookmark))
                 }
             }
             Spacer(Modifier.height(24.dp))
@@ -765,8 +767,8 @@ private fun openFile(context: android.content.Context, item: FileItem) {
     try {
         val uri = item.uri ?: FileProvider.getUriForFile(context, "${context.packageName}.provider", File(item.path))
         context.startActivity(Intent.createChooser(Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, item.mimeType); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }, "Open with"))
-    } catch (_: Exception) { Toast.makeText(context, "No app found", Toast.LENGTH_SHORT).show() }
+            setDataAndType(uri, item.mimeType); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }, context.getString(DesignSystemR.string.open_with)))
+    } catch (_: Exception) { Toast.makeText(context, context.getString(DesignSystemR.string.no_app_found), Toast.LENGTH_SHORT).show() }
 }
 
 private fun shareFiles(context: android.content.Context, items: List<FileItem>) {

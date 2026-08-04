@@ -25,6 +25,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -234,7 +236,7 @@ fun ApkAnalyzerSheet(
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text("APK analyzer", style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(DesignSystemR.string.apk_analyzer), style = MaterialTheme.typography.headlineSmall)
             Text(app.name, style = MaterialTheme.typography.titleMedium)
             Text(app.apkPath, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
@@ -243,7 +245,7 @@ fun ApkAnalyzerSheet(
                 state.error != null -> Text(state.error!!, color = MaterialTheme.colorScheme.error)
                 state.analysis != null -> ApkAnalysisContent(state.analysis!!)
             }
-            TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) { Text("Close") }
+            TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) { Text(stringResource(DesignSystemR.string.close)) }
             Spacer(Modifier.height(16.dp))
         }
     }
@@ -262,7 +264,7 @@ private fun ApkAnalysisContent(analysis: ApkAnalysis) {
     }
     AnalyzerSection("Signatures") {
         if (analysis.signatures.isEmpty()) {
-            Text("No signing certificate found", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(DesignSystemR.string.no_signing_certificate), style = MaterialTheme.typography.bodySmall)
         } else {
             analysis.signatures.forEach { signature ->
                 AnalyzerRow("SHA-256", signature.sha256)

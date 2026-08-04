@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -24,6 +25,7 @@ import androidx.lifecycle.viewModelScope
 import com.explorer.fileexplorer.core.database.ConnectionDao
 import com.explorer.fileexplorer.core.database.ConnectionEntity
 import com.explorer.fileexplorer.core.designsystem.*
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.network.ConnectionManager
 import com.explorer.fileexplorer.core.network.NetworkFileRepository
@@ -288,9 +290,9 @@ fun NetworkScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Network") },
-                navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
-                actions = { IconButton(onClick = { viewModel.showForm() }) { Icon(Icons.Filled.Add, "Add Connection") } },
+                title = { Text(stringResource(DesignSystemR.string.network)) },
+                navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(DesignSystemR.string.back)) } },
+                actions = { IconButton(onClick = { viewModel.showForm() }) { Icon(Icons.Filled.Add, stringResource(DesignSystemR.string.add_connection)) } },
             )
         },
     ) { padding ->
@@ -299,9 +301,9 @@ fun NetworkScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Filled.Lan, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.5f))
                     Spacer(Modifier.height(16.dp))
-                    Text("No connections", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(DesignSystemR.string.no_connections), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
-                    FilledTonalButton(onClick = { viewModel.showForm() }) { Text("Add Connection") }
+                    FilledTonalButton(onClick = { viewModel.showForm() }) { Text(stringResource(DesignSystemR.string.add_connection)) }
                 }
             }
         } else {
@@ -333,23 +335,25 @@ private fun SftpHostKeyDialog(
     AlertDialog(
         onDismissRequest = onReject,
         icon = { Icon(Icons.Filled.Security, null) },
-        title = { Text(if (challenge.isChangedKey) "SFTP Host Key Changed" else "Trust SFTP Host Key?") },
+        title = {
+            Text(stringResource(if (challenge.isChangedKey) DesignSystemR.string.sftp_host_key_changed else DesignSystemR.string.trust_sftp_host_key))
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${challenge.hostname}:${challenge.port}", style = MaterialTheme.typography.titleSmall)
-                Text("Algorithm: ${challenge.keyAlgorithm}", style = MaterialTheme.typography.bodySmall)
-                Text("Fingerprint: ${challenge.fingerprintSha256}", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(DesignSystemR.string.host_endpoint, challenge.hostname, challenge.port), style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(DesignSystemR.string.algorithm, challenge.keyAlgorithm), style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(DesignSystemR.string.fingerprint, challenge.fingerprintSha256), style = MaterialTheme.typography.bodySmall)
                 if (challenge.isChangedKey) {
                     Text(
-                        "The saved key for this host no longer matches.",
+                        stringResource(DesignSystemR.string.host_key_mismatch),
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onTrust) { Text("Trust") } },
-        dismissButton = { TextButton(onClick = onReject) { Text("Cancel") } },
+                confirmButton = { TextButton(onClick = onTrust) { Text(stringResource(DesignSystemR.string.trust)) } },
+                dismissButton = { TextButton(onClick = onReject) { Text(stringResource(DesignSystemR.string.cancel)) } },
     )
 }
 
@@ -380,14 +384,14 @@ private fun ConnectionListItem(
                 if (isActive) {
                     Spacer(Modifier.width(8.dp))
                     Surface(color = AccentGreen.copy(alpha = 0.2f), shape = MaterialTheme.shapes.small) {
-                        Text("CONNECTED", style = MaterialTheme.typography.labelSmall, color = AccentGreen,
+                        Text(stringResource(DesignSystemR.string.connected).uppercase(), style = MaterialTheme.typography.labelSmall, color = AccentGreen,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                     }
                 }
             }
         },
         supportingContent = {
-            Text("${connection.protocol.uppercase()} - ${connection.host}:${connection.port}",
+            Text(stringResource(DesignSystemR.string.connection_endpoint, connection.protocol.uppercase(), connection.host, connection.port),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         },
         leadingContent = { Icon(protocolIcon, null, tint = statusColor) },
@@ -396,17 +400,17 @@ private fun ConnectionListItem(
                 if (isConnecting) {
                     CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
                 } else if (isActive) {
-                    IconButton(onClick = onBrowse) { Icon(Icons.Filled.FolderOpen, "Browse") }
-                    IconButton(onClick = onDisconnect) { Icon(Icons.Filled.LinkOff, "Disconnect") }
+                    IconButton(onClick = onBrowse) { Icon(Icons.Filled.FolderOpen, stringResource(DesignSystemR.string.browse)) }
+                    IconButton(onClick = onDisconnect) { Icon(Icons.Filled.LinkOff, stringResource(DesignSystemR.string.disconnect)) }
                 } else {
-                    IconButton(onClick = onConnect) { Icon(Icons.Filled.Link, "Connect") }
+                    IconButton(onClick = onConnect) { Icon(Icons.Filled.Link, stringResource(DesignSystemR.string.connect)) }
                 }
                 var expanded by remember { mutableStateOf(false) }
-                IconButton(onClick = { expanded = true }) { Icon(Icons.Filled.MoreVert, "More") }
+                IconButton(onClick = { expanded = true }) { Icon(Icons.Filled.MoreVert, stringResource(DesignSystemR.string.more)) }
                 DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    DropdownMenuItem(text = { Text("Edit") }, onClick = { onEdit(); expanded = false },
+                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.edit)) }, onClick = { onEdit(); expanded = false },
                         leadingIcon = { Icon(Icons.Filled.Edit, null) })
-                    DropdownMenuItem(text = { Text("Delete") }, onClick = { onDelete(); expanded = false },
+                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.delete)) }, onClick = { onDelete(); expanded = false },
                         leadingIcon = { Icon(Icons.Filled.Delete, null) })
                 }
             }
@@ -438,10 +442,10 @@ private fun RemoteBrowserScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
-                navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+                navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(DesignSystemR.string.back)) } },
                 actions = {
-                    IconButton(onClick = onNavigateUp) { Icon(Icons.Filled.ArrowUpward, "Up") }
-                    IconButton(onClick = { showNewFolder = true }) { Icon(Icons.Filled.CreateNewFolder, "New Folder") }
+                    IconButton(onClick = onNavigateUp) { Icon(Icons.Filled.ArrowUpward, stringResource(DesignSystemR.string.up)) }
+                    IconButton(onClick = { showNewFolder = true }) { Icon(Icons.Filled.CreateNewFolder, stringResource(DesignSystemR.string.new_folder)) }
                 },
             )
         },
@@ -452,7 +456,7 @@ private fun RemoteBrowserScreen(
             }
         } else if (files.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("Empty directory", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(DesignSystemR.string.empty_directory), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
             LazyColumn(Modifier.padding(padding).fillMaxSize()) {
@@ -467,10 +471,10 @@ private fun RemoteBrowserScreen(
         var name by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showNewFolder = false },
-            title = { Text("New Folder") },
-            text = { OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true) },
-            confirmButton = { TextButton(onClick = { if (name.isNotBlank()) { onCreateFolder(name.trim()); showNewFolder = false } }) { Text("Create") } },
-            dismissButton = { TextButton(onClick = { showNewFolder = false }) { Text("Cancel") } },
+            title = { Text(stringResource(DesignSystemR.string.new_folder)) },
+            text = { OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(stringResource(DesignSystemR.string.folder_name)) }, singleLine = true) },
+            confirmButton = { TextButton(onClick = { if (name.isNotBlank()) { onCreateFolder(name.trim()); showNewFolder = false } }) { Text(stringResource(DesignSystemR.string.create)) } },
+            dismissButton = { TextButton(onClick = { showNewFolder = false }) { Text(stringResource(DesignSystemR.string.cancel)) } },
         )
     }
 }
@@ -513,7 +517,7 @@ private fun ConnectionFormDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (editing != null) "Edit Connection" else "New Connection") },
+        title = { Text(stringResource(if (editing != null) DesignSystemR.string.edit_connection else DesignSystemR.string.new_connection)) },
         text = {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 item {
@@ -527,27 +531,27 @@ private fun ConnectionFormDialog(
                 }
                 item {
                     OutlinedTextField(value = name, onValueChange = { name = it },
-                        label = { Text("Display Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        label = { Text(stringResource(DesignSystemR.string.display_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(value = host, onValueChange = { host = it },
-                            label = { Text("Host") }, singleLine = true, modifier = Modifier.weight(2f))
+                            label = { Text(stringResource(DesignSystemR.string.host)) }, singleLine = true, modifier = Modifier.weight(2f))
                         OutlinedTextField(value = port, onValueChange = { port = it.filter { c -> c.isDigit() } },
-                            label = { Text("Port") }, singleLine = true, modifier = Modifier.weight(1f))
+                            label = { Text(stringResource(DesignSystemR.string.port)) }, singleLine = true, modifier = Modifier.weight(1f))
                     }
                 }
                 item {
                     OutlinedTextField(value = username, onValueChange = { username = it },
-                        label = { Text("Username") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        label = { Text(stringResource(DesignSystemR.string.username)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
                 item {
                     OutlinedTextField(value = password, onValueChange = { password = it },
-                        label = { Text("Password") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(DesignSystemR.string.password)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                         visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                         trailingIcon = {
                             IconButton(onClick = { showPassword = !showPassword }) {
-                                Icon(if (showPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle")
+                                Icon(if (showPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, stringResource(DesignSystemR.string.show_password_toggle))
                             }
                         })
                 }
@@ -555,25 +559,25 @@ private fun ConnectionFormDialog(
                 if (protocol == "smb") {
                     item {
                         OutlinedTextField(value = shareName, onValueChange = { shareName = it },
-                            label = { Text("Share Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            label = { Text(stringResource(DesignSystemR.string.share_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     }
                 }
                 // SFTP-specific: key path
                 if (protocol == "sftp") {
                     item {
                         OutlinedTextField(value = privateKeyPath, onValueChange = { privateKeyPath = it },
-                            label = { Text("Private Key Path (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        label = { Text(stringResource(DesignSystemR.string.private_key_path_optional)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     }
                 }
                 item {
                     OutlinedTextField(value = remotePath, onValueChange = { remotePath = it },
-                        label = { Text("Remote Path") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        label = { Text(stringResource(DesignSystemR.string.remote_path)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
                 // TLS toggle for FTP/WebDAV
                 if (protocol in listOf("ftp", "webdav")) {
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Use TLS/SSL", modifier = Modifier.weight(1f))
+                            Text(stringResource(DesignSystemR.string.use_tls_ssl), modifier = Modifier.weight(1f))
                             Switch(checked = useTls, onCheckedChange = { useTls = it })
                         }
                     }
@@ -585,11 +589,11 @@ private fun ConnectionFormDialog(
                 if (isTesting) {
                     CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
                 } else {
-                    TextButton(onClick = { onTest(buildEntity()) }, enabled = host.isNotBlank()) { Text("Test") }
+                    TextButton(onClick = { onTest(buildEntity()) }, enabled = host.isNotBlank()) { Text(stringResource(DesignSystemR.string.test)) }
                 }
-                TextButton(onClick = { onSave(buildEntity()) }, enabled = host.isNotBlank()) { Text("Save") }
+                TextButton(onClick = { onSave(buildEntity()) }, enabled = host.isNotBlank()) { Text(stringResource(DesignSystemR.string.save)) }
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(DesignSystemR.string.cancel)) } },
     )
 }

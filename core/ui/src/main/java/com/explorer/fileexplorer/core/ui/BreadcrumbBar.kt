@@ -12,8 +12,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 
 @Composable
 fun BreadcrumbBar(
@@ -43,7 +45,7 @@ fun BreadcrumbBar(
             // Root
             Icon(
                 imageVector = Icons.Filled.Storage,
-                contentDescription = "Root",
+                contentDescription = stringResource(DesignSystemR.string.root),
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
                     .size(20.dp)

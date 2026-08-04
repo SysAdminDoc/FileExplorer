@@ -20,6 +20,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.text.style.TextOverflow
@@ -35,6 +36,7 @@ import com.explorer.fileexplorer.core.data.StorageEntry
 import com.explorer.fileexplorer.core.data.StorageScanProgress
 import com.explorer.fileexplorer.core.data.StorageScanResult
 import com.explorer.fileexplorer.core.data.StorageTreeNode
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -113,20 +115,20 @@ fun StorageAnalyzerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Storage Analyzer") },
+                title = { Text(stringResource(DesignSystemR.string.storage_analyzer)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(DesignSystemR.string.back))
                     }
                 },
                 actions = {
                     if (state.isScanning) {
                         IconButton(onClick = viewModel::cancelScan) {
-                            Icon(Icons.Filled.Close, contentDescription = "Cancel scan")
+                            Icon(Icons.Filled.Close, contentDescription = stringResource(DesignSystemR.string.cancel_scan))
                         }
                     } else {
                         IconButton(onClick = viewModel::scan) {
-                            Icon(Icons.Filled.Refresh, contentDescription = "Rescan storage")
+                            Icon(Icons.Filled.Refresh, contentDescription = stringResource(DesignSystemR.string.rescan_storage))
                         }
                     }
                 },
@@ -142,7 +144,7 @@ fun StorageAnalyzerScreen(
             if (state.isScanning) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 Text(
-                    text = "Scanning ${state.progress.files} files in ${state.progress.directories} folders...",
+                    text = stringResource(DesignSystemR.string.scanning_progress, state.progress.files, state.progress.directories),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 8.dp),
@@ -182,8 +184,8 @@ fun StorageAnalyzerScreen(
                             },
                         )
                         Text(
-                            text = if (current.children.isEmpty()) "No child entries in this folder"
-                            else "Tap a folder to drill down. Sizes include all descendants.",
+                            text = if (current.children.isEmpty()) stringResource(DesignSystemR.string.no_child_entries)
+                            else stringResource(DesignSystemR.string.treemap_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(vertical = 8.dp),
@@ -208,23 +210,23 @@ private fun AnalyzerEmptyState(isScanning: Boolean, onScan: () -> Unit) {
     ) {
         Icon(Icons.Filled.Analytics, contentDescription = null, modifier = Modifier.size(72.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.height(16.dp))
-        Text("Analyze storage usage", style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(DesignSystemR.string.analyze_storage_usage), style = MaterialTheme.typography.headlineSmall)
         Text(
-            "Find the largest files, duplicate content, and which folders use the most space.",
+            stringResource(DesignSystemR.string.analyzer_description),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(vertical = 12.dp),
         )
-        Button(onClick = onScan, enabled = !isScanning) { Text("Scan storage") }
+        Button(onClick = onScan, enabled = !isScanning) { Text(stringResource(DesignSystemR.string.scan_storage)) }
     }
 }
 
 @Composable
 private fun AnalyzerSummary(result: StorageScanResult) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        AnalyzerMetric("Used", formatBytes(result.totalBytes), Modifier.weight(1f))
-        AnalyzerMetric("Files", result.fileCount.toString(), Modifier.weight(1f))
-        AnalyzerMetric("Folders", result.directoryCount.toString(), Modifier.weight(1f))
+        AnalyzerMetric(stringResource(DesignSystemR.string.used), formatBytes(result.totalBytes), Modifier.weight(1f))
+        AnalyzerMetric(stringResource(DesignSystemR.string.files), result.fileCount.toString(), Modifier.weight(1f))
+        AnalyzerMetric(stringResource(DesignSystemR.string.folders), result.directoryCount.toString(), Modifier.weight(1f))
     }
 }
 
@@ -263,7 +265,7 @@ private fun AnalyzerNodeBreadcrumb(stack: List<StorageTreeNode>, onUp: () -> Uni
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        if (stack.size > 1) TextButton(onClick = onUp) { Text("Up") }
+        if (stack.size > 1) TextButton(onClick = onUp) { Text(stringResource(DesignSystemR.string.up)) }
     }
 }
 
@@ -336,7 +338,7 @@ private fun sliceRects(nodes: List<StorageTreeNode>, width: Int, height: Int): L
 @Composable
 private fun DuplicateList(groups: List<DuplicateGroup>) {
     if (groups.isEmpty()) {
-        AnalyzerMessage("No duplicate files found")
+        AnalyzerMessage(stringResource(DesignSystemR.string.no_duplicate_files))
         return
     }
     LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -351,7 +353,7 @@ private fun DuplicateCard(group: DuplicateGroup) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                "${group.files.size} copies · ${formatBytes(group.size)} each",
+                stringResource(DesignSystemR.string.duplicate_copies, group.files.size, formatBytes(group.size)),
                 style = MaterialTheme.typography.titleSmall,
             )
             group.files.forEach { file ->
@@ -364,7 +366,7 @@ private fun DuplicateCard(group: DuplicateGroup) {
 @Composable
 private fun LargestFileList(files: List<StorageEntry>) {
     if (files.isEmpty()) {
-        AnalyzerMessage("No files found")
+        AnalyzerMessage(stringResource(DesignSystemR.string.no_files_found))
         return
     }
     LazyColumn(modifier = Modifier.fillMaxSize()) {

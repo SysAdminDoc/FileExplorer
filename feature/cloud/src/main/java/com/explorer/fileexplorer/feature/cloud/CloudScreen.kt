@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -21,6 +22,7 @@ import androidx.lifecycle.viewModelScope
 import com.explorer.fileexplorer.core.cloud.CloudAccount
 import com.explorer.fileexplorer.core.cloud.CloudAccountManager
 import com.explorer.fileexplorer.core.cloud.CloudService
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.ui.FileListItem
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -172,9 +174,9 @@ fun CloudScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Cloud Storage") },
-                navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
-                actions = { IconButton(onClick = viewModel::showAddDialog) { Icon(Icons.Filled.Add, "Add Account") } },
+                title = { Text(stringResource(DesignSystemR.string.cloud_storage)) },
+                navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(DesignSystemR.string.back)) } },
+                actions = { IconButton(onClick = viewModel::showAddDialog) { Icon(Icons.Filled.Add, stringResource(DesignSystemR.string.add_account)) } },
             )
         },
     ) { padding ->
@@ -184,10 +186,10 @@ fun CloudScreen(
                     Icon(Icons.Filled.CloudQueue, null, Modifier.size(64.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.5f))
                     Spacer(Modifier.height(16.dp))
-                    Text("No cloud accounts", style = MaterialTheme.typography.bodyLarge,
+                    Text(stringResource(DesignSystemR.string.no_cloud_accounts), style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(12.dp))
-                    FilledTonalButton(onClick = viewModel::showAddDialog) { Text("Add Account") }
+                    FilledTonalButton(onClick = viewModel::showAddDialog) { Text(stringResource(DesignSystemR.string.add_account)) }
                 }
             }
         } else {
@@ -207,7 +209,7 @@ fun CloudScreen(
     if (state.showAddDialog) {
         AlertDialog(
             onDismissRequest = viewModel::hideAddDialog,
-            title = { Text("Add Cloud Account") },
+            title = { Text(stringResource(DesignSystemR.string.add_cloud_account)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     CloudService.entries.forEach { service ->
@@ -224,13 +226,13 @@ fun CloudScreen(
                         FilledTonalButton(
                             onClick = { viewModel.addAccount(service); viewModel.hideAddDialog() },
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        ) { Text("Connect ${service.displayName}") }
+                        ) { Text("${stringResource(DesignSystemR.string.connect)} ${service.displayName}") }
                         Spacer(Modifier.height(8.dp))
                     }
                 }
             },
             confirmButton = {},
-            dismissButton = { TextButton(onClick = viewModel::hideAddDialog) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = viewModel::hideAddDialog) { Text(stringResource(DesignSystemR.string.cancel)) } },
         )
     }
 }
@@ -251,14 +253,14 @@ private fun CloudAccountItem(
         headlineContent = { Text(account.displayName.ifEmpty { account.email }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         supportingContent = {
             Column {
-                Text("${account.service.displayName} - ${account.email}", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(DesignSystemR.string.cloud_account_identity, account.service.displayName, account.email), style = MaterialTheme.typography.bodySmall)
                 if (account.staySignedIn) {
-                    Text("Stays signed in on this device", style = MaterialTheme.typography.labelSmall)
+                    Text(stringResource(DesignSystemR.string.stays_signed_in_device), style = MaterialTheme.typography.labelSmall)
                 }
                 if (account.quotaTotal > 0) {
                     val usedGb = "%.1f".format(account.quotaUsed / (1024.0 * 1024 * 1024))
                     val totalGb = "%.1f".format(account.quotaTotal / (1024.0 * 1024 * 1024))
-                    Text("$usedGb / $totalGb GB", style = MaterialTheme.typography.labelSmall)
+                    Text(stringResource(DesignSystemR.string.cloud_quota, usedGb, totalGb), style = MaterialTheme.typography.labelSmall)
                     LinearProgressIndicator(
                         progress = { (account.quotaUsed.toFloat() / account.quotaTotal.toFloat()).coerceIn(0f, 1f) },
                         modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(3.dp),
@@ -269,19 +271,21 @@ private fun CloudAccountItem(
         leadingContent = { Icon(icon, null, tint = MaterialTheme.colorScheme.primary) },
         trailingContent = {
             Row {
-                IconButton(onClick = onBrowse) { Icon(Icons.Filled.FolderOpen, "Browse") }
+                IconButton(onClick = onBrowse) { Icon(Icons.Filled.FolderOpen, stringResource(DesignSystemR.string.browse)) }
                 var expanded by remember { mutableStateOf(false) }
-                IconButton(onClick = { expanded = true }) { Icon(Icons.Filled.MoreVert, "More") }
+                IconButton(onClick = { expanded = true }) { Icon(Icons.Filled.MoreVert, stringResource(DesignSystemR.string.more)) }
                 DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                     DropdownMenuItem(
-                        text = { Text(if (account.staySignedIn) "Forget on close" else "Stay signed in") },
+                        text = {
+                            Text(stringResource(if (account.staySignedIn) DesignSystemR.string.forget_on_close else DesignSystemR.string.stay_signed_in))
+                        },
                         onClick = {
                             onStaySignedInChange(!account.staySignedIn)
                             expanded = false
                         },
                         leadingIcon = { Icon(if (account.staySignedIn) Icons.Filled.LockOpen else Icons.Filled.Lock, null) },
                     )
-                    DropdownMenuItem(text = { Text("Remove") }, onClick = { onRemove(); expanded = false },
+                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.remove)) }, onClick = { onRemove(); expanded = false },
                         leadingIcon = { Icon(Icons.Filled.RemoveCircle, null) })
                 }
             }
@@ -314,10 +318,10 @@ private fun CloudBrowserScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
-                navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+                navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(DesignSystemR.string.back)) } },
                 actions = {
-                    if (folderDepth > 0) { IconButton(onClick = onNavigateUp) { Icon(Icons.Filled.ArrowUpward, "Up") } }
-                    IconButton(onClick = { showNewFolder = true }) { Icon(Icons.Filled.CreateNewFolder, "New Folder") }
+                    if (folderDepth > 0) { IconButton(onClick = onNavigateUp) { Icon(Icons.Filled.ArrowUpward, stringResource(DesignSystemR.string.back)) } }
+                    IconButton(onClick = { showNewFolder = true }) { Icon(Icons.Filled.CreateNewFolder, stringResource(DesignSystemR.string.new_folder)) }
                 },
             )
         },
@@ -326,7 +330,7 @@ private fun CloudBrowserScreen(
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else if (files.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("Empty folder", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(DesignSystemR.string.empty_directory), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
             LazyColumn(Modifier.padding(padding).fillMaxSize()) {
@@ -339,9 +343,9 @@ private fun CloudBrowserScreen(
 
     if (showNewFolder) {
         var name by remember { mutableStateOf("") }
-        AlertDialog(onDismissRequest = { showNewFolder = false }, title = { Text("New Folder") },
-            text = { OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true) },
-            confirmButton = { TextButton(onClick = { if (name.isNotBlank()) { onCreateFolder(name.trim()); showNewFolder = false } }) { Text("Create") } },
-            dismissButton = { TextButton(onClick = { showNewFolder = false }) { Text("Cancel") } })
+        AlertDialog(onDismissRequest = { showNewFolder = false }, title = { Text(stringResource(DesignSystemR.string.new_folder)) },
+            text = { OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(stringResource(DesignSystemR.string.folder_name)) }, singleLine = true) },
+            confirmButton = { TextButton(onClick = { if (name.isNotBlank()) { onCreateFolder(name.trim()); showNewFolder = false } }) { Text(stringResource(DesignSystemR.string.create)) } },
+            dismissButton = { TextButton(onClick = { showNewFolder = false }) { Text(stringResource(DesignSystemR.string.cancel)) } })
     }
 }
