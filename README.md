@@ -33,6 +33,7 @@ cd FileExplorer
 | Batch Rename | Regex capture groups, counter/date/parent tokens, collision checks, and live preview | Complete |
 | Transfer Queue | Pausable and reorderable copy, move, and delete queue with throttling, conflict choices, and text diff preview | Complete |
 | DocumentsProvider | SAF access to the local storage root with browsing, search, recent files, and document mutations | Complete |
+| Share Server | Authenticated HTTP web access and passive FTP sharing with foreground service and Quick Settings start/stop | Complete |
 | File Operations | Copy, move, trash, restore, permanent delete, rename, create. Foreground service with progress notification | Complete |
 | Trash Bin | `.FileExplorer-Trash/` per storage volume, 30-day default purge, configurable TTL, restore and empty-trash screen | Complete |
 | Search | Streaming results via Coroutine Flow, regex support, search history | Complete |
@@ -131,6 +132,7 @@ Cloud providers require OAuth configuration. Each is optional and the app works 
 | App lock | Security screen | Biometric requirement on launch |
 | Secure delete | Security screen | 3-pass overwrite before deletion |
 | Vault | Security screen | Protected private storage area |
+| Share server | Share Server screen / Quick Settings | Authenticated HTTP or FTP access to a selected local folder |
 
 ## Theme
 
@@ -160,7 +162,7 @@ OLED remains available as the high-contrast AMOLED option, while System follows 
 | `MANAGE_EXTERNAL_STORAGE` | Browse files outside app-private directories — core function of a file manager |
 | `QUERY_ALL_PACKAGES` | App Manager: list, search, sort, and share APKs for all installed apps |
 | `INTERNET` + `ACCESS_NETWORK_STATE` | SMB/SFTP/FTP/WebDAV and cloud provider connectivity |
-| `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC` | Long-running copy/move/delete with progress notification |
+| `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC` | Long-running file operations and local share server notification |
 | `POST_NOTIFICATIONS` | Transfer progress and completion notifications |
 | `READ_MEDIA_*` | Android 13+ granular media access |
 

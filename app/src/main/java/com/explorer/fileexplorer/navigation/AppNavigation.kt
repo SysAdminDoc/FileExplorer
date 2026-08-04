@@ -14,6 +14,7 @@ import com.explorer.fileexplorer.feature.browser.StorageAnalyzerScreen
 import com.explorer.fileexplorer.feature.cloud.CloudScreen
 import com.explorer.fileexplorer.feature.editor.EditorScreen
 import com.explorer.fileexplorer.feature.network.NetworkScreen
+import com.explorer.fileexplorer.feature.network.ShareServerScreen
 import com.explorer.fileexplorer.feature.search.SearchScreen
 import com.explorer.fileexplorer.feature.security.SecurityScreen
 import com.explorer.fileexplorer.feature.settings.SettingsScreen
@@ -24,6 +25,7 @@ object Routes {
     const val SEARCH = "search"
     const val SETTINGS = "settings"
     const val NETWORK = "network"
+    const val SHARE_SERVER = "share-server"
     const val CLOUD = "cloud"
     const val SECURITY = "security"
     const val EDITOR = "editor/{filePath}"
@@ -45,6 +47,7 @@ fun AppNavigation(
                 onOpenSearch = { navController.navigate(Routes.SEARCH) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenNetwork = { navController.navigate(Routes.NETWORK) },
+                onOpenServer = { navController.navigate(Routes.SHARE_SERVER) },
                 onOpenCloud = { navController.navigate(Routes.CLOUD) },
                 onOpenSecurity = { navController.navigate(Routes.SECURITY) },
                 onOpenApps = { navController.navigate(Routes.APPS) },
@@ -64,6 +67,7 @@ fun AppNavigation(
 
         composable(Routes.SETTINGS) { SettingsScreen(onNavigateBack = { navController.popBackStack() }) }
         composable(Routes.NETWORK) { NetworkScreen(onNavigateBack = { navController.popBackStack() }) }
+        composable(Routes.SHARE_SERVER) { ShareServerScreen(onNavigateBack = { navController.popBackStack() }) }
         composable(Routes.CLOUD) { CloudScreen(onNavigateBack = { navController.popBackStack() }) }
         composable(Routes.SECURITY) { SecurityScreen(onNavigateBack = { navController.popBackStack() }) }
         composable(Routes.APPS) { AppsScreen(onNavigateBack = { navController.popBackStack() }) }

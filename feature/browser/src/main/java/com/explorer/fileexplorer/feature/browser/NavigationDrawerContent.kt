@@ -26,6 +26,7 @@ fun NavigationDrawerContent(
     onToggleRoot: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenNetwork: () -> Unit,
+    onOpenServer: () -> Unit,
     onOpenCloud: () -> Unit,
     onOpenSecurity: () -> Unit,
     onOpenApps: () -> Unit,
@@ -159,6 +160,11 @@ fun NavigationDrawerContent(
             // Network
             NavigationDrawerItem(label = { Text("Network") }, selected = false,
                 onClick = onOpenNetwork, icon = { Icon(Icons.Filled.Lan, null) },
+                modifier = Modifier.padding(horizontal = 12.dp))
+
+            // Share server
+            NavigationDrawerItem(label = { Text("Share Server") }, selected = false,
+                onClick = onOpenServer, icon = { Icon(Icons.Filled.WifiTethering, null) },
                 modifier = Modifier.padding(horizontal = 12.dp))
 
             // Cloud Storage

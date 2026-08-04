@@ -58,21 +58,7 @@ For operations exceeding 6 hours, consider chunking or using WorkManager.
 
 ## Next (v1.5.0 -- v1.7.0)
 
-### X-06: DocumentsProvider (SAF export)
-Implement `DocumentsProvider` so other apps can pick files *from* FileExplorer via the system
-file picker. Also enables SSHFS-style virtual mounts where remote shares appear as local storage
-to other apps. AnExplorer, Material Files, and Ghost Commander all implement this.
 
-- **Impact:** 4/5 (ecosystem integration). **Effort:** 3/5.
-- **Source:** AnExplorer DocumentsProvider; Material Files SAF integration; Android SAF documentation.
-
-### X-07: Built-in FTP/HTTP server
-Turn the phone into an FTP or HTTP server for desktop file access. Quick Settings tile to
-start/stop. Material Files has FTP server with QS tile. Solid Explorer has both FTP and web
-server. FX File Explorer's web access is a standout feature.
-
-- **Impact:** 4/5 (unique vs most OSS FMs). **Effort:** 3/5.
-- **Source:** Material Files FTP server; Solid Explorer web sharing; FX File Explorer web access.
 
 ### X-08: Per-file AES-256 encryption/decryption
 Encrypt individual files with AES-256-GCM keyed via Android Keystore. Decrypt with biometric
