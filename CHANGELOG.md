@@ -23,6 +23,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added a paginated hex editor with byte editing through 64 MiB and read-only inspection for larger files.
 - Added APK analyzer details for manifests, permissions, signatures, DEX method counts, and ZIP directory sizes.
 - Added native PDF page rendering and bounded DOCX/XLSX document previews from the browser.
+- Added configurable swipe-left/right actions for browser list rows, including safe delete confirmation and cut-to-move.
 
 ## [v1.3.3] - 2026-06-30
 

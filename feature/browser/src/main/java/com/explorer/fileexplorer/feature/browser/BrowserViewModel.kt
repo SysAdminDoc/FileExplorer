@@ -28,6 +28,7 @@ import com.explorer.fileexplorer.core.storage.RootHelper
 import com.explorer.fileexplorer.core.storage.RootState
 import com.explorer.fileexplorer.core.storage.StorageVolumeHelper
 import com.explorer.fileexplorer.feature.settings.SettingsRepository
+import com.explorer.fileexplorer.feature.settings.SwipeAction
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -65,8 +66,12 @@ data class BrowserUiState(
     val archivePath: String? = null,
     val archiveInternalPath: String = "",
     val showCompressDialog: Boolean = false,
+    val deleteConfirmationItem: FileItem? = null,
     val showExtractDialog: Boolean = false,
     val compactDensity: Boolean = false,
+    val confirmDelete: Boolean = false,
+    val swipeLeftAction: SwipeAction = SwipeAction.NONE,
+    val swipeRightAction: SwipeAction = SwipeAction.NONE,
     val dualPaneEnabled: Boolean = false,
     val secondaryPath: String = Environment.getExternalStorageDirectory().absolutePath,
     val secondaryFiles: List<FileItem> = emptyList(),
@@ -149,7 +154,14 @@ class BrowserViewModel @Inject constructor(
     private fun observeSettings() {
         viewModelScope.launch {
             settingsRepository.settings.collect { s ->
-                _state.update { it.copy(compactDensity = s.compactDensity) }
+                _state.update {
+                    it.copy(
+                        compactDensity = s.compactDensity,
+                        confirmDelete = s.confirmDelete,
+                        swipeLeftAction = s.swipeLeftAction,
+                        swipeRightAction = s.swipeRightAction,
+                    )
+                }
             }
         }
     }
@@ -512,6 +524,48 @@ class BrowserViewModel @Inject constructor(
     }
 
     fun onItemLongClick(item: FileItem) { toggleSelection(item.path) }
+
+    fun applySwipe(item: FileItem, action: SwipeAction) {
+        if (action == SwipeAction.NONE) return
+        if (_state.value.insideArchive) {
+            viewModelScope.launch { _events.emit(BrowserEvent.Toast("Gestures are unavailable inside archives")) }
+            return
+        }
+        when (action) {
+            SwipeAction.DELETE -> {
+                if (_state.value.confirmDelete) {
+                    _state.update { it.copy(deleteConfirmationItem = item) }
+                } else {
+                    _state.update { it.copy(selectedItems = setOf(item.path)) }
+                    deleteSelected()
+                }
+            }
+            SwipeAction.SHARE -> viewModelScope.launch {
+                _events.emit(BrowserEvent.ShareFiles(listOf(item)))
+            }
+            SwipeAction.COMPRESS -> {
+                _state.update { it.copy(selectedItems = setOf(item.path), showCompressDialog = true) }
+            }
+            SwipeAction.MOVE -> {
+                _state.update {
+                    it.copy(
+                        clipboard = ClipboardContent(listOf(item), FileOperation.MOVE, it.currentPath),
+                        selectedItems = emptySet(),
+                    )
+                }
+                viewModelScope.launch { _events.emit(BrowserEvent.Toast("Move ready; navigate to a folder and tap Paste")) }
+            }
+            SwipeAction.NONE -> Unit
+        }
+    }
+
+    fun dismissDeleteConfirmation() { _state.update { it.copy(deleteConfirmationItem = null) } }
+
+    fun confirmDeleteGesture() {
+        val item = _state.value.deleteConfirmationItem ?: return
+        _state.update { it.copy(deleteConfirmationItem = null, selectedItems = setOf(item.path)) }
+        deleteSelected()
+    }
 
     fun extractArchive(archivePath: String? = null, destination: String? = null) {
         val archive = archivePath ?: _state.value.archivePath ?: return

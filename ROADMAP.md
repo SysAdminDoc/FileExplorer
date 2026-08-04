@@ -77,13 +77,6 @@ already have rclone configured; importing saves re-entering credentials.
 - **Impact:** 2/5 (niche but sticky). **Effort:** 2/5.
 - **Source:** Existing ROADMAP item; rclone community.
 
-### L-08: Gesture customization
-Assign swipe-left / swipe-right on list items to configurable actions (delete, share, compress,
-move to folder, etc.). Solid Explorer offers this.
-
-- **Impact:** 2/5. **Effort:** 3/5.
-- **Source:** Solid Explorer gesture actions; existing ROADMAP item.
-
 ### L-09: Magisk / KernelSU / APatch module browser
 List installed modules, toggle state, install from ZIP. KernelSU-Next uses libsu internally.
 APatch bypasses SELinux via KernelPatch (libsu optional).

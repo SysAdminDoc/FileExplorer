@@ -47,6 +47,21 @@ object SettingsKeys {
     val THEME_MODE = stringPreferencesKey("theme_mode")
     val TRASH_TTL_DAYS = intPreferencesKey("trash_ttl_days")
     val COMPACT_DENSITY = booleanPreferencesKey("compact_density")
+    val SWIPE_LEFT_ACTION = stringPreferencesKey("swipe_left_action")
+    val SWIPE_RIGHT_ACTION = stringPreferencesKey("swipe_right_action")
+}
+
+enum class SwipeAction(val label: String, val description: String) {
+    NONE("No action", "Leave the row in place"),
+    DELETE("Delete", "Move the item to Trash"),
+    SHARE("Share", "Open the system share sheet"),
+    COMPRESS("Compress", "Open the archive dialog for the item"),
+    MOVE("Move", "Cut the item, then paste it in a destination folder"),
+    ;
+
+    companion object {
+        fun fromKey(key: String?): SwipeAction = entries.firstOrNull { it.name == key } ?: NONE
+    }
 }
 
 data class SettingsState(
@@ -60,6 +75,8 @@ data class SettingsState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val trashTtlDays: Int = LocalTrashManager.DEFAULT_TTL_DAYS,
     val compactDensity: Boolean = false,
+    val swipeLeftAction: SwipeAction = SwipeAction.NONE,
+    val swipeRightAction: SwipeAction = SwipeAction.NONE,
 )
 
 @Singleton
@@ -80,6 +97,8 @@ class SettingsRepository @Inject constructor(
             themeMode = ThemeMode.fromKey(prefs[SettingsKeys.THEME_MODE]),
             trashTtlDays = prefs[SettingsKeys.TRASH_TTL_DAYS] ?: LocalTrashManager.DEFAULT_TTL_DAYS,
             compactDensity = prefs[SettingsKeys.COMPACT_DENSITY] ?: false,
+            swipeLeftAction = SwipeAction.fromKey(prefs[SettingsKeys.SWIPE_LEFT_ACTION]),
+            swipeRightAction = SwipeAction.fromKey(prefs[SettingsKeys.SWIPE_RIGHT_ACTION]),
         )
     }
 
@@ -105,6 +124,8 @@ class SettingsViewModel @Inject constructor(
     fun setThemeMode(mode: ThemeMode) { viewModelScope.launch { repo.update(SettingsKeys.THEME_MODE, mode.name) } }
     fun setTrashTtlDays(days: Int) { viewModelScope.launch { repo.update(SettingsKeys.TRASH_TTL_DAYS, days) } }
     fun toggleCompactDensity() { viewModelScope.launch { repo.update(SettingsKeys.COMPACT_DENSITY, !state.value.compactDensity) } }
+    fun setSwipeLeftAction(action: SwipeAction) { viewModelScope.launch { repo.update(SettingsKeys.SWIPE_LEFT_ACTION, action.name) } }
+    fun setSwipeRightAction(action: SwipeAction) { viewModelScope.launch { repo.update(SettingsKeys.SWIPE_RIGHT_ACTION, action.name) } }
 
     fun exportBackup(out: java.io.OutputStream) {
         viewModelScope.launch {
@@ -234,6 +255,26 @@ fun SettingsScreen(
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
+            Text(
+                text = "GESTURES",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            )
+
+            SwipeActionSelector(
+                title = "Swipe left",
+                current = state.swipeLeftAction,
+                onSelect = viewModel::setSwipeLeftAction,
+            )
+            SwipeActionSelector(
+                title = "Swipe right",
+                current = state.swipeRightAction,
+                onSelect = viewModel::setSwipeRightAction,
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
             // Backup
             Text(
                 text = "BACKUP",
@@ -308,6 +349,31 @@ private fun SettingsToggle(
             Switch(checked = checked, onCheckedChange = { onToggle() })
         },
     )
+}
+
+@Composable
+private fun SwipeActionSelector(
+    title: String,
+    current: SwipeAction,
+    onSelect: (SwipeAction) -> Unit,
+) {
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = { Text(current.description) },
+    )
+    FlowRow(
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        SwipeAction.entries.forEach { action ->
+            FilterChip(
+                selected = current == action,
+                onClick = { onSelect(action) },
+                label = { Text(action.label) },
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

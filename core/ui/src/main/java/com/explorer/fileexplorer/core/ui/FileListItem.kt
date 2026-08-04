@@ -3,6 +3,7 @@ package com.explorer.fileexplorer.core.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -12,6 +13,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.explorer.fileexplorer.core.model.FileColumn
@@ -29,8 +32,33 @@ fun FileListItem(
     visibleColumns: Set<FileColumn> = FileColumn.DEFAULT_VISIBLE_COLUMNS,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    onSwipeLeft: (() -> Unit)? = null,
+    onSwipeRight: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val swipeThreshold = with(LocalDensity.current) { 72.dp.toPx() }
+    val swipeModifier = if (onSwipeLeft != null || onSwipeRight != null) {
+        Modifier.pointerInput(swipeThreshold, onSwipeLeft, onSwipeRight) {
+            var dragDistance = 0f
+            detectHorizontalDragGestures(
+                onHorizontalDrag = { change, amount ->
+                    dragDistance += amount
+                    change.consume()
+                },
+                onDragEnd = {
+                    when {
+                        dragDistance <= -swipeThreshold -> onSwipeLeft?.invoke()
+                        dragDistance >= swipeThreshold -> onSwipeRight?.invoke()
+                    }
+                    dragDistance = 0f
+                },
+                onDragCancel = { dragDistance = 0f },
+            )
+        }
+    } else {
+        Modifier
+    }
+
     val backgroundColor by animateColorAsState(
         targetValue = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
         else MaterialTheme.colorScheme.surface,
@@ -43,6 +71,7 @@ fun FileListItem(
     ) {
         Row(
             modifier = Modifier
+                .then(swipeModifier)
                 .combinedClickable(
                     onClick = onClick,
                     onLongClick = onLongClick,

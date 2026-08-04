@@ -200,6 +200,8 @@ fun BrowserScreen(
                         onClearSelection = viewModel::clearSelection,
                         onDeleteSelected = viewModel::deleteSelected,
                         onShowProperties = viewModel::showProperties,
+                        onSwipeLeft = { item -> viewModel.applySwipe(item, state.swipeLeftAction) },
+                        onSwipeRight = { item -> viewModel.applySwipe(item, state.swipeRightAction) },
                         onSelectTab = { viewModel.selectTab(BrowserPane.PRIMARY, it) },
                         onCloseTab = { viewModel.closeTab(BrowserPane.PRIMARY, it) },
                         onAddTab = { viewModel.openTab(BrowserPane.PRIMARY) },
@@ -277,9 +279,13 @@ fun BrowserScreen(
                         onPrimaryNavigate = viewModel::navigateTo,
                         onPrimaryItemClick = viewModel::onItemClick,
                         onPrimaryItemLongClick = viewModel::onItemLongClick,
+                        onPrimarySwipeLeft = { item -> viewModel.applySwipe(item, state.swipeLeftAction) },
+                        onPrimarySwipeRight = { item -> viewModel.applySwipe(item, state.swipeRightAction) },
                         onSecondaryNavigate = viewModel::navigateSecondaryTo,
                         onSecondaryItemClick = viewModel::onSecondaryItemClick,
                         onSecondaryItemLongClick = viewModel::onSecondaryItemLongClick,
+                        onSecondarySwipeLeft = { item -> viewModel.applySwipe(item, state.swipeLeftAction) },
+                        onSecondarySwipeRight = { item -> viewModel.applySwipe(item, state.swipeRightAction) },
                         onPrimaryNavigateUp = viewModel::navigateUp,
                         onSecondaryNavigateUp = viewModel::navigateSecondaryUp,
                         onPrimaryRefresh = viewModel::refresh,
@@ -324,6 +330,8 @@ fun BrowserScreen(
                                             visibleColumns = state.visibleColumns,
                                             onClick = { viewModel.onItemClick(item) },
                                             onLongClick = { viewModel.onItemLongClick(item) },
+                                            onSwipeLeft = { viewModel.applySwipe(item, state.swipeLeftAction) },
+                                            onSwipeRight = { viewModel.applySwipe(item, state.swipeRightAction) },
                                         )
                                     }
                                 }
@@ -364,6 +372,19 @@ fun BrowserScreen(
         CompressDialog(
             onConfirm = { name, format, password -> viewModel.compressSelected(name, format, password) },
             onDismiss = viewModel::dismissCompressDialog)
+    }
+    state.deleteConfirmationItem?.let { item ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissDeleteConfirmation,
+            title = { Text("Delete ${if (item.isDirectory) "folder" else "file"}?") },
+            text = { Text("Move ${item.name} to Trash?") },
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmDeleteGesture) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissDeleteConfirmation) { Text("Cancel") }
+            },
+        )
     }
     state.pendingDrop?.let { request ->
         DropConfirmationDialog(
