@@ -58,6 +58,7 @@ fun BrowserScreen(
     onOpenAnalyzer: () -> Unit = {},
     onOpenTransfers: () -> Unit = {},
     onOpenEditor: (String) -> Unit = {},
+    onOpenHexEditor: (String) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -152,7 +153,12 @@ fun BrowserScreen(
                         onCompress = viewModel::showCompressDialog,
                         onBatchRename = viewModel::showBatchRenameDialog,
                         onRename = { state.files.firstOrNull { it.path in state.selectedItems }?.let { viewModel.showRename(it) } },
-                        onProperties = { state.files.firstOrNull { it.path in state.selectedItems }?.let { viewModel.showProperties(it) } })
+                        onProperties = { state.files.firstOrNull { it.path in state.selectedItems }?.let { viewModel.showProperties(it) } },
+                        onHexView = {
+                            state.files.firstOrNull { it.path in state.selectedItems }
+                                ?.takeIf { !it.isDirectory }
+                                ?.let { onOpenHexEditor(it.path) }
+                        })
                 } else {
                     BrowserTopBar(
                         onMenuClick = { scope.launch { drawerState.open() } },
@@ -439,6 +445,7 @@ private fun SelectionTopBar(
     onCopy: () -> Unit, onCut: () -> Unit, onDelete: () -> Unit, onPermanentDelete: () -> Unit, onShare: () -> Unit,
     onEncrypt: () -> Unit, onDecrypt: () -> Unit,
     onCompress: () -> Unit, onBatchRename: () -> Unit, onRename: () -> Unit, onProperties: () -> Unit,
+    onHexView: () -> Unit,
 ) {
     TopAppBar(
         title = { Text("$selectedCount selected") },
@@ -478,6 +485,8 @@ private fun SelectionTopBar(
                     DropdownMenuItem(text = { Text("Batch rename") }, onClick = { onBatchRename(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.EditNote, null) })
                     if (selectedCount == 1) {
+                        DropdownMenuItem(text = { Text("Hex view") }, onClick = { onHexView(); moreExpanded = false },
+                            leadingIcon = { Icon(Icons.Filled.Code, null) })
                         DropdownMenuItem(text = { Text("Rename") }, onClick = { onRename(); moreExpanded = false },
                             leadingIcon = { Icon(Icons.Filled.Edit, null) })
                     }

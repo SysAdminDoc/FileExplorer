@@ -32,4 +32,5 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation)
     implementation(libs.coroutines.core)
+    testImplementation(kotlin("test"))
 }

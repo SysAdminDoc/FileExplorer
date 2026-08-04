@@ -20,6 +20,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added read-only RAR browsing and extraction, including path-traversal protection for extracted entries.
 - Added a versioned AIDL plugin/add-on API with manifest discovery, isolated binder calls, and URI-backed plugin repositories.
 - Added MediaStore-backed Collections for Photos, Videos, Music, Documents, Downloads, and APKs.
+- Added a paginated hex editor with byte editing through 64 MiB and read-only inspection for larger files.
 
 ## [v1.3.3] - 2026-06-30
 

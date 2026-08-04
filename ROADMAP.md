@@ -77,13 +77,6 @@ already have rclone configured; importing saves re-entering credentials.
 - **Impact:** 2/5 (niche but sticky). **Effort:** 2/5.
 - **Source:** Existing ROADMAP item; rclone community.
 
-### L-05: Binary hex editor
-Hex view for files up to 64 MB; read-only for larger files. Useful for forensics and
-embedded development. X-plore has a hex viewer.
-
-- **Impact:** 2/5 (niche). **Effort:** 3/5.
-- **Source:** X-plore hex viewer; existing ROADMAP item.
-
 ### L-06: Integrated APK analyzer
 Manifest viewer, permissions list, signature info, shared UID, size breakdown per directory,
 DEX method count. Goes beyond the current App Manager's basic info display.

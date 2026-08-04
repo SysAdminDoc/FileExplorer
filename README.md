@@ -59,13 +59,14 @@ cd FileExplorer
 | Checksum Verify | MD5, SHA-1, SHA-256, SHA-512 via java.security.MessageDigest | Complete |
 | Text Editor | Built-in editor with syntax highlighting, line numbers, find/replace, undo/redo | Complete |
 | App Manager | List all apps, filter user/system/disabled, search, sort, share APK, uninstall | Complete |
+| Hex Editor | Paginated hexadecimal view with byte editing up to 64 MiB and read-only larger-file inspection | Complete |
 
 ## Architecture
 
 ```
                            ┌─────────────────────────────────────────────┐
                            │                  :app                       │
-                           │  Application, Navigation (9 routes),        │
+                           │  Application, Navigation (10 routes),       │
                            │  Permission flow, MainActivity              │
                            └──────┬──────┬──────┬──────┬──────┬─────────┘
                                   │      │      │      │      │
