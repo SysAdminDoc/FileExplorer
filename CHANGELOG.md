@@ -21,6 +21,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added a versioned AIDL plugin/add-on API with manifest discovery, isolated binder calls, and URI-backed plugin repositories.
 - Added MediaStore-backed Collections for Photos, Videos, Music, Documents, Downloads, and APKs.
 - Added a paginated hex editor with byte editing through 64 MiB and read-only inspection for larger files.
+- Added APK analyzer details for manifests, permissions, signatures, DEX method counts, and ZIP directory sizes.
 
 ## [v1.3.3] - 2026-06-30
 

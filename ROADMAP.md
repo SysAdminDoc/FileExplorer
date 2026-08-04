@@ -77,13 +77,6 @@ already have rclone configured; importing saves re-entering credentials.
 - **Impact:** 2/5 (niche but sticky). **Effort:** 2/5.
 - **Source:** Existing ROADMAP item; rclone community.
 
-### L-06: Integrated APK analyzer
-Manifest viewer, permissions list, signature info, shared UID, size breakdown per directory,
-DEX method count. Goes beyond the current App Manager's basic info display.
-
-- **Impact:** 2/5 (developer/power-user). **Effort:** 3/5.
-- **Source:** X-plore app analyzer; existing ROADMAP item.
-
 ### L-07: PDF and document preview
 Embedded PDF viewer via PdfRenderer (Android native) and lightweight DOCX/XLSX preview.
 MiXplorer's MiX PDF add-on and X-plore's PDF viewer are reference implementations.

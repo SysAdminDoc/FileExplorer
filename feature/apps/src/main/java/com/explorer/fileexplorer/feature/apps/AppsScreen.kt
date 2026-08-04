@@ -7,6 +7,7 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.Image
@@ -68,6 +69,7 @@ data class AppsUiState(
     val sort: AppSort = AppSort.NAME,
     val sortAsc: Boolean = true,
     val selectedApp: AppInfo? = null,
+    val analyzingApp: AppInfo? = null,
 ) {
     val appCount: Int get() = filteredApps.size
 }
@@ -108,6 +110,8 @@ class AppsViewModel @Inject constructor(
 
     fun showDetails(app: AppInfo) { _state.update { it.copy(selectedApp = app) } }
     fun hideDetails() { _state.update { it.copy(selectedApp = null) } }
+    fun showAnalyzer(app: AppInfo) { _state.update { it.copy(analyzingApp = app) } }
+    fun hideAnalyzer() { _state.update { it.copy(analyzingApp = null) } }
 
     fun openApp(packageName: String) {
         val intent = context.packageManager.getLaunchIntentForPackage(packageName)
@@ -191,7 +195,12 @@ class AppsViewModel @Inject constructor(
                 packageName = pkg.packageName,
                 name = appInfo.loadLabel(pm).toString(),
                 versionName = pkg.versionName ?: "",
-                versionCode = pkg.longVersionCode,
+                versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    pkg.longVersionCode
+                } else {
+                    @Suppress("DEPRECATION")
+                    pkg.versionCode.toLong()
+                },
                 apkSize = apkFile.length(),
                 apkPath = appInfo.sourceDir,
                 isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
@@ -282,7 +291,12 @@ fun AppsScreen(
             onOpen = { viewModel.openApp(app.packageName) },
             onSettings = { viewModel.openAppSettings(app.packageName) },
             onShareApk = { viewModel.shareApk(app) },
-            onUninstall = { viewModel.uninstallApp(app.packageName) })
+            onUninstall = { viewModel.uninstallApp(app.packageName) },
+            onAnalyze = { viewModel.hideDetails(); viewModel.showAnalyzer(app) })
+    }
+
+    state.analyzingApp?.let { app ->
+        ApkAnalyzerSheet(app = app, onDismiss = viewModel::hideAnalyzer)
     }
 }
 
@@ -317,7 +331,7 @@ private fun AppListItem(app: AppInfo, onOpen: () -> Unit, onDetails: () -> Unit)
 private fun AppDetailsSheet(
     app: AppInfo, onDismiss: () -> Unit,
     onOpen: () -> Unit, onSettings: () -> Unit,
-    onShareApk: () -> Unit, onUninstall: () -> Unit,
+    onShareApk: () -> Unit, onUninstall: () -> Unit, onAnalyze: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.padding(24.dp)) {
@@ -353,6 +367,9 @@ private fun AppDetailsSheet(
                 OutlinedButton(onClick = onSettings, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Filled.Settings, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Settings")
                 }
+            }
+            OutlinedButton(onClick = onAnalyze, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Icon(Icons.Filled.Analytics, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Analyze APK")
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 OutlinedButton(onClick = onShareApk, modifier = Modifier.weight(1f)) {
