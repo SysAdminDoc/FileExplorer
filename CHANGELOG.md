@@ -2,7 +2,7 @@
 
 All notable changes to FileExplorer will be documented in this file.
 
-## [Unreleased]
+## [v1.5.0] - 2026-08-03
 
 ### Added
 - Added an independent dual-pane browser layout with per-pane navigation, refresh, sorting, hidden-file filtering, and selection.
