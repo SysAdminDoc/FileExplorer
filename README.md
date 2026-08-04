@@ -36,6 +36,7 @@ cd FileExplorer
 | Share Server | Authenticated HTTP web access and passive FTP sharing with foreground service and Quick Settings start/stop | Complete |
 | File Encryption | AES-256-GCM encryption with an Android Keystore key and biometric-gated decryption from the browser | Complete |
 | Shizuku Android/data and obb | Optional UserService backend for scoped browsing and file operations under Android/data and Android/obb | Optional |
+| Large-screen layout | Adaptive places, file list, and preview panes with keyboard shortcuts and mouse context menus | Complete |
 | File Operations | Copy, move, trash, restore, permanent delete, rename, create. Foreground service with progress notification | Complete |
 | Trash Bin | `.FileExplorer-Trash/` per storage volume, 30-day default purge, configurable TTL, restore and empty-trash screen | Complete |
 | Search | Streaming results via Coroutine Flow, regex support, search history | Complete |
@@ -136,6 +137,7 @@ Cloud providers require OAuth configuration. Each is optional and the app works 
 | Vault | Security screen | Protected private storage area |
 | File encryption | Browser selection → More | Encrypt files to `.encrypted`; biometric authentication is required to decrypt |
 | Shizuku access | Shizuku Access screen / drawer | Optional Android/data and Android/obb backend; requires a separately started Shizuku or Sui service and granted permission |
+| Large-screen layout | Automatic on windows at least 840dp wide | Three-pane places, files, and preview workspace with Ctrl+A, Delete, F5, Escape, and Up shortcuts |
 | Share server | Share Server screen / Quick Settings | Authenticated HTTP or FTP access to a selected local folder |
 
 ## Theme

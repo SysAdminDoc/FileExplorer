@@ -57,15 +57,6 @@ For operations exceeding 6 hours, consider chunking or using WorkManager.
 ---
 
 ## Next (v1.5.0 -- v1.7.0)
-
-### X-10: Large screen / foldable / DeX layout
-3-column layout on tablets and foldables (tree + list + preview). Keyboard shortcuts,
-right-click context menus, trackpad scrolling. Android 14/15 large screen guidance.
-Solid Explorer and AnExplorer both support large screens well.
-
-- **Impact:** 3/5 (growing form factor). **Effort:** 4/5.
-- **Source:** Android large screen guidance; Chromebook/DeX community requests; AnExplorer all-device targeting.
-
 ### X-11: Per-directory view memory
 Remember grid vs list, sort order, and column visibility per directory path. Persisted in Room.
 MiXplorer does this; most other FMs reset view preferences on every navigation.

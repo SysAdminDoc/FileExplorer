@@ -171,7 +171,26 @@ fun BrowserScreen(
                 }
             },
         ) { padding ->
-            Column(modifier = Modifier.padding(padding)) {
+            BoxWithConstraints(modifier = Modifier.padding(padding).fillMaxSize()) {
+                if (!state.dualPaneEnabled && LargeScreenLayoutPolicy.useThreePane(maxWidth.value.toInt())) {
+                    LargeScreenBrowserContent(
+                        state = state,
+                        onNavigate = viewModel::navigateTo,
+                        onOpenItem = viewModel::onItemClick,
+                        onLongClick = viewModel::onItemLongClick,
+                        onNavigateUp = viewModel::navigateUp,
+                        onRefresh = viewModel::refresh,
+                        onSelectAll = viewModel::selectAll,
+                        onClearSelection = viewModel::clearSelection,
+                        onDeleteSelected = viewModel::deleteSelected,
+                        onShowProperties = viewModel::showProperties,
+                        onSelectTab = { viewModel.selectTab(BrowserPane.PRIMARY, it) },
+                        onCloseTab = { viewModel.closeTab(BrowserPane.PRIMARY, it) },
+                        onAddTab = { viewModel.openTab(BrowserPane.PRIMARY) },
+                        onReorderTabs = { from, to -> viewModel.reorderTabs(BrowserPane.PRIMARY, from, to) },
+                    )
+                } else {
+                    Column(modifier = Modifier.fillMaxSize()) {
                 // Root mode banner
                 if (state.rootEnabled && state.isRootPath) {
                     Surface(color = AccentOrange.copy(alpha = 0.12f), modifier = Modifier.fillMaxWidth()) {
@@ -272,6 +291,8 @@ fun BrowserScreen(
                                 }
                             }
                         }
+                    }
+                }
                     }
                 }
             }

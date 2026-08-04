@@ -15,6 +15,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added an authenticated HTTP/FTP LAN share server with directory listings, file transfers, safe mutations, a foreground notification, and a Quick Settings toggle.
 - Added per-file AES-256-GCM encryption with an Android Keystore key and biometric-gated decryption from the browser.
 - Added optional Shizuku/Sui UserService access for scoped Android/data and Android/obb browsing and file operations.
+- Added an adaptive large-screen browser workspace with places, files, and preview panes plus keyboard and mouse input affordances.
 
 ## [v1.3.3] - 2026-06-30
 
