@@ -77,13 +77,6 @@ already have rclone configured; importing saves re-entering credentials.
 - **Impact:** 2/5 (niche but sticky). **Effort:** 2/5.
 - **Source:** Existing ROADMAP item; rclone community.
 
-### L-14: USB OTG support
-Read/write USB drives connected via OTG adapter. Uses Android UsbManager + DocumentFile
-for scoped-storage-safe access. Amaze has USB OTG support.
-
-- **Impact:** 3/5. **Effort:** 3/5.
-- **Source:** Amaze USB OTG; Android UsbManager documentation.
-
 ### L-15: Wi-Fi Direct / Quick Share integration
 Send files to nearby devices via Wi-Fi Direct or Quick Share (Nearby Share successor).
 Uses `android.nearby` APIs.

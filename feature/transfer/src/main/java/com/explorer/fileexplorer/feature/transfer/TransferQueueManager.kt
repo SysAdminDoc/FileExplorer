@@ -1,6 +1,7 @@
 package com.explorer.fileexplorer.feature.transfer
 
 import com.explorer.fileexplorer.core.data.FileRepositoryFactory
+import com.explorer.fileexplorer.core.data.UsbPathCodec
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileOperation
 import kotlinx.coroutines.CancellationException
@@ -179,9 +180,11 @@ class TransferQueueManager @Inject constructor(
         var sharedAction = initial.conflictAction
 
         try {
-            val repository = repositoryFactory.getRepository(
-                if (initial.operation == FileOperation.DELETE) initial.sourcePaths.first() else initial.destination,
-            )
+            val repository = if (initial.operation == FileOperation.DELETE) {
+                repositoryFactory.getRepository(initial.sourcePaths.first())
+            } else {
+                repositoryFactory.getTransferRepository(initial.sourcePaths, initial.destination)
+            }
             val totalBytes = if (initial.operation == FileOperation.DELETE) 0L else repository.calculateSize(initial.sourcePaths)
             updateTask(taskId) { it.copy(totalBytes = totalBytes) }
             initial.sourcePaths.forEachIndexed { index, source ->
@@ -295,8 +298,16 @@ class TransferQueueManager @Inject constructor(
         operation == FileOperation.COPY || operation == FileOperation.MOVE
 
     private fun targetPath(destination: String, source: String): String {
-        val name = source.trimEnd('/', '\\').substringAfterLastAny('/', '\\')
-        return destination.trimEnd('/', '\\') + "/" + name
+        val name = if (UsbPathCodec.isUsbPath(source)) {
+            UsbPathCodec.name(source) ?: ""
+        } else {
+            source.trimEnd('/', '\\').substringAfterLastAny('/', '\\')
+        }
+        return if (UsbPathCodec.isUsbPath(destination)) {
+            UsbPathCodec.childPath(destination, name)
+        } else {
+            destination.trimEnd('/', '\\') + "/" + name
+        }
     }
 
     private suspend fun buildConflict(source: String, target: String): TransferConflict {

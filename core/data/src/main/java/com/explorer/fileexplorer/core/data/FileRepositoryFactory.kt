@@ -11,6 +11,7 @@ class FileRepositoryFactory @Inject constructor(
     private val localRepo: LocalFileRepository,
     private val rootRepo: RootFileRepository,
     private val shizukuRepo: ShizukuFileRepository,
+    private val usbFileRepository: UsbFileRepository,
     private val rootHelper: RootHelper,
     private val shizukuManager: ShizukuManager,
 ) {
@@ -33,6 +34,7 @@ class FileRepositoryFactory @Inject constructor(
         val schemeEnd = path.indexOf("://")
         if (schemeEnd > 0) {
             val scheme = path.substring(0, schemeEnd).lowercase()
+            if (scheme == UsbPathCodec.SCHEME) return usbFileRepository
             schemeResolver?.resolve(scheme)?.let { return NetworkRepoAdapter(it) }
             pluginResolver?.resolve(scheme)?.let { return it }
         }
@@ -43,6 +45,10 @@ class FileRepositoryFactory @Inject constructor(
         }
 
         return if (ShizukuPaths.isAllowed(path)) shizukuRepo else localRepo
+    }
+
+    fun getTransferRepository(sources: List<String>, destination: String): FileRepository {
+        return if (sources.any(UsbPathCodec::isUsbPath)) usbFileRepository else getRepository(destination)
     }
 
     private fun isNormallyReadable(path: String): Boolean {

@@ -34,6 +34,7 @@ cd FileExplorer
 | Batch Rename | Regex capture groups, counter/date/parent tokens, collision checks, and live preview | Complete |
 | Transfer Queue | Pausable and reorderable copy, move, and delete queue with throttling, conflict choices, and text diff preview | Complete |
 | DocumentsProvider | SAF access to the local storage root with browsing, search, recent files, and document mutations | Complete |
+| USB OTG | UsbManager mass-storage detection, persistent SAF tree access, and DocumentFile read/write browsing | Requires configuration |
 | Share Server | Authenticated HTTP web access and passive FTP sharing with foreground service and Quick Settings start/stop | Complete |
 | File Encryption | AES-256-GCM encryption with an Android Keystore key and biometric-gated decryption from the browser | Complete |
 | Shizuku Android/data and obb | Optional UserService backend for scoped browsing and file operations under Android/data and Android/obb | Optional |
@@ -109,7 +110,7 @@ automatically for the action and disconnected afterward if it was not already ac
      ┌──▼──▼─────────────▼────────▼──────▼────▼─────────▼────▼─────▼────────▼──┐
      │                        Core Layer                                        │
      │  :core:data        FileRepositoryFactory → Local / Root / Archive        │
-     │                    EncryptedVolumeManager (root-only FUSE mounts)        │
+     │                    UsbFileRepository + EncryptedVolumeManager          │
      │  :core:plugin      Versioned AIDL plugin discovery and URI repository     │
      │  :core:storage     PermissionHelper, StorageVolumeHelper, RootHelper     │
      │  :core:network     SMB / SFTP / FTP / WebDAV + ConnectionManager         │
@@ -198,6 +199,7 @@ Cloud providers require OAuth configuration. Each is optional and the app works 
 | Share server | Share Server screen / Quick Settings | Authenticated HTTP or FTP access to a selected local folder |
 | Integrity watch | Security screen or Browser selection → More → Watch for changes | Recompute watched SHA-256 fingerprints every 15 minutes and notify on drift |
 | File tags | Browser selection → More → Set tags; drawer → Tags; Search → tag chips | Apply normalized tags and combine multiple tags with filename or regex search |
+| USB OTG | Drawer → USB OTG → Choose USB folder | Connect a mass-storage device, choose its SAF folder, then browse and mutate it with persisted access |
 | Encrypted volumes | Security → Encrypted volumes | Requires root, an installed gocryptfs or EncFS binary, FUSE support, and existing cipher directories |
 
 ## Theme

@@ -28,6 +28,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added exported Tasker / Automate intent actions for copy, move, archive creation, and saved-connection network uploads, with request completion broadcasts.
 - Added Room-backed integrity watches for files and directory trees, with browser selection support, periodic WorkManager scans, drift statuses, and notifications.
 - Added Room-backed file tags, browser assignment and management, and AND-combination tag filters in Search.
+- Added USB OTG browsing through UsbManager mass-storage detection, persisted SAF tree grants, and DocumentFile read/write operations.
 - Added a root-only encrypted-volume workflow for mounting and unmounting existing gocryptfs or EncFS volumes with protected passphrase handling.
 
 ## [v1.3.3] - 2026-06-30

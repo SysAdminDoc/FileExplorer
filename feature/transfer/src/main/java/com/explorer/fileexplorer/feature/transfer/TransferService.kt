@@ -135,7 +135,7 @@ class TransferService : Service() {
         currentJob = scope.launch {
             val repository = when (operation) {
                 FileOperation.DELETE -> repositoryFactory.getRepository(sources.first())
-                FileOperation.COPY, FileOperation.MOVE -> repositoryFactory.getRepository(destination)
+                FileOperation.COPY, FileOperation.MOVE -> repositoryFactory.getTransferRepository(sources, destination)
                 else -> fileRepository
             }
             val totalBytes = runCatching {

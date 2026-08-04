@@ -14,16 +14,21 @@ import com.explorer.fileexplorer.core.database.BookmarkEntity
 import com.explorer.fileexplorer.core.designsystem.AccentOrange
 import com.explorer.fileexplorer.core.designsystem.AccentRed
 import com.explorer.fileexplorer.core.model.StorageVolume
+import com.explorer.fileexplorer.core.data.UsbDeviceInfo
+import com.explorer.fileexplorer.core.data.UsbStorageRoot
 import com.explorer.fileexplorer.core.storage.RootState
 import com.explorer.fileexplorer.core.storage.ShizukuPaths
 
 @Composable
 fun NavigationDrawerContent(
     volumes: List<StorageVolume>,
+    usbDevices: List<UsbDeviceInfo>,
+    usbRoots: List<UsbStorageRoot>,
     bookmarks: List<BookmarkEntity>,
     rootState: RootState,
     rootEnabled: Boolean,
     onNavigate: (String) -> Unit,
+    onOpenUsbPicker: () -> Unit,
     onOpenCollections: () -> Unit,
     onOpenTags: () -> Unit,
     onToggleRoot: () -> Unit,
@@ -70,6 +75,34 @@ fun NavigationDrawerContent(
                     color = if (volume.usagePercent > 0.9f) AccentRed else MaterialTheme.colorScheme.primary,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant)
                 Spacer(Modifier.height(4.dp))
+            }
+
+            if (usbDevices.isNotEmpty() || usbRoots.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text("USB OTG", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
+                for (root in usbRoots) {
+                    NavigationDrawerItem(
+                        label = { Text(root.name) }, selected = false,
+                        onClick = { onNavigate(root.path) },
+                        icon = { Icon(Icons.Filled.Usb, null) },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                }
+                for (device in usbDevices) {
+                    NavigationDrawerItem(
+                        label = { Text(device.name) }, selected = false,
+                        onClick = onOpenUsbPicker,
+                        icon = { Icon(Icons.Filled.Usb, null) },
+                        badge = { Text("Choose folder", style = MaterialTheme.typography.labelSmall) },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                }
+                OutlinedButton(
+                    onClick = onOpenUsbPicker,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp),
+                ) { Text("Choose USB folder") }
             }
 
             Spacer(Modifier.height(8.dp))

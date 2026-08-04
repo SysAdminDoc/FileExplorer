@@ -1,8 +1,15 @@
 package com.explorer.fileexplorer.feature.browser
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -76,6 +83,27 @@ fun BrowserScreen(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var showSortMenu by remember { mutableStateOf(false) }
+    val usbTreePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
+        uri?.let(viewModel::addUsbTree)
+    }
+    DisposableEffect(context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(receiverContext: Context?, intent: Intent?) {
+                viewModel.refreshUsbStorage()
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction("android.hardware.usb.action.USB_DEVICE_ATTACHED")
+            addAction("android.hardware.usb.action.USB_DEVICE_DETACHED")
+        }
+        if (Build.VERSION.SDK_INT >= 33) {
+            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            context.registerReceiver(receiver, filter)
+        }
+        onDispose { context.unregisterReceiver(receiver) }
+    }
 
     LaunchedEffect(initialPath) {
         initialPath?.takeIf { it.isNotBlank() }?.let(viewModel::navigateTo)
@@ -89,7 +117,8 @@ fun BrowserScreen(
                     val extension = event.item.extension.lowercase()
                     if (event.item.path.startsWith("/") && extension in setOf("pdf", "docx", "xlsx")) {
                         onOpenPreview(event.item.path)
-                    } else if (event.item.isText || extension in setOf("kt", "java", "py", "js", "ts", "json", "xml", "html", "css", "sh", "ps1", "md", "txt", "yml", "yaml", "toml", "cfg", "ini", "conf", "log", "csv", "sql", "c", "cpp", "h", "rs", "go", "rb", "php", "swift", "gradle", "properties")) {
+                    } else if (event.item.path.startsWith("/") &&
+                        (event.item.isText || extension in setOf("kt", "java", "py", "js", "ts", "json", "xml", "html", "css", "sh", "ps1", "md", "txt", "yml", "yaml", "toml", "cfg", "ini", "conf", "log", "csv", "sql", "c", "cpp", "h", "rs", "go", "rb", "php", "swift", "gradle", "properties"))) {
                         onOpenEditor(event.item.path)
                     } else {
                         openFile(context, event.item)
@@ -127,9 +156,14 @@ fun BrowserScreen(
         drawerState = drawerState,
         drawerContent = {
             NavigationDrawerContent(
-                volumes = state.volumes, bookmarks = state.bookmarks,
+                volumes = state.volumes, usbDevices = state.usbDevices, usbRoots = state.usbRoots,
+                bookmarks = state.bookmarks,
                 rootState = state.rootState, rootEnabled = state.rootEnabled,
                 onNavigate = { path -> viewModel.navigateTo(path); scope.launch { drawerState.close() } },
+                onOpenUsbPicker = {
+                    scope.launch { drawerState.close() }
+                    usbTreePicker.launch(null)
+                },
                 onOpenCollections = { scope.launch { drawerState.close() }; onOpenCollections() },
                 onOpenTags = { scope.launch { drawerState.close() }; onOpenTags() },
                 onToggleRoot = { viewModel.toggleRootMode() },
@@ -701,7 +735,7 @@ private fun PropRow(label: String, value: String) {
 
 private fun openFile(context: android.content.Context, item: FileItem) {
     try {
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", File(item.path))
+        val uri = item.uri ?: FileProvider.getUriForFile(context, "${context.packageName}.provider", File(item.path))
         context.startActivity(Intent.createChooser(Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, item.mimeType); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }, "Open with"))
     } catch (_: Exception) { Toast.makeText(context, "No app found", Toast.LENGTH_SHORT).show() }
@@ -709,7 +743,10 @@ private fun openFile(context: android.content.Context, item: FileItem) {
 
 private fun shareFiles(context: android.content.Context, items: List<FileItem>) {
     try {
-        val uris = items.mapNotNull { try { FileProvider.getUriForFile(context, "${context.packageName}.provider", File(it.path)) } catch (_: Exception) { null } }
+        val uris = items.mapNotNull {
+            try { it.uri ?: FileProvider.getUriForFile(context, "${context.packageName}.provider", File(it.path)) }
+            catch (_: Exception) { null }
+        }
         if (uris.isEmpty()) return
         val intent = if (uris.size == 1) Intent(Intent.ACTION_SEND).apply { putExtra(Intent.EXTRA_STREAM, uris.first()); type = items.first().mimeType }
         else Intent(Intent.ACTION_SEND_MULTIPLE).apply { putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris)); type = "*/*" }

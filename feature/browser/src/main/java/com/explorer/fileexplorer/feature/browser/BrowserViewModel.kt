@@ -1,5 +1,6 @@
 package com.explorer.fileexplorer.feature.browser
 
+import android.net.Uri
 import android.os.Environment
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,6 +15,10 @@ import com.explorer.fileexplorer.core.data.LocalTrashManager
 import com.explorer.fileexplorer.core.data.RootFileRepository
 import com.explorer.fileexplorer.core.data.SecureDelete
 import com.explorer.fileexplorer.core.data.TagRepository
+import com.explorer.fileexplorer.core.data.UsbDeviceInfo
+import com.explorer.fileexplorer.core.data.UsbPathCodec
+import com.explorer.fileexplorer.core.data.UsbStorageManager
+import com.explorer.fileexplorer.core.data.UsbStorageRoot
 import com.explorer.fileexplorer.feature.security.FileEncryptionManager
 import com.explorer.fileexplorer.feature.security.FileEncryptionBatchResult
 import com.explorer.fileexplorer.feature.security.SecurityRepository
@@ -55,6 +60,9 @@ data class BrowserUiState(
     val selectedItems: Set<String> = emptySet(),
     val clipboard: ClipboardContent = ClipboardContent(),
     val volumes: List<StorageVolume> = emptyList(),
+    val usbDevices: List<UsbDeviceInfo> = emptyList(),
+    val usbRoots: List<UsbStorageRoot> = emptyList(),
+    val isRefreshingUsb: Boolean = false,
     val bookmarks: List<BookmarkEntity> = emptyList(),
     val tags: List<TagEntity> = emptyList(),
     val showTagDialog: Boolean = false,
@@ -130,6 +138,7 @@ class BrowserViewModel @Inject constructor(
     private val rootRepo: RootFileRepository,
     private val archiveHelper: ArchiveHelper,
     private val storageVolumeHelper: StorageVolumeHelper,
+    private val usbStorageManager: UsbStorageManager,
     private val trashManager: LocalTrashManager,
     private val settingsRepository: SettingsRepository,
     private val securityRepository: SecurityRepository,
@@ -152,6 +161,7 @@ class BrowserViewModel @Inject constructor(
 
     init {
         loadVolumes()
+        refreshUsbStorage()
         observeBookmarks()
         observeTags()
         observeRootState()
@@ -289,6 +299,10 @@ class BrowserViewModel @Inject constructor(
 
     fun navigateSecondaryUp() {
         val path = _state.value.secondaryPath
+        if (UsbPathCodec.isUsbPath(path)) {
+            UsbPathCodec.parentPath(path)?.let(::navigateSecondaryTo) ?: navigateSecondaryTo("/")
+            return
+        }
         val parent = path.substringBeforeLast('/', "/")
         if (parent.isNotEmpty() && parent != path) navigateSecondaryTo(parent)
     }
@@ -466,6 +480,10 @@ class BrowserViewModel @Inject constructor(
             if (ip.contains('/')) {
                 navigateInsideArchive(_state.value.archivePath!!, ip.substringBeforeLast('/'))
             } else { navigateTo(_state.value.archivePath!!.substringBeforeLast('/')) }
+            return
+        }
+        if (UsbPathCodec.isUsbPath(_state.value.currentPath)) {
+            UsbPathCodec.parentPath(_state.value.currentPath)?.let(::navigateTo) ?: navigateTo("/")
             return
         }
         val parent = _state.value.currentPath.substringBeforeLast('/', "/")
@@ -838,7 +856,11 @@ class BrowserViewModel @Inject constructor(
 
     fun createFolder(name: String) {
         viewModelScope.launch {
-            val path = "${_state.value.currentPath}/$name"
+            val path = if (UsbPathCodec.isUsbPath(_state.value.currentPath)) {
+                UsbPathCodec.childPath(_state.value.currentPath, name)
+            } else {
+                "${_state.value.currentPath}/$name"
+            }
             repoFactory.getRepository(path).createDirectory(path)
                 .onSuccess { _state.update { it.copy(showNewFolderDialog = false) }; refresh() }
                 .onFailure { e -> _events.emit(BrowserEvent.Toast("Create failed: ${e.message}")) }
@@ -980,6 +1002,27 @@ class BrowserViewModel @Inject constructor(
 
 
     private fun loadVolumes() { _state.update { it.copy(volumes = storageVolumeHelper.getStorageVolumes()) } }
+    fun refreshUsbStorage() {
+        if (_state.value.isRefreshingUsb) return
+        viewModelScope.launch {
+            _state.update { it.copy(isRefreshingUsb = true) }
+            val devices = usbStorageManager.connectedDevices()
+            val roots = usbStorageManager.savedRoots()
+            _state.update { it.copy(usbDevices = devices, usbRoots = roots, isRefreshingUsb = false) }
+        }
+    }
+
+    fun addUsbTree(uri: Uri) {
+        viewModelScope.launch {
+            usbStorageManager.saveTree(uri)
+                .onSuccess { root ->
+                    _events.emit(BrowserEvent.Toast("USB storage connected: ${root.name}"))
+                    _state.update { it.copy(usbRoots = (it.usbRoots + root).distinctBy(UsbStorageRoot::path)) }
+                    navigateTo(root.path)
+                }
+                .onFailure { error -> _events.emit(BrowserEvent.Toast("USB access failed: ${error.message}")) }
+        }
+    }
     private fun trashVolumeRoots(): List<String> = storageVolumeHelper.getStorageVolumes().map { it.path }.distinct()
     private fun observeBookmarks() { viewModelScope.launch { bookmarkDao.getAllFlow().collect { b -> _state.update { it.copy(bookmarks = b) } } } }
     private fun observeTags() { viewModelScope.launch { tagRepository.tags.collect { tags -> _state.update { it.copy(tags = tags) } } } }
