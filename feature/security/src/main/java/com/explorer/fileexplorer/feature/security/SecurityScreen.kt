@@ -4,9 +4,12 @@ import android.content.Context
 import android.widget.Toast
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -15,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -25,6 +29,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.explorer.fileexplorer.core.data.EncryptedVolumeFormat
+import com.explorer.fileexplorer.core.data.EncryptedVolumeManager
+import com.explorer.fileexplorer.core.data.EncryptedVolumeMount
+import com.explorer.fileexplorer.core.data.EncryptedVolumeRequest
 import com.explorer.fileexplorer.core.database.IntegrityEntryEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -262,6 +270,11 @@ data class SecurityUiState(
     val isComputing: Boolean = false,
     val integrityEntries: List<IntegrityEntryEntity> = emptyList(),
     val isScanningIntegrity: Boolean = false,
+    val encryptedFormats: List<EncryptedVolumeFormat> = emptyList(),
+    val encryptedMounts: List<EncryptedVolumeMount> = emptyList(),
+    val isLoadingEncryptedVolumes: Boolean = false,
+    val isMountingEncryptedVolume: Boolean = false,
+    val showEncryptedVolumeDialog: Boolean = false,
 )
 
 @HiltViewModel
@@ -269,6 +282,7 @@ class SecurityViewModel @Inject constructor(
     private val securityRepo: SecurityRepository,
     private val vaultManager: VaultManager,
     private val integrityRepository: IntegrityRepository,
+    private val encryptedVolumeManager: EncryptedVolumeManager,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SecurityUiState())
@@ -289,6 +303,7 @@ class SecurityViewModel @Inject constructor(
                 _state.update { it.copy(integrityEntries = entries) }
             }
         }
+        refreshEncryptedVolumes()
     }
 
     fun toggleAppLock() { viewModelScope.launch { securityRepo.setAppLock(!_state.value.settings.appLockEnabled) } }
@@ -334,6 +349,75 @@ class SecurityViewModel @Inject constructor(
             _state.update { it.copy(isScanningIntegrity = false) }
         }
     }
+
+    fun refreshEncryptedVolumes() {
+        if (_state.value.isLoadingEncryptedVolumes) return
+        viewModelScope.launch {
+            _state.update { it.copy(isLoadingEncryptedVolumes = true) }
+            runCatching {
+                encryptedVolumeManager.detectFormats() to encryptedVolumeManager.listMounted()
+            }.onSuccess { (formats, mounts) ->
+                _state.update {
+                    it.copy(
+                        encryptedFormats = formats,
+                        encryptedMounts = mounts,
+                        isLoadingEncryptedVolumes = false,
+                    )
+                }
+            }.onFailure { error ->
+                _state.update { it.copy(isLoadingEncryptedVolumes = false) }
+                _toasts.emit("Encrypted volume refresh failed: ${error.message}")
+            }
+        }
+    }
+
+    fun showEncryptedVolumeDialog() {
+        _state.update { it.copy(showEncryptedVolumeDialog = true) }
+    }
+
+    fun dismissEncryptedVolumeDialog() {
+        _state.update { it.copy(showEncryptedVolumeDialog = false) }
+    }
+
+    fun mountEncryptedVolume(
+        format: EncryptedVolumeFormat,
+        cipherPath: String,
+        mountPath: String,
+        readOnly: Boolean,
+        passphrase: CharArray,
+    ) {
+        if (_state.value.isMountingEncryptedVolume) {
+            passphrase.fill('\u0000')
+            return
+        }
+        viewModelScope.launch {
+            _state.update {
+                it.copy(
+                    showEncryptedVolumeDialog = false,
+                    isMountingEncryptedVolume = true,
+                )
+            }
+            encryptedVolumeManager.mount(
+                EncryptedVolumeRequest(format, cipherPath, mountPath, readOnly),
+                passphrase,
+            ).onSuccess {
+                _toasts.emit("${format.label} volume mounted")
+            }.onFailure { error ->
+                _toasts.emit("Encrypted volume mount failed: ${error.message}")
+            }
+            _state.update { it.copy(isMountingEncryptedVolume = false) }
+            refreshEncryptedVolumes()
+        }
+    }
+
+    fun unmountEncryptedVolume(mountPath: String) {
+        viewModelScope.launch {
+            encryptedVolumeManager.unmount(mountPath)
+                .onSuccess { _toasts.emit("Encrypted volume unmounted") }
+                .onFailure { error -> _toasts.emit("Encrypted volume unmount failed: ${error.message}") }
+            refreshEncryptedVolumes()
+        }
+    }
 }
 
 // -- Screen --
@@ -356,6 +440,16 @@ fun SecurityScreen(
                 viewModel.addIntegrityPath(path)
             },
             onDismiss = { showIntegrityPathDialog = false },
+        )
+    }
+    if (state.showEncryptedVolumeDialog) {
+        EncryptedVolumeDialog(
+            formats = state.encryptedFormats,
+            isMounting = state.isMountingEncryptedVolume,
+            onConfirm = { format, cipherPath, mountPath, readOnly, passphrase ->
+                viewModel.mountEncryptedVolume(format, cipherPath, mountPath, readOnly, passphrase)
+            },
+            onDismiss = viewModel::dismissEncryptedVolumeDialog,
         )
     }
 
@@ -499,6 +593,77 @@ fun SecurityScreen(
                 }
             }
 
+            // Encrypted volumes
+            item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
+            item {
+                Text("ENCRYPTED VOLUMES", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+            }
+            item {
+                ListItem(
+                    headlineContent = { Text("Encrypted volumes") },
+                    supportingContent = {
+                        Text("Mount existing gocryptfs or EncFS volumes through the root environment")
+                    },
+                    leadingContent = { Icon(Icons.Filled.EnhancedEncryption, null) },
+                    trailingContent = {
+                        IconButton(
+                            onClick = viewModel::refreshEncryptedVolumes,
+                            enabled = !state.isLoadingEncryptedVolumes && !state.isMountingEncryptedVolume,
+                        ) { Icon(Icons.Filled.Refresh, "Refresh encrypted volumes") }
+                    },
+                )
+            }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = viewModel::showEncryptedVolumeDialog,
+                        enabled = state.encryptedFormats.isNotEmpty() && !state.isMountingEncryptedVolume,
+                        modifier = Modifier.weight(1f),
+                    ) { Text("Mount volume") }
+                }
+            }
+            if (state.isLoadingEncryptedVolumes) {
+                item {
+                    Text(
+                        "Checking root environment...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+            } else if (state.encryptedFormats.isEmpty()) {
+                item {
+                    Text(
+                        "Root access and a compatible gocryptfs or EncFS binary with FUSE support are required.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+            }
+            if (state.encryptedMounts.isEmpty()) {
+                item {
+                    Text(
+                        "No encrypted volumes mounted.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                }
+            } else {
+                items(state.encryptedMounts, key = { it.mountPath }) { mount ->
+                    EncryptedVolumeMountRow(
+                        mount = mount,
+                        onUnmount = { viewModel.unmountEncryptedVolume(mount.mountPath) },
+                    )
+                }
+            }
+
             // Info
             item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             item {
@@ -520,6 +685,115 @@ fun SecurityScreen(
             item { Spacer(Modifier.height(32.dp)) }
         }
     }
+}
+
+@Composable
+private fun EncryptedVolumeMountRow(mount: EncryptedVolumeMount, onUnmount: () -> Unit) {
+    ListItem(
+        headlineContent = { Text("${mount.format.label}: ${mount.mountPath}", maxLines = 1) },
+        supportingContent = {
+            Text(
+                "Cipher: ${mount.cipherPath} · ${if (mount.readOnly) "read-only" else "read/write"}",
+                maxLines = 2,
+            )
+        },
+        leadingContent = { Icon(Icons.Filled.Lock, null) },
+        trailingContent = {
+            IconButton(onClick = onUnmount) { Icon(Icons.Filled.Eject, "Unmount volume") }
+        },
+    )
+}
+
+@Composable
+private fun EncryptedVolumeDialog(
+    formats: List<EncryptedVolumeFormat>,
+    isMounting: Boolean,
+    onConfirm: (EncryptedVolumeFormat, String, String, Boolean, CharArray) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var selectedFormat by remember(formats) { mutableStateOf(formats.firstOrNull()) }
+    var cipherPath by remember { mutableStateOf("") }
+    var mountPath by remember { mutableStateOf("") }
+    var passphrase by remember { mutableStateOf("") }
+    var readOnly by remember { mutableStateOf(false) }
+    val canSubmit = selectedFormat != null && cipherPath.isNotBlank() &&
+        mountPath.isNotBlank() && passphrase.isNotEmpty() && !isMounting
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Mount encrypted volume") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("Format", style = MaterialTheme.typography.labelLarge)
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    formats.forEach { format ->
+                        FilterChip(
+                            selected = selectedFormat == format,
+                            onClick = { selectedFormat = format },
+                            label = { Text(format.label) },
+                        )
+                    }
+                }
+                OutlinedTextField(
+                    value = cipherPath,
+                    onValueChange = { cipherPath = it },
+                    label = { Text("Cipher directory") },
+                    supportingText = { Text("Absolute path to an existing encrypted volume") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = mountPath,
+                    onValueChange = { mountPath = it },
+                    label = { Text("Empty mount directory") },
+                    supportingText = { Text("Files already in this directory are rejected") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = passphrase,
+                    onValueChange = { passphrase = it },
+                    label = { Text("Passphrase") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text("Read-only mount")
+                    Switch(checked = readOnly, onCheckedChange = { readOnly = it })
+                }
+                Text(
+                    "Only existing volumes are supported. The passphrase is sent through a temporary protected file and is not included in the root command.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val format = selectedFormat ?: return@TextButton
+                    val secret = passphrase.toCharArray()
+                    passphrase = ""
+                    onConfirm(format, cipherPath.trim(), mountPath.trim(), readOnly, secret)
+                },
+                enabled = canSubmit,
+            ) { Text(if (isMounting) "Mounting..." else "Mount") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !isMounting) { Text("Cancel") } },
+    )
 }
 
 @Composable

@@ -77,13 +77,6 @@ already have rclone configured; importing saves re-entering credentials.
 - **Impact:** 2/5 (niche but sticky). **Effort:** 2/5.
 - **Source:** Existing ROADMAP item; rclone community.
 
-### L-13: EncFS / encrypted volume support
-Mount EncFS or gocryptfs volumes in-place. MiXplorer supports EncFS across all storage
-backends (local, cloud, network). Enables accessing encrypted cloud storage.
-
-- **Impact:** 2/5 (privacy niche). **Effort:** 4/5.
-- **Source:** MiXplorer EncFS; gocryptfs Android.
-
 ### L-14: USB OTG support
 Read/write USB drives connected via OTG adapter. Uses Android UsbManager + DocumentFile
 for scoped-storage-safe access. Amaze has USB OTG support.
