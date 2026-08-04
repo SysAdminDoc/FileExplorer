@@ -13,6 +13,7 @@ import com.explorer.fileexplorer.core.data.LocalFileRepository
 import com.explorer.fileexplorer.core.data.LocalTrashManager
 import com.explorer.fileexplorer.core.data.RootFileRepository
 import com.explorer.fileexplorer.core.data.SecureDelete
+import com.explorer.fileexplorer.core.data.TagRepository
 import com.explorer.fileexplorer.feature.security.FileEncryptionManager
 import com.explorer.fileexplorer.feature.security.FileEncryptionBatchResult
 import com.explorer.fileexplorer.feature.security.SecurityRepository
@@ -24,6 +25,7 @@ import com.explorer.fileexplorer.core.database.DirectoryViewPreferenceCodec
 import com.explorer.fileexplorer.core.database.DirectoryViewPreferenceDao
 import com.explorer.fileexplorer.core.database.RecentFileDao
 import com.explorer.fileexplorer.core.database.RecentFileEntity
+import com.explorer.fileexplorer.core.database.TagEntity
 import com.explorer.fileexplorer.core.model.*
 import com.explorer.fileexplorer.core.storage.RootHelper
 import com.explorer.fileexplorer.core.storage.RootState
@@ -54,6 +56,9 @@ data class BrowserUiState(
     val clipboard: ClipboardContent = ClipboardContent(),
     val volumes: List<StorageVolume> = emptyList(),
     val bookmarks: List<BookmarkEntity> = emptyList(),
+    val tags: List<TagEntity> = emptyList(),
+    val showTagDialog: Boolean = false,
+    val tagDialogSelectedTags: Set<String> = emptySet(),
     val pathHistory: List<String> = emptyList(),
     val historyIndex: Int = -1,
     val propertiesItem: FileItem? = null,
@@ -130,6 +135,7 @@ class BrowserViewModel @Inject constructor(
     private val securityRepository: SecurityRepository,
     private val fileEncryptionManager: FileEncryptionManager,
     private val integrityRepository: IntegrityRepository,
+    private val tagRepository: TagRepository,
     private val transferQueueManager: TransferQueueManager,
     private val bookmarkDao: BookmarkDao,
     private val recentFileDao: RecentFileDao,
@@ -147,6 +153,7 @@ class BrowserViewModel @Inject constructor(
     init {
         loadVolumes()
         observeBookmarks()
+        observeTags()
         observeRootState()
         observeSettings()
         initializeRoot()
@@ -614,6 +621,54 @@ class BrowserViewModel @Inject constructor(
         }
     }
 
+    fun showTagDialog() {
+        val paths = getSelectedFileItems().map { it.path }
+        if (paths.isEmpty()) return
+        viewModelScope.launch {
+            val commonTags = tagRepository.commonTagsForPaths(paths)
+            _state.update {
+                it.copy(showTagDialog = true, tagDialogSelectedTags = commonTags)
+            }
+        }
+    }
+
+    fun dismissTagDialog() {
+        _state.update { it.copy(showTagDialog = false, tagDialogSelectedTags = emptySet()) }
+    }
+
+    fun toggleTagInDialog(tagName: String) {
+        _state.update { state ->
+            val selected = state.tagDialogSelectedTags.toMutableSet()
+            if (!selected.add(tagName)) selected.remove(tagName)
+            state.copy(tagDialogSelectedTags = selected)
+        }
+    }
+
+    fun createTagForDialog(value: String) {
+        viewModelScope.launch {
+            tagRepository.createTag(value)
+                .onSuccess { tag ->
+                    _state.update { it.copy(tagDialogSelectedTags = it.tagDialogSelectedTags + tag.name) }
+                }
+                .onFailure { error -> _events.emit(BrowserEvent.Toast(error.message ?: "Unable to create tag")) }
+        }
+    }
+
+    fun applyTags() {
+        val paths = getSelectedFileItems().map { it.path }
+        val selectedTags = _state.value.tagDialogSelectedTags
+        if (paths.isEmpty()) {
+            dismissTagDialog()
+            return
+        }
+        viewModelScope.launch {
+            tagRepository.replaceTags(paths, selectedTags)
+            _events.emit(BrowserEvent.Toast("Applied ${selectedTags.size} tag(s) to ${paths.size} item(s)"))
+            dismissTagDialog()
+            clearSelection()
+        }
+    }
+
     fun showCompressDialog() { _state.update { it.copy(showCompressDialog = true) } }
     fun dismissCompressDialog() { _state.update { it.copy(showCompressDialog = false) } }
 
@@ -927,6 +982,7 @@ class BrowserViewModel @Inject constructor(
     private fun loadVolumes() { _state.update { it.copy(volumes = storageVolumeHelper.getStorageVolumes()) } }
     private fun trashVolumeRoots(): List<String> = storageVolumeHelper.getStorageVolumes().map { it.path }.distinct()
     private fun observeBookmarks() { viewModelScope.launch { bookmarkDao.getAllFlow().collect { b -> _state.update { it.copy(bookmarks = b) } } } }
+    private fun observeTags() { viewModelScope.launch { tagRepository.tags.collect { tags -> _state.update { it.copy(tags = tags) } } } }
     private fun getSelectedFileItems(): List<FileItem> { val s = _state.value.selectedItems; return _state.value.files.filter { it.path in s } }
 
     private data class StagedRename(

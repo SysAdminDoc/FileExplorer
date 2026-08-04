@@ -19,6 +19,7 @@ import com.explorer.fileexplorer.feature.editor.DocumentPreviewScreen
 import com.explorer.fileexplorer.feature.network.NetworkScreen
 import com.explorer.fileexplorer.feature.network.ShareServerScreen
 import com.explorer.fileexplorer.feature.search.SearchScreen
+import com.explorer.fileexplorer.feature.search.TagsScreen
 import com.explorer.fileexplorer.feature.security.SecurityScreen
 import com.explorer.fileexplorer.feature.settings.SettingsScreen
 import com.explorer.fileexplorer.feature.transfer.TransferQueueScreen
@@ -29,6 +30,7 @@ object Routes {
     const val BROWSER = "browser"
     const val BROWSER_AT_PATH = "browser/{path}"
     const val SEARCH = "search"
+    const val TAGS = "tags"
     const val COLLECTIONS = "collections"
     const val SETTINGS = "settings"
     const val NETWORK = "network"
@@ -65,6 +67,7 @@ fun AppNavigation(
                 onOpenServer = { navController.navigate(Routes.SHARE_SERVER) },
                 onOpenCloud = { navController.navigate(Routes.CLOUD) },
                 onOpenCollections = { navController.navigate(Routes.COLLECTIONS) },
+                onOpenTags = { navController.navigate(Routes.TAGS) },
                 onOpenSecurity = { navController.navigate(Routes.SECURITY) },
                 onOpenApps = { navController.navigate(Routes.APPS) },
                 onOpenRootModules = { navController.navigate(Routes.ROOT_MODULES) },
@@ -91,6 +94,7 @@ fun AppNavigation(
                 onOpenServer = { navController.navigate(Routes.SHARE_SERVER) },
                 onOpenCloud = { navController.navigate(Routes.CLOUD) },
                 onOpenCollections = { navController.navigate(Routes.COLLECTIONS) },
+                onOpenTags = { navController.navigate(Routes.TAGS) },
                 onOpenSecurity = { navController.navigate(Routes.SECURITY) },
                 onOpenApps = { navController.navigate(Routes.APPS) },
                 onOpenRootModules = { navController.navigate(Routes.ROOT_MODULES) },
@@ -108,6 +112,10 @@ fun AppNavigation(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToFolder = { navController.popBackStack() },
             )
+        }
+
+        composable(Routes.TAGS) {
+            TagsScreen(onNavigateBack = { navController.popBackStack() })
         }
 
         composable(Routes.COLLECTIONS) {

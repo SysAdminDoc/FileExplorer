@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -29,6 +30,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.explorer.fileexplorer.core.data.ArchiveFormat
+import com.explorer.fileexplorer.core.database.TagEntity
 import com.explorer.fileexplorer.core.designsystem.AccentOrange
 import com.explorer.fileexplorer.core.model.*
 import com.explorer.fileexplorer.core.storage.RootState
@@ -52,6 +54,7 @@ fun BrowserScreen(
     onOpenServer: () -> Unit = {},
     onOpenCloud: () -> Unit = {},
     onOpenCollections: () -> Unit = {},
+    onOpenTags: () -> Unit = {},
     onOpenSecurity: () -> Unit = {},
     onOpenApps: () -> Unit = {},
     onOpenRootModules: () -> Unit = {},
@@ -128,6 +131,7 @@ fun BrowserScreen(
                 rootState = state.rootState, rootEnabled = state.rootEnabled,
                 onNavigate = { path -> viewModel.navigateTo(path); scope.launch { drawerState.close() } },
                 onOpenCollections = { scope.launch { drawerState.close() }; onOpenCollections() },
+                onOpenTags = { scope.launch { drawerState.close() }; onOpenTags() },
                 onToggleRoot = { viewModel.toggleRootMode() },
                 onOpenSettings = { scope.launch { drawerState.close() }; onOpenSettings() },
                 onOpenNetwork = { scope.launch { drawerState.close() }; onOpenNetwork() },
@@ -157,6 +161,7 @@ fun BrowserScreen(
                         onDecrypt = viewModel::requestDecryptSelected,
                         onCompress = viewModel::showCompressDialog,
                         onWatchIntegrity = viewModel::watchSelectedIntegrity,
+                        onTag = viewModel::showTagDialog,
                         onBatchRename = viewModel::showBatchRenameDialog,
                         onRename = { state.files.firstOrNull { it.path in state.selectedItems }?.let { viewModel.showRename(it) } },
                         onProperties = { state.files.firstOrNull { it.path in state.selectedItems }?.let { viewModel.showProperties(it) } },
@@ -376,6 +381,16 @@ fun BrowserScreen(
             onConfirm = { name, format, password -> viewModel.compressSelected(name, format, password) },
             onDismiss = viewModel::dismissCompressDialog)
     }
+    if (state.showTagDialog) {
+        TagAssignmentDialog(
+            tags = state.tags,
+            selectedTags = state.tagDialogSelectedTags,
+            onToggle = viewModel::toggleTagInDialog,
+            onCreate = viewModel::createTagForDialog,
+            onConfirm = viewModel::applyTags,
+            onDismiss = viewModel::dismissTagDialog,
+        )
+    }
     state.deleteConfirmationItem?.let { item ->
         AlertDialog(
             onDismissRequest = viewModel::dismissDeleteConfirmation,
@@ -471,7 +486,7 @@ private fun SelectionTopBar(
     onClear: () -> Unit, onSelectAll: () -> Unit,
     onCopy: () -> Unit, onCut: () -> Unit, onDelete: () -> Unit, onPermanentDelete: () -> Unit, onShare: () -> Unit,
     onEncrypt: () -> Unit, onDecrypt: () -> Unit,
-    onCompress: () -> Unit, onWatchIntegrity: () -> Unit, onBatchRename: () -> Unit,
+    onCompress: () -> Unit, onWatchIntegrity: () -> Unit, onTag: () -> Unit, onBatchRename: () -> Unit,
     onRename: () -> Unit, onProperties: () -> Unit,
     onHexView: () -> Unit,
 ) {
@@ -506,6 +521,8 @@ private fun SelectionTopBar(
                         leadingIcon = { Icon(Icons.Filled.FolderZip, null) })
                     DropdownMenuItem(text = { Text("Watch for changes") }, onClick = { onWatchIntegrity(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.VerifiedUser, null) })
+                    DropdownMenuItem(text = { Text("Set tags") }, onClick = { onTag(); moreExpanded = false },
+                        leadingIcon = { Icon(Icons.Filled.Label, null) })
                     DropdownMenuItem(text = { Text("Share") }, onClick = { onShare(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.Share, null) })
                     DropdownMenuItem(text = { Text("Encrypt files") }, onClick = { onEncrypt(); moreExpanded = false },
@@ -549,6 +566,69 @@ private fun InputDialog(title: String, label: String, initial: String, confirmTe
         text = { OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text(label) }, singleLine = true) },
         confirmButton = { TextButton(onClick = { if (text.isNotBlank()) onConfirm(text.trim()) }) { Text(confirmText) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+}
+
+@Composable
+private fun TagAssignmentDialog(
+    tags: List<TagEntity>,
+    selectedTags: Set<String>,
+    onToggle: (String) -> Unit,
+    onCreate: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var newTag by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Set tags") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "The selected tags replace the tags on every selected item.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                if (tags.isEmpty()) {
+                    Text("Create a tag below to get started.", style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    LazyColumn(modifier = Modifier.heightIn(max = 240.dp)) {
+                        items(tags, key = { it.name }) { tag ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onToggle(tag.name) },
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(
+                                    checked = tag.name in selectedTags,
+                                    onCheckedChange = { onToggle(tag.name) },
+                                )
+                                Text("#${tag.name}")
+                            }
+                        }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = newTag,
+                        onValueChange = { newTag = it },
+                        label = { Text("New tag") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        onClick = {
+                            if (newTag.isNotBlank()) {
+                                onCreate(newTag)
+                                newTag = ""
+                            }
+                        },
+                    ) { Text("Add") }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Apply") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

@@ -3,8 +3,10 @@ package com.explorer.fileexplorer.feature.search
 import android.os.Environment
 import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -20,14 +22,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.explorer.fileexplorer.core.data.LocalFileRepository
+import com.explorer.fileexplorer.core.data.TagRepository
 import com.explorer.fileexplorer.core.database.SearchHistoryDao
 import com.explorer.fileexplorer.core.database.SearchHistoryEntity
+import com.explorer.fileexplorer.core.database.TagEntity
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.ui.FileListItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.io.File
 import javax.inject.Inject
 
 data class SearchUiState(
@@ -38,12 +43,15 @@ data class SearchUiState(
     val useRegex: Boolean = false,
     val includeHidden: Boolean = false,
     val history: List<SearchHistoryEntity> = emptyList(),
+    val availableTags: List<TagEntity> = emptyList(),
+    val selectedTags: Set<String> = emptySet(),
 )
 
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val fileRepository: LocalFileRepository,
     private val searchHistoryDao: SearchHistoryDao,
+    private val tagRepository: TagRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SearchUiState())
@@ -56,23 +64,41 @@ class SearchViewModel @Inject constructor(
                 _state.update { it.copy(history = history) }
             }
         }
+        viewModelScope.launch {
+            tagRepository.tags.collect { tags ->
+                _state.update { it.copy(availableTags = tags) }
+            }
+        }
     }
 
     fun updateQuery(query: String) { _state.update { it.copy(query = query) } }
     fun setSearchPath(path: String) { _state.update { it.copy(searchPath = path) } }
     fun toggleRegex() { _state.update { it.copy(useRegex = !it.useRegex) } }
     fun toggleHidden() { _state.update { it.copy(includeHidden = !it.includeHidden) } }
+    fun toggleTag(tagName: String) {
+        _state.update { state ->
+            val selected = state.selectedTags.toMutableSet()
+            if (!selected.add(tagName)) selected.remove(tagName)
+            state.copy(selectedTags = selected)
+        }
+    }
+    fun clearTagFilters() { _state.update { it.copy(selectedTags = emptySet()) } }
 
     fun search() {
         val query = _state.value.query.trim()
-        if (query.isEmpty()) return
+        val selectedTags = _state.value.selectedTags
+        if (query.isEmpty() && selectedTags.isEmpty()) return
 
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             _state.update { it.copy(isSearching = true, results = emptyList()) }
 
             // Save to history
-            searchHistoryDao.upsert(SearchHistoryEntity(query = query, scopePath = _state.value.searchPath))
+            if (query.isNotEmpty()) {
+                searchHistoryDao.upsert(SearchHistoryEntity(query = query, scopePath = _state.value.searchPath))
+            }
+            val taggedPaths = selectedTags.takeIf { it.isNotEmpty() }
+                ?.let { tagRepository.pathsForAllTags(it) }
 
             fileRepository.searchStreaming(
                 rootPath = _state.value.searchPath,
@@ -80,7 +106,10 @@ class SearchViewModel @Inject constructor(
                 regex = _state.value.useRegex,
                 includeHidden = _state.value.includeHidden,
             ).collect { item ->
-                _state.update { it.copy(results = it.results + item) }
+                val canonicalPath = runCatching { File(item.path).canonicalPath }.getOrNull()
+                if (taggedPaths == null || item.path in taggedPaths || canonicalPath in taggedPaths) {
+                    _state.update { it.copy(results = it.results + item) }
+                }
             }
 
             _state.update { it.copy(isSearching = false) }
@@ -168,8 +197,31 @@ fun SearchScreen(
                 }
             }
 
+            if (state.availableTags.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Tags", style = MaterialTheme.typography.labelMedium)
+                    state.availableTags.forEach { tag ->
+                        FilterChip(
+                            selected = tag.name in state.selectedTags,
+                            onClick = { viewModel.toggleTag(tag.name) },
+                            label = { Text("#${tag.name}") },
+                        )
+                    }
+                    if (state.selectedTags.isNotEmpty()) {
+                        TextButton(onClick = viewModel::clearTagFilters) { Text("Clear") }
+                    }
+                }
+            }
+
             // Results
-            if (state.results.isEmpty() && !state.isSearching && state.query.isEmpty()) {
+            if (state.results.isEmpty() && !state.isSearching && state.query.isEmpty() && state.selectedTags.isEmpty()) {
                 // Show history
                 if (state.history.isNotEmpty()) {
                     Row(

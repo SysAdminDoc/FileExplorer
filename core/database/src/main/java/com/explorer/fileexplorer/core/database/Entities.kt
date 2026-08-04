@@ -11,6 +11,31 @@ data class BookmarkEntity(
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
 )
 
+@Entity(tableName = "tags")
+data class TagEntity(
+    @PrimaryKey
+    @ColumnInfo(name = "name") val name: String,
+    @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
+)
+
+@Entity(
+    tableName = "file_tags",
+    primaryKeys = ["path", "tag_name"],
+    foreignKeys = [
+        ForeignKey(
+            entity = TagEntity::class,
+            parentColumns = ["name"],
+            childColumns = ["tag_name"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index(value = ["tag_name"]), Index(value = ["path"])],
+)
+data class FileTagEntity(
+    @ColumnInfo(name = "path") val path: String,
+    @ColumnInfo(name = "tag_name") val tagName: String,
+)
+
 @Entity(tableName = "recent_files")
 data class RecentFileEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

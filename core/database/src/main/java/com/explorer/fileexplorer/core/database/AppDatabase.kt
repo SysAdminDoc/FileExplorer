@@ -21,8 +21,10 @@ import javax.inject.Singleton
         ConnectionEntity::class,
         DirectoryViewPreferenceEntity::class,
         IntegrityEntryEntity::class,
+        TagEntity::class,
+        FileTagEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -32,6 +34,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun connectionDao(): ConnectionDao
     abstract fun directoryViewPreferenceDao(): DirectoryViewPreferenceDao
     abstract fun integrityDao(): IntegrityDao
+    abstract fun tagDao(): TagDao
 }
 
 @Module
@@ -45,7 +48,7 @@ object DatabaseModule {
             context,
             AppDatabase::class.java,
             "file_explorer.db"
-        ).addMigrations(MIGRATION_2_3, MIGRATION_3_4).build()
+        ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
     }
 
     @Provides fun provideBookmarkDao(db: AppDatabase): BookmarkDao = db.bookmarkDao()
@@ -56,6 +59,7 @@ object DatabaseModule {
     fun provideDirectoryViewPreferenceDao(db: AppDatabase): DirectoryViewPreferenceDao =
         db.directoryViewPreferenceDao()
     @Provides fun provideIntegrityDao(db: AppDatabase): IntegrityDao = db.integrityDao()
+    @Provides fun provideTagDao(db: AppDatabase): TagDao = db.tagDao()
 }
 
 val MIGRATION_2_3 = object : Migration(2, 3) {
@@ -95,5 +99,31 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
             )
             """.trimIndent(),
         )
+    }
+}
+
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `tags` (
+                `name` TEXT NOT NULL,
+                `created_at` INTEGER NOT NULL,
+                PRIMARY KEY(`name`)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `file_tags` (
+                `path` TEXT NOT NULL,
+                `tag_name` TEXT NOT NULL,
+                PRIMARY KEY(`path`, `tag_name`),
+                FOREIGN KEY(`tag_name`) REFERENCES `tags`(`name`) ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_file_tags_tag_name` ON `file_tags` (`tag_name`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_file_tags_path` ON `file_tags` (`path`)")
     }
 }

@@ -27,6 +27,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added a root-only module browser for Magisk, KernelSU, and APatch, with module status toggles and manager-backed ZIP installation.
 - Added exported Tasker / Automate intent actions for copy, move, archive creation, and saved-connection network uploads, with request completion broadcasts.
 - Added Room-backed integrity watches for files and directory trees, with browser selection support, periodic WorkManager scans, drift statuses, and notifications.
+- Added Room-backed file tags, browser assignment and management, and AND-combination tag filters in Search.
 
 ## [v1.3.3] - 2026-06-30
 

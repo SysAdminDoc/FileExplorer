@@ -31,6 +31,45 @@ interface BookmarkDao {
 }
 
 @Dao
+interface TagDao {
+    @Query("SELECT * FROM tags ORDER BY name COLLATE NOCASE ASC")
+    fun getAllFlow(): Flow<List<TagEntity>>
+
+    @Query("SELECT * FROM tags ORDER BY name COLLATE NOCASE ASC")
+    suspend fun getAll(): List<TagEntity>
+
+    @Query("SELECT * FROM tags WHERE name = :name")
+    suspend fun getByName(name: String): TagEntity?
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(tag: TagEntity): Long
+
+    @Query("DELETE FROM tags WHERE name = :name")
+    suspend fun deleteByName(name: String)
+
+    @Query("SELECT tag_name FROM file_tags WHERE path = :path ORDER BY tag_name COLLATE NOCASE ASC")
+    suspend fun getTagNamesForPath(path: String): List<String>
+
+    @Query(
+        "SELECT path FROM file_tags WHERE tag_name IN (:tagNames) " +
+            "GROUP BY path HAVING COUNT(DISTINCT tag_name) = :tagCount ORDER BY path ASC",
+    )
+    suspend fun getPathsWithAllTags(tagNames: List<String>, tagCount: Int): List<String>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertFileTag(fileTag: FileTagEntity)
+
+    @Query("DELETE FROM file_tags WHERE path = :path")
+    suspend fun deleteAllForPath(path: String)
+
+    @Transaction
+    suspend fun replaceTags(path: String, tagNames: List<String>) {
+        deleteAllForPath(path)
+        tagNames.distinct().forEach { tagName -> insertFileTag(FileTagEntity(path, tagName)) }
+    }
+}
+
+@Dao
 interface RecentFileDao {
     @Query("SELECT * FROM recent_files ORDER BY accessed_at DESC LIMIT :limit")
     fun getRecentFlow(limit: Int = 100): Flow<List<RecentFileEntity>>

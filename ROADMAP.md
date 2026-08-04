@@ -77,13 +77,6 @@ already have rclone configured; importing saves re-entering credentials.
 - **Impact:** 2/5 (niche but sticky). **Effort:** 2/5.
 - **Source:** Existing ROADMAP item; rclone community.
 
-### L-12: Tag-based file organization
-User-defined tags applied to files, stored in Room DB, searchable via tag combinations.
-TagSpaces is the only Android app offering this. Emerging community request.
-
-- **Impact:** 2/5 (emerging). **Effort:** 3/5.
-- **Source:** TagSpaces app; Reddit community discussions.
-
 ### L-13: EncFS / encrypted volume support
 Mount EncFS or gocryptfs volumes in-place. MiXplorer supports EncFS across all storage
 backends (local, cloud, network). Enables accessing encrypted cloud storage.

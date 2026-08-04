@@ -59,6 +59,7 @@ cd FileExplorer
 | Secure Delete | DoD 5220.22-M 3-pass overwrite before deletion | Complete |
 | Checksum Verify | MD5, SHA-1, SHA-256, SHA-512 via java.security.MessageDigest | Complete |
 | Integrity Watch | Room-backed SHA-256 watches for files and directory trees, with periodic drift notifications | Complete |
+| File Tags | Room-backed tags with multi-tag AND search and browser assignment | Complete |
 | Text Editor | Built-in editor with syntax highlighting, line numbers, find/replace, undo/redo | Complete |
 | App Manager | List all apps, filter user/system/disabled, search, sort, share APK, uninstall | Complete |
 | APK Analyzer | Manifest, permissions, signing certificate SHA-256, shared UID, DEX method count, and ZIP directory size breakdown | Complete |
@@ -111,7 +112,7 @@ automatically for the action and disconnected afterward if it was not already ac
      │  :core:storage     PermissionHelper, StorageVolumeHelper, RootHelper     │
      │  :core:network     SMB / SFTP / FTP / WebDAV + ConnectionManager         │
      │  :core:cloud       Google Drive / Dropbox / OneDrive + AccountManager    │
-     │  :core:database    Room (bookmarks, recents, history, connections, views, integrity) │
+     │  :core:database    Room (bookmarks, recents, history, connections, views, integrity, tags) │
      │  :core:model       FileItem, SortOrder, TransferTask, ClipboardContent   │
      │  :core:ui          FileIcon, BreadcrumbBar, FileListItem                 │
      │  :core:designsystem  OLED dark theme, Material 3 colors                 │
@@ -194,6 +195,7 @@ Cloud providers require OAuth configuration. Each is optional and the app works 
 | Large-screen layout | Automatic on windows at least 840dp wide | Three-pane places, files, and preview workspace with Ctrl+A, Delete, F5, Escape, and Up shortcuts |
 | Share server | Share Server screen / Quick Settings | Authenticated HTTP or FTP access to a selected local folder |
 | Integrity watch | Security screen or Browser selection → More → Watch for changes | Recompute watched SHA-256 fingerprints every 15 minutes and notify on drift |
+| File tags | Browser selection → More → Set tags; drawer → Tags; Search → tag chips | Apply normalized tags and combine multiple tags with filename or regex search |
 
 ## Theme
 
