@@ -39,6 +39,7 @@ cd FileExplorer
 | Media casting | Cast a selected local or SAF-backed photo, video, or audio file through Chromecast's Cast dialog | Requires Chromecast / Google Cast services |
 | Localization | Shared Android string resources with English plus Spanish, Brazilian Portuguese, German, French, Japanese, Korean, Simplified Chinese, Russian, and Arabic locale variants | Core visible surfaces localized |
 | Thumbnail cache | Configurable 32–1024 MB Coil disk-cache cap, internal or external app-cache location, and one-tap purge controls in Settings | Complete |
+| Directory sizes | Optional coroutine-backed recursive folder sizes in list view with a bounded per-directory LRU cache | Complete |
 | Share Server | Authenticated HTTP web access and passive FTP sharing with foreground service and Quick Settings start/stop | Complete |
 | File Encryption | AES-256-GCM encryption with an Android Keystore key and biometric-gated decryption from the browser | Complete |
 | Shizuku Android/data and obb | Optional UserService backend for scoped browsing and file operations under Android/data and Android/obb | Optional |

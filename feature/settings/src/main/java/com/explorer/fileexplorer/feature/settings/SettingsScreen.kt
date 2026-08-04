@@ -51,6 +51,7 @@ object SettingsKeys {
     val THEME_MODE = stringPreferencesKey("theme_mode")
     val TRASH_TTL_DAYS = intPreferencesKey("trash_ttl_days")
     val COMPACT_DENSITY = booleanPreferencesKey("compact_density")
+    val SHOW_DIRECTORY_SIZES = booleanPreferencesKey("show_directory_sizes")
     val SWIPE_LEFT_ACTION = stringPreferencesKey("swipe_left_action")
     val SWIPE_RIGHT_ACTION = stringPreferencesKey("swipe_right_action")
 }
@@ -116,6 +117,7 @@ data class SettingsState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val trashTtlDays: Int = LocalTrashManager.DEFAULT_TTL_DAYS,
     val compactDensity: Boolean = false,
+    val showDirectorySizes: Boolean = false,
     val swipeLeftAction: SwipeAction = SwipeAction.NONE,
     val swipeRightAction: SwipeAction = SwipeAction.NONE,
 )
@@ -142,6 +144,7 @@ class SettingsRepository @Inject constructor(
             themeMode = ThemeMode.fromKey(prefs[SettingsKeys.THEME_MODE]),
             trashTtlDays = prefs[SettingsKeys.TRASH_TTL_DAYS] ?: LocalTrashManager.DEFAULT_TTL_DAYS,
             compactDensity = prefs[SettingsKeys.COMPACT_DENSITY] ?: false,
+            showDirectorySizes = prefs[SettingsKeys.SHOW_DIRECTORY_SIZES] ?: false,
             swipeLeftAction = SwipeAction.fromKey(prefs[SettingsKeys.SWIPE_LEFT_ACTION]),
             swipeRightAction = SwipeAction.fromKey(prefs[SettingsKeys.SWIPE_RIGHT_ACTION]),
         )
@@ -179,6 +182,7 @@ class SettingsViewModel @Inject constructor(
     fun setThemeMode(mode: ThemeMode) { viewModelScope.launch { repo.update(SettingsKeys.THEME_MODE, mode.name) } }
     fun setTrashTtlDays(days: Int) { viewModelScope.launch { repo.update(SettingsKeys.TRASH_TTL_DAYS, days) } }
     fun toggleCompactDensity() { viewModelScope.launch { repo.update(SettingsKeys.COMPACT_DENSITY, !state.value.compactDensity) } }
+    fun toggleShowDirectorySizes() { viewModelScope.launch { repo.update(SettingsKeys.SHOW_DIRECTORY_SIZES, !state.value.showDirectorySizes) } }
     fun setSwipeLeftAction(action: SwipeAction) { viewModelScope.launch { repo.update(SettingsKeys.SWIPE_LEFT_ACTION, action.name) } }
     fun setSwipeRightAction(action: SwipeAction) { viewModelScope.launch { repo.update(SettingsKeys.SWIPE_RIGHT_ACTION, action.name) } }
     fun setThumbnailCacheSize(sizeMb: Int) {
@@ -302,6 +306,13 @@ fun SettingsScreen(
                 subtitle = stringResource(DesignSystemR.string.reduce_spacing),
                 checked = state.compactDensity,
                 onToggle = viewModel::toggleCompactDensity,
+            )
+
+            SettingsToggle(
+                title = stringResource(DesignSystemR.string.show_directory_sizes),
+                subtitle = stringResource(DesignSystemR.string.show_directory_sizes_description),
+                checked = state.showDirectorySizes,
+                onToggle = viewModel::toggleShowDirectorySizes,
             )
 
             ThumbnailCacheSettingsPanel(

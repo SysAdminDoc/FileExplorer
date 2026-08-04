@@ -12,6 +12,7 @@ import com.explorer.fileexplorer.core.data.FileRepository
 import com.explorer.fileexplorer.core.data.FileRepositoryFactory
 import com.explorer.fileexplorer.core.data.LocalFileRepository
 import com.explorer.fileexplorer.core.data.LocalTrashManager
+import com.explorer.fileexplorer.core.data.NetworkRepoAdapter
 import com.explorer.fileexplorer.core.data.RootFileRepository
 import com.explorer.fileexplorer.core.data.SecureDelete
 import com.explorer.fileexplorer.core.data.TagRepository
@@ -38,8 +39,13 @@ import com.explorer.fileexplorer.core.storage.StorageVolumeHelper
 import com.explorer.fileexplorer.feature.settings.SettingsRepository
 import com.explorer.fileexplorer.feature.settings.SwipeAction
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.cancellation.CancellationException
 import java.util.UUID
 import javax.inject.Inject
 
@@ -83,6 +89,10 @@ data class BrowserUiState(
     val deleteConfirmationItem: FileItem? = null,
     val showExtractDialog: Boolean = false,
     val compactDensity: Boolean = false,
+    val showDirectorySizes: Boolean = false,
+    val directorySizes: Map<String, Long> = emptyMap(),
+    val directorySizesLoading: Set<String> = emptySet(),
+    val directorySizesUnavailable: Set<String> = emptySet(),
     val confirmDelete: Boolean = false,
     val swipeLeftAction: SwipeAction = SwipeAction.NONE,
     val swipeRightAction: SwipeAction = SwipeAction.NONE,
@@ -91,6 +101,9 @@ data class BrowserUiState(
     val secondaryFiles: List<FileItem> = emptyList(),
     val secondaryIsLoading: Boolean = false,
     val secondaryError: String? = null,
+    val secondaryDirectorySizes: Map<String, Long> = emptyMap(),
+    val secondaryDirectorySizesLoading: Set<String> = emptySet(),
+    val secondaryDirectorySizesUnavailable: Set<String> = emptySet(),
     val secondarySelectedItems: Set<String> = emptySet(),
     val pendingDrop: PendingDrop? = null,
     val tabs: List<BrowserTab> = listOf(
@@ -161,6 +174,10 @@ class BrowserViewModel @Inject constructor(
     private val _events = MutableSharedFlow<BrowserEvent>()
     val events: SharedFlow<BrowserEvent> = _events.asSharedFlow()
 
+    private val directorySizeCache = DirectorySizeCache()
+    private var directorySizeJob: Job? = null
+    private var secondaryDirectorySizeJob: Job? = null
+
     init {
         loadVolumes()
         refreshUsbStorage()
@@ -175,13 +192,47 @@ class BrowserViewModel @Inject constructor(
     private fun observeSettings() {
         viewModelScope.launch {
             settingsRepository.settings.collect { s ->
+                val previous = _state.value
                 _state.update {
                     it.copy(
                         compactDensity = s.compactDensity,
+                        showDirectorySizes = s.showDirectorySizes,
                         confirmDelete = s.confirmDelete,
                         swipeLeftAction = s.swipeLeftAction,
                         swipeRightAction = s.swipeRightAction,
                     )
+                }
+                val current = _state.value
+                if (!s.showDirectorySizes) {
+                    directorySizeJob?.cancel()
+                    secondaryDirectorySizeJob?.cancel()
+                    _state.update {
+                        it.copy(
+                            directorySizes = emptyMap(),
+                            directorySizesLoading = emptySet(),
+                            directorySizesUnavailable = emptySet(),
+                            secondaryDirectorySizes = emptyMap(),
+                            secondaryDirectorySizesLoading = emptySet(),
+                            secondaryDirectorySizesUnavailable = emptySet(),
+                        )
+                    }
+                } else if (!previous.showDirectorySizes) {
+                    if (!current.insideArchive && current.files.isNotEmpty()) {
+                        scheduleDirectorySizes(
+                            path = current.currentPath,
+                            files = current.files,
+                            repository = repoFactory.getRepository(current.currentPath),
+                            secondary = false,
+                        )
+                    }
+                    if (current.dualPaneEnabled && current.secondaryFiles.isNotEmpty()) {
+                        scheduleDirectorySizes(
+                            path = current.secondaryPath,
+                            files = current.secondaryFiles,
+                            repository = repoFactory.getRepository(current.secondaryPath),
+                            secondary = true,
+                        )
+                    }
                 }
             }
         }
@@ -200,6 +251,100 @@ class BrowserViewModel @Inject constructor(
         }
     }
 
+    private fun scheduleDirectorySizes(
+        path: String,
+        files: List<FileItem>,
+        repository: FileRepository,
+        secondary: Boolean,
+    ) {
+        val directories = files.filter(FileItem::isDirectory).map(FileItem::path)
+        val unavailable = if (repository is NetworkRepoAdapter) directories.toSet() else emptySet()
+        val loading = if (_state.value.showDirectorySizes && unavailable.isEmpty()) directories.toSet() else emptySet()
+
+        if (secondary) {
+            secondaryDirectorySizeJob?.cancel()
+            secondaryDirectorySizeJob = null
+            _state.update {
+                if (it.secondaryPath != path) it else it.copy(
+                    secondaryDirectorySizes = emptyMap(),
+                    secondaryDirectorySizesLoading = loading,
+                    secondaryDirectorySizesUnavailable = unavailable,
+                )
+            }
+        } else {
+            directorySizeJob?.cancel()
+            directorySizeJob = null
+            _state.update {
+                if (it.currentPath != path) it else it.copy(
+                    directorySizes = emptyMap(),
+                    directorySizesLoading = loading,
+                    directorySizesUnavailable = unavailable,
+                )
+            }
+        }
+
+        if (!_state.value.showDirectorySizes || directories.isEmpty() || unavailable.isNotEmpty()) return
+
+        val cachePrefix = repository::class.qualifiedName ?: repository::class.java.name
+        val job = viewModelScope.launch {
+            for (directory in directories) {
+                ensureActive()
+                val cacheKey = "$cachePrefix|$directory"
+                val size = directorySizeCache.get(cacheKey) ?: calculateDirectorySize(repository, directory)?.also {
+                    directorySizeCache.put(cacheKey, it)
+                }
+                if (!isCurrentDirectorySizeRequest(path, secondary)) return@launch
+                _state.update { state ->
+                    if (secondary) {
+                        if (size == null) {
+                            state.copy(
+                                secondaryDirectorySizesLoading = state.secondaryDirectorySizesLoading - directory,
+                                secondaryDirectorySizesUnavailable = state.secondaryDirectorySizesUnavailable + directory,
+                            )
+                        } else {
+                            state.copy(
+                                secondaryDirectorySizes = state.secondaryDirectorySizes + (directory to size),
+                                secondaryDirectorySizesLoading = state.secondaryDirectorySizesLoading - directory,
+                            )
+                        }
+                    } else if (size == null) {
+                        state.copy(
+                            directorySizesLoading = state.directorySizesLoading - directory,
+                            directorySizesUnavailable = state.directorySizesUnavailable + directory,
+                        )
+                    } else {
+                        state.copy(
+                            directorySizes = state.directorySizes + (directory to size),
+                            directorySizesLoading = state.directorySizesLoading - directory,
+                        )
+                    }
+                }
+            }
+        }
+        if (secondary) secondaryDirectorySizeJob = job else directorySizeJob = job
+    }
+
+    private suspend fun calculateDirectorySize(repository: FileRepository, path: String): Long? = try {
+        withContext(Dispatchers.IO) { repository.calculateSize(listOf(path)) }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun isCurrentDirectorySizeRequest(path: String, secondary: Boolean): Boolean {
+        val state = _state.value
+        return state.showDirectorySizes && if (secondary) {
+            state.secondaryPath == path
+        } else {
+            state.currentPath == path && !state.insideArchive
+        }
+    }
+
+    private fun clearDirectorySizeCacheForRefresh() {
+        directorySizeCache.clear()
+    }
+
     fun toggleRootMode() {
         if (rootHelper.isRooted) {
             rootHelper.setRootEnabled(!rootHelper.rootEnabled.value)
@@ -210,6 +355,14 @@ class BrowserViewModel @Inject constructor(
     }
 
     fun navigateTo(path: String) {
+        directorySizeJob?.cancel()
+        _state.update {
+            it.copy(
+                directorySizes = emptyMap(),
+                directorySizesLoading = emptySet(),
+                directorySizesUnavailable = emptySet(),
+            )
+        }
         viewModelScope.launch {
             val preferences = DirectoryViewPreferenceCodec.decode(directoryViewPreferenceDao.getByPath(path))
             _state.update {
@@ -239,6 +392,7 @@ class BrowserViewModel @Inject constructor(
                         insideArchive = false, archivePath = null, archiveInternalPath = "",
                         selinuxContext = selinux)
                 }
+                scheduleDirectorySizes(path, sorted, repo, secondary = false)
             }
         }
     }
@@ -260,6 +414,16 @@ class BrowserViewModel @Inject constructor(
                 pendingDrop = null,
             )
         }
+        if (!enabled) {
+            secondaryDirectorySizeJob?.cancel()
+            _state.update {
+                it.copy(
+                    secondaryDirectorySizes = emptyMap(),
+                    secondaryDirectorySizesLoading = emptySet(),
+                    secondaryDirectorySizesUnavailable = emptySet(),
+                )
+            }
+        }
         if (enabled) {
             navigateSecondaryTo(current.secondaryPath.ifBlank { current.currentPath })
         }
@@ -267,6 +431,14 @@ class BrowserViewModel @Inject constructor(
 
     fun navigateSecondaryTo(path: String) {
         if (!_state.value.dualPaneEnabled) return
+        secondaryDirectorySizeJob?.cancel()
+        _state.update {
+            it.copy(
+                secondaryDirectorySizes = emptyMap(),
+                secondaryDirectorySizesLoading = emptySet(),
+                secondaryDirectorySizesUnavailable = emptySet(),
+            )
+        }
         viewModelScope.launch {
             _state.update {
                 it.copy(
@@ -281,15 +453,18 @@ class BrowserViewModel @Inject constructor(
                 )
             }
             try {
-                repoFactory.getRepository(path).listFiles(path).collect { files ->
+                val repository = repoFactory.getRepository(path)
+                repository.listFiles(path).collect { files ->
+                    val sorted = sortFiles(files, _state.value.sortOrder, _state.value.showHidden)
                     _state.update {
                         it.copy(
                             secondaryPath = path,
-                            secondaryFiles = sortFiles(files, it.sortOrder, it.showHidden),
+                            secondaryFiles = sorted,
                             secondaryIsLoading = false,
                             secondaryError = null,
                         )
                     }
+                    scheduleDirectorySizes(path, sorted, repository, secondary = true)
                 }
             } catch (e: Exception) {
                 _state.update {
@@ -310,6 +485,7 @@ class BrowserViewModel @Inject constructor(
     }
 
     fun refreshSecondary() {
+        clearDirectorySizeCacheForRefresh()
         navigateSecondaryTo(_state.value.secondaryPath)
     }
 
@@ -504,14 +680,24 @@ class BrowserViewModel @Inject constructor(
     }
 
     private fun loadPath(path: String, historyIndex: Int) {
+        directorySizeJob?.cancel()
+        _state.update {
+            it.copy(
+                directorySizes = emptyMap(),
+                directorySizesLoading = emptySet(),
+                directorySizesUnavailable = emptySet(),
+            )
+        }
         viewModelScope.launch {
             val preferences = DirectoryViewPreferenceCodec.decode(directoryViewPreferenceDao.getByPath(path))
             _state.update { it.copy(isLoading = true, selectedItems = emptySet()) }
-            repoFactory.getRepository(path).listFiles(path).collect { files ->
+            val repository = repoFactory.getRepository(path)
+            repository.listFiles(path).collect { files ->
+                val sorted = sortFiles(files, preferences.sortOrder, _state.value.showHidden)
                 _state.update {
                     it.copy(
                         currentPath = path,
-                        files = sortFiles(files, preferences.sortOrder, it.showHidden),
+                        files = sorted,
                         sortOrder = preferences.sortOrder,
                         viewMode = preferences.viewMode,
                         visibleColumns = preferences.visibleColumns,
@@ -519,18 +705,23 @@ class BrowserViewModel @Inject constructor(
                         historyIndex = historyIndex,
                     )
                 }
+                scheduleDirectorySizes(path, sorted, repository, secondary = false)
             }
         }
     }
 
     private fun navigateInsideArchive(archivePath: String, internalPath: String) {
+        directorySizeJob?.cancel()
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
             try {
                 val entries = archiveHelper.listArchive(archivePath, internalPath)
                 _state.update { it.copy(files = entries, isLoading = false, insideArchive = true,
                     archivePath = archivePath, archiveInternalPath = internalPath,
-                    currentPath = "$archivePath/$internalPath".trimEnd('/')) }
+                    currentPath = "$archivePath/$internalPath".trimEnd('/'),
+                    directorySizes = emptyMap(),
+                    directorySizesLoading = emptySet(),
+                    directorySizesUnavailable = emptySet()) }
             } catch (e: Exception) {
                 _state.update { it.copy(isLoading = false, error = "Archive error: ${e.message}") }
             }
@@ -998,6 +1189,7 @@ class BrowserViewModel @Inject constructor(
     }
 
     fun refresh() {
+        clearDirectorySizeCacheForRefresh()
         if (_state.value.insideArchive) navigateInsideArchive(_state.value.archivePath!!, _state.value.archiveInternalPath)
         else navigateTo(_state.value.currentPath)
     }

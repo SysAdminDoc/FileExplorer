@@ -32,6 +32,9 @@ fun FileListItem(
     selectionMode: Boolean = false,
     compact: Boolean = false,
     visibleColumns: Set<FileColumn> = FileColumn.DEFAULT_VISIBLE_COLUMNS,
+    showDirectorySizes: Boolean = false,
+    directorySize: Long? = null,
+    directorySizeUnavailable: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onSwipeLeft: (() -> Unit)? = null,
@@ -114,6 +117,17 @@ fun FileListItem(
                             item.childCount?.let { count ->
                                 Text(
                                     text = "$count items",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (showDirectorySizes) {
+                                Text(
+                                    text = when {
+                                        directorySize != null -> FileItem.formatSize(directorySize)
+                                        directorySizeUnavailable -> stringResource(DesignSystemR.string.directory_size_unavailable)
+                                        else -> stringResource(DesignSystemR.string.directory_size_calculating)
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )

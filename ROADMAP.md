@@ -77,13 +77,6 @@ already have rclone configured; importing saves re-entering credentials.
 - **Impact:** 2/5 (niche but sticky). **Effort:** 2/5.
 - **Source:** Existing ROADMAP item; rclone community.
 
-### L-19: Real-time directory size
-Opt-in setting to show recursive directory sizes in list view. Background-computed via coroutines
-with a per-directory LRU cache. DiskUsage and X-plore both show this.
-
-- **Impact:** 3/5. **Effort:** 2/5.
-- **Source:** Existing ROADMAP item; X-plore directory size display; community requests.
-
 ### L-20: Saved searches
 Named regex + path filter combinations pinned to the navigation drawer. Quick recall for
 frequently used search patterns.

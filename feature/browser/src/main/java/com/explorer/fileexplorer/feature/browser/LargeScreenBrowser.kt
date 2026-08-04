@@ -388,6 +388,9 @@ private fun LargeFilePane(
                                 selectionMode = state.selectionMode,
                                 compact = state.compactDensity,
                                 visibleColumns = state.visibleColumns,
+                                showDirectorySizes = state.showDirectorySizes,
+                                directorySize = state.directorySizes[item.path],
+                                directorySizeUnavailable = item.path in state.directorySizesUnavailable,
                                 onClick = { onSelectItem(item) },
                                 onLongClick = { onLongClick(item) },
                                 modifier = Modifier

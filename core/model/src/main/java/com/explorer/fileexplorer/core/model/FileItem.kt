@@ -48,10 +48,7 @@ data class FileItem(
     val displaySize: String
         get() = when {
             isDirectory -> childCount?.let { "$it items" } ?: ""
-            size < 1024 -> "$size B"
-            size < 1024 * 1024 -> "%.1f KB".format(size / 1024.0)
-            size < 1024 * 1024 * 1024 -> "%.1f MB".format(size / (1024.0 * 1024.0))
-            else -> "%.2f GB".format(size / (1024.0 * 1024.0 * 1024.0))
+            else -> formatSize(size)
         }
 
     companion object {
@@ -66,5 +63,12 @@ data class FileItem(
             "c", "cpp", "h", "hpp", "rs", "go", "rb", "php", "sql",
             "gradle", "properties", "gitignore", "env", "dockerfile"
         )
+
+        fun formatSize(size: Long): String = when {
+            size < 1024 -> "$size B"
+            size < 1024 * 1024 -> "%.1f KB".format(size / 1024.0)
+            size < 1024 * 1024 * 1024 -> "%.1f MB".format(size / (1024.0 * 1024.0))
+            else -> "%.2f GB".format(size / (1024.0 * 1024.0 * 1024.0))
+        }
     }
 }

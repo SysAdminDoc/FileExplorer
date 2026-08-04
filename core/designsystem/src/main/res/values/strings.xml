@@ -137,6 +137,10 @@
     <string name="always_show_folders">Always show folders before files</string>
     <string name="compact_density">Compact density</string>
     <string name="reduce_spacing">Reduce spacing for more visible files per screen</string>
+    <string name="show_directory_sizes">Show directory sizes</string>
+    <string name="show_directory_sizes_description">Calculate recursive folder sizes in list view</string>
+    <string name="directory_size_calculating">Calculating size…</string>
+    <string name="directory_size_unavailable">Size unavailable</string>
     <string name="confirm_delete">Confirm delete</string>
     <string name="confirm_before_delete">Show confirmation before deleting files</string>
     <string name="swipe_left">Swipe left</string>
