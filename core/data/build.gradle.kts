@@ -35,6 +35,7 @@ dependencies {
     // Archive handling
     implementation(libs.commons.compress)
     implementation(libs.zip4j)
+    implementation(libs.junrar)
     implementation(libs.xz)
     implementation(libs.zstd.jni)
 }

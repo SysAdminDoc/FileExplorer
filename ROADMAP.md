@@ -58,14 +58,6 @@ For operations exceeding 6 hours, consider chunking or using WorkManager.
 
 ## Next (v1.5.0 -- v1.7.0)
 
-### X-12: RAR archive read support
-Add `libarchive` JNI or `junrar` for RAR decompression (read-only — RAR creation requires
-proprietary license). RAR is still widely used. Material Files uses `libarchive` for this.
-MiXplorer's MiX Archive add-on handles RAR.
-
-- **Impact:** 3/5 (common format). **Effort:** 2/5.
-- **Source:** Material Files libarchive; MiX Archive add-on; user complaints about RAR gaps.
-
 ---
 
 ## Later (v2.0+)

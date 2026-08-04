@@ -4,6 +4,8 @@ import android.content.Context
 import android.webkit.MimeTypeMap
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
+import com.github.junrar.Archive
+import com.github.junrar.rarfile.FileHeader
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -30,7 +32,7 @@ import javax.inject.Singleton
 
 /**
  * Handles archive browsing (as virtual folders), extraction, and creation.
- * Supports: ZIP (via zip4j for encryption), TAR, GZ, BZ2, XZ, 7z, Zstandard.
+ * Supports: ZIP (via zip4j for encryption), RAR (read-only), TAR, GZ, BZ2, XZ, 7z, Zstandard.
  */
 @Singleton
 class ArchiveHelper @Inject constructor(
@@ -45,6 +47,7 @@ class ArchiveHelper @Inject constructor(
         val allEntries = when {
             ext == "zip" || ext == "jar" || ext == "war" || ext == "ear" -> listZipEntries(archivePath)
             ext == "7z" -> list7zEntries(archivePath)
+            ext == "rar" -> listRarEntries(archivePath)
             ext in setOf("tar", "tgz", "tbz2", "txz") || isTarCompressed(archivePath) -> listTarEntries(archivePath)
             else -> emptyList()
         }
@@ -99,6 +102,7 @@ class ArchiveHelper @Inject constructor(
             val count = when {
                 ext == "zip" || ext == "jar" -> extractZip(archivePath, destination, entriesToExtract, password, onProgress)
                 ext == "7z" -> extract7z(archivePath, destination, entriesToExtract, onProgress)
+                ext == "rar" -> extractRar(archivePath, destination, entriesToExtract, password, onProgress)
                 ext in setOf("tar", "tgz", "tbz2", "txz") || isTarCompressed(archivePath) ->
                     extractTar(archivePath, destination, entriesToExtract, onProgress)
                 else -> 0
@@ -134,7 +138,7 @@ class ArchiveHelper @Inject constructor(
     fun isArchive(path: String): Boolean {
         val ext = path.substringAfterLast('.').lowercase()
         return ext in setOf("zip", "jar", "war", "ear", "7z", "tar", "gz", "tgz",
-            "bz2", "tbz2", "xz", "txz", "zst")
+            "bz2", "tbz2", "xz", "txz", "zst", "rar")
     }
 
     // -- ZIP (via zip4j for encryption support) --
@@ -312,6 +316,67 @@ class ArchiveHelper @Inject constructor(
             out.closeArchiveEntry()
             onProgress(0, 0, file.name)
         }
+    }
+
+    // -- RAR (read-only via Junrar) --
+
+    private fun listRarEntries(path: String): List<FileItem> {
+        val entries = mutableListOf<FileItem>()
+        Archive(File(path)).use { archive ->
+            for (header in archive) {
+                entries += header.toFileItem()
+            }
+        }
+        return entries
+    }
+
+    private fun extractRar(
+        archivePath: String,
+        destination: String,
+        entries: List<String>?,
+        password: CharArray?,
+        onProgress: (Long, Long, String) -> Unit,
+    ): Int {
+        val archive = if (password == null) {
+            Archive(File(archivePath))
+        } else {
+            Archive(File(archivePath), String(password))
+        }
+        var count = 0
+        archive.use {
+            for (header in archive) {
+                val entryName = header.fileName.trimEnd('/')
+                if (entryName.isEmpty() || (entries != null && entryName !in entries)) continue
+
+                val outputFile = ArchiveEntryPathPolicy.safeDestination(destination, entryName) ?: continue
+                if (header.isDirectory) {
+                    outputFile.mkdirs()
+                } else {
+                    outputFile.parentFile?.mkdirs()
+                    FileOutputStream(outputFile).use { output -> archive.extractFile(header, output) }
+                }
+                count++
+                onProgress(count.toLong(), -1L, entryName)
+            }
+        }
+        return count
+    }
+
+    private fun FileHeader.toFileItem(): FileItem {
+        val name = fileName.trimEnd('/')
+        val extension = name.substringAfterLast('.', "")
+        val mime = if (isDirectory) "inode/directory"
+        else MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.lowercase())
+            ?: "application/octet-stream"
+        return FileItem(
+            name = name.substringAfterLast('/'),
+            path = name,
+            size = fullUnpackSize,
+            lastModified = mTime?.time ?: 0L,
+            isDirectory = isDirectory,
+            mimeType = mime,
+            extension = extension,
+        )
     }
 
     // -- TAR (with compression auto-detection) --

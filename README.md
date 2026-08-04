@@ -43,7 +43,7 @@ cd FileExplorer
 | Bookmarks | Bookmark any directory, persisted in Room DB, accessible from drawer | Complete |
 | Recent Files | Track opened files, quick access from drawer | Complete |
 | Root Access | libsu 6.0.0, browse /data /system /vendor, SELinux context, chmod/chown, remount | Complete |
-| Archives | Browse ZIP/7z/TAR as virtual folders. Extract/create with AES-256 passwords | Complete |
+| Archives | Browse ZIP/7z/TAR/RAR as virtual folders. RAR extraction is read-only; ZIP supports AES-256 passwords | Complete |
 | SMB/CIFS | Windows network shares via smbj 0.13.0 with domain auth | Complete |
 | SFTP | SSH file transfer via sshj 0.40.0 with known_hosts verification, password + private key auth | Complete |
 | FTP/FTPS | File transfer via Apache Commons Net 3.13.0 with TLS toggle | Complete |
@@ -102,7 +102,7 @@ cd FileExplorer
 | Persistence | Room + DataStore | 2.8.4 |
 | File I/O | java.nio.file (NIO2) | JDK 17 |
 | Root | libsu | 6.0.0 |
-| Archives | Apache Commons Compress + zip4j | 1.28.0 / 2.11.6 |
+| Archives | Apache Commons Compress + zip4j + Junrar | 1.28.0 / 2.11.6 / 7.6.0 |
 | SMB | smbj | 0.13.0 |
 | SFTP | sshj + BouncyCastle | 0.40.0 / 1.84 |
 | FTP | Apache Commons Net | 3.13.0 |
