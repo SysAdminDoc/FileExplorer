@@ -9,6 +9,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.explorer.fileexplorer.feature.apps.AppsScreen
 import com.explorer.fileexplorer.feature.browser.BrowserScreen
+import com.explorer.fileexplorer.feature.browser.CollectionsScreen
 import com.explorer.fileexplorer.feature.browser.TrashScreen
 import com.explorer.fileexplorer.feature.browser.StorageAnalyzerScreen
 import com.explorer.fileexplorer.feature.cloud.CloudScreen
@@ -25,6 +26,7 @@ object Routes {
     const val BROWSER = "browser"
     const val BROWSER_AT_PATH = "browser/{path}"
     const val SEARCH = "search"
+    const val COLLECTIONS = "collections"
     const val SETTINGS = "settings"
     const val NETWORK = "network"
     const val SHIZUKU = "shizuku"
@@ -54,6 +56,7 @@ fun AppNavigation(
                 onOpenShizuku = { navController.navigate(Routes.SHIZUKU) },
                 onOpenServer = { navController.navigate(Routes.SHARE_SERVER) },
                 onOpenCloud = { navController.navigate(Routes.CLOUD) },
+                onOpenCollections = { navController.navigate(Routes.COLLECTIONS) },
                 onOpenSecurity = { navController.navigate(Routes.SECURITY) },
                 onOpenApps = { navController.navigate(Routes.APPS) },
                 onOpenTrash = { navController.navigate(Routes.TRASH) },
@@ -76,6 +79,7 @@ fun AppNavigation(
                 onOpenShizuku = { navController.navigate(Routes.SHIZUKU) },
                 onOpenServer = { navController.navigate(Routes.SHARE_SERVER) },
                 onOpenCloud = { navController.navigate(Routes.CLOUD) },
+                onOpenCollections = { navController.navigate(Routes.COLLECTIONS) },
                 onOpenSecurity = { navController.navigate(Routes.SECURITY) },
                 onOpenApps = { navController.navigate(Routes.APPS) },
                 onOpenTrash = { navController.navigate(Routes.TRASH) },
@@ -90,6 +94,10 @@ fun AppNavigation(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToFolder = { navController.popBackStack() },
             )
+        }
+
+        composable(Routes.COLLECTIONS) {
+            CollectionsScreen(onNavigateBack = { navController.popBackStack() })
         }
 
         composable(Routes.SETTINGS) { SettingsScreen(onNavigateBack = { navController.popBackStack() }) }

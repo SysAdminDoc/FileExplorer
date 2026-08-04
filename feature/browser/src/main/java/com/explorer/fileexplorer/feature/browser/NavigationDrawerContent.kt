@@ -24,6 +24,7 @@ fun NavigationDrawerContent(
     rootState: RootState,
     rootEnabled: Boolean,
     onNavigate: (String) -> Unit,
+    onOpenCollections: () -> Unit,
     onToggleRoot: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenNetwork: () -> Unit,
@@ -89,6 +90,10 @@ fun NavigationDrawerContent(
                     onClick = { onNavigate(path) }, icon = { Icon(icon, null) },
                     modifier = Modifier.padding(horizontal = 12.dp))
             }
+
+            NavigationDrawerItem(label = { Text("Collections") }, selected = false,
+                onClick = onOpenCollections, icon = { Icon(Icons.Filled.CollectionsBookmark, null) },
+                modifier = Modifier.padding(horizontal = 12.dp))
 
             // Bookmarks
             if (bookmarks.isNotEmpty()) {

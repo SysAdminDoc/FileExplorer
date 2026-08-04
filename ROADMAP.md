@@ -62,13 +62,6 @@ For operations exceeding 6 hours, consider chunking or using WorkManager.
 
 ## Later (v2.0+)
 
-### L-02: Collections / smart categories
-Auto-grouped views: Photos, Videos, Music, Documents, Downloads, APKs. Queries MediaStore
-for indexed content. Solid Explorer's Collections is a key differentiator.
-
-- **Impact:** 3/5. **Effort:** 3/5.
-- **Source:** Solid Explorer Collections feature.
-
 ### L-03: Additional cloud providers
 pCloud, Box, Nextcloud (typed WebDAV), Mega, S3/Backblaze B2 (AWS SDK for Kotlin),
 MediaFire, Yandex Disk. MiXplorer supports 19 providers; Solid Explorer supports 10+.

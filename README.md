@@ -29,6 +29,7 @@ cd FileExplorer
 | File Browsing | NIO2 backend, breadcrumb nav, per-directory grid/list, sort, and column visibility | Complete |
 | Dual-pane Browsing | Independent left/right folders with long-press drag-and-drop copy or move | Complete |
 | Tabbed Browsing | Multiple tabs per pane with add, select, reorder, and swipe-to-close controls | Complete |
+| Collections | MediaStore-backed Photos, Videos, Music, Documents, Downloads, and APK smart categories | Complete |
 | Storage Analyzer | Recursive size treemap, SHA-256 duplicate groups, and largest-file list | Complete |
 | Batch Rename | Regex capture groups, counter/date/parent tokens, collision checks, and live preview | Complete |
 | Transfer Queue | Pausable and reorderable copy, move, and delete queue with throttling, conflict choices, and text diff preview | Complete |
@@ -64,7 +65,7 @@ cd FileExplorer
 ```
                            ┌─────────────────────────────────────────────┐
                            │                  :app                       │
-                           │  Application, Navigation (8 routes),        │
+                           │  Application, Navigation (9 routes),        │
                            │  Permission flow, MainActivity              │
                            └──────┬──────┬──────┬──────┬──────┬─────────┘
                                   │      │      │      │      │
