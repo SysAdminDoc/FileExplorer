@@ -38,6 +38,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added named saved searches with regex/path recall from the navigation drawer.
 - Added automatic recent-directory tracking with a separate drawer section and Room migration.
 - Added SMB3 server-side copy through SMBJ with streamed fallback for NAS devices that reject the copy ioctl.
+- Added a bounded, text-first EPUB reader that follows package spine order without a third-party renderer.
 
 ## [v1.3.3] - 2026-06-30
 

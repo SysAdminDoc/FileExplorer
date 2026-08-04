@@ -348,6 +348,7 @@
     <string name="editor_status">%1$s | %2$d lines | %3$s</string>
     <string name="docx_no_text">The DOCX contains no readable text</string>
     <string name="xlsx_no_cells">The XLSX contains no readable cells</string>
+    <string name="epub_no_text">No readable EPUB text found</string>
     <string name="collection_item_summary">%1$d items · %2$s</string>
     <string name="search_apps_hint">Search apps...</string>
     <string name="analyze_apk">Analyze APK</string>

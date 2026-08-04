@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
+import java.net.URLDecoder
 import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
 import org.w3c.dom.Document
@@ -14,12 +15,20 @@ enum class PreviewDocumentType {
     PDF,
     DOCX,
     XLSX,
+    EPUB,
 }
+
+data class EpubChapter(
+    val title: String,
+    val paragraphs: List<String>,
+)
 
 data class DocumentPreviewData(
     val type: PreviewDocumentType,
     val paragraphs: List<String> = emptyList(),
     val rows: List<List<String>> = emptyList(),
+    val title: String = "",
+    val epubChapters: List<EpubChapter> = emptyList(),
 )
 
 object DocumentPreviewParser {
@@ -56,6 +65,8 @@ object DocumentPreviewParser {
                     )
                 }
 
+                "epub" -> parseEpub(zip)
+
                 else -> error("Unsupported preview format: $extension")
             }
         }
@@ -83,6 +94,78 @@ object DocumentPreviewParser {
         }
         .filter { row -> row.any(String::isNotEmpty) }
         .toList()
+
+    private fun parseEpub(zip: ZipFile): DocumentPreviewData {
+        val container = zip.readXml("META-INF/container.xml")
+            ?: error("EPUB container.xml is missing")
+        val packagePath = descendants(container, "rootfile")
+            .firstOrNull()
+            ?.getAttribute("full-path")
+            ?.takeIf(String::isNotBlank)
+            ?.let(::normalizeZipPath)
+            ?: error("EPUB package document is missing")
+        val packageDocument = zip.readXml(packagePath)
+            ?: error("EPUB package document is missing")
+        val packageDirectory = packagePath.substringBeforeLast('/', "")
+        val manifest = descendants(packageDocument, "item").associateBy(
+            keySelector = { it.getAttribute("id") },
+            valueTransform = { item ->
+                EpubManifestItem(
+                    href = item.getAttribute("href"),
+                    mediaType = item.getAttribute("media-type"),
+                )
+            },
+        )
+        val spineItems = descendants(packageDocument, "itemref")
+            .mapNotNull { manifest[it.getAttribute("idref")] }
+            .filter { it.mediaType in EPUB_HTML_MEDIA_TYPES && it.href.isNotBlank() }
+        val fallbackItems = manifest.values
+            .filter { it.mediaType in EPUB_HTML_MEDIA_TYPES && it.href.isNotBlank() }
+        val orderedItems = (spineItems.ifEmpty { fallbackItems }).take(MAX_EPUB_CHAPTERS)
+        val chapters = orderedItems.mapIndexedNotNull { index, item ->
+            val chapterPath = resolveZipPath(packageDirectory, item.href)
+            val chapterDocument = zip.readXml(chapterPath) ?: return@mapIndexedNotNull null
+            val blocks = epubBlocks(chapterDocument)
+            if (blocks.isEmpty()) return@mapIndexedNotNull null
+            val heading = blocks.firstOrNull { it.first }?.second
+                ?: "Chapter ${index + 1}"
+            EpubChapter(
+                title = heading,
+                paragraphs = blocks.map { it.second },
+            )
+        }
+        require(chapters.isNotEmpty()) { "EPUB contains no readable chapters" }
+        return DocumentPreviewData(
+            type = PreviewDocumentType.EPUB,
+            title = descendants(packageDocument, "title")
+                .firstOrNull()
+                ?.textContent
+                ?.trim()
+                .orEmpty(),
+            epubChapters = chapters,
+        )
+    }
+
+    private fun epubBlocks(document: Document): List<Pair<Boolean, String>> {
+        val blockNames = setOf("h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "blockquote", "pre")
+        val blocks = descendants(document, "*")
+            .asSequence()
+            .filter { localName(it) in blockNames }
+            .mapNotNull { element ->
+                val text = collectText(element).replace('\u00a0', ' ').trim()
+                text.takeIf(String::isNotEmpty)?.let { localName(element).startsWith("h") to it }
+            }
+            .take(MAX_EPUB_PARAGRAPHS)
+            .toList()
+        if (blocks.isNotEmpty()) return blocks
+        val fallback = descendants(document, "body")
+            .firstOrNull()
+            ?.let(::collectText)
+            ?.replace('\u00a0', ' ')
+            ?.trim()
+            ?.takeIf(String::isNotEmpty)
+        return fallback?.let { listOf(false to it) }.orEmpty()
+    }
 
     private fun cellValue(cell: Element, sharedStrings: List<String>): String {
         val type = cell.getAttribute("t")
@@ -171,5 +254,31 @@ object DocumentPreviewParser {
         descendants(document, "si").map { collectText(it) }
     }.orEmpty()
 
+    private fun resolveZipPath(baseDirectory: String, href: String): String {
+        val decoded = URLDecoder.decode(href.substringBefore('#'), Charsets.UTF_8.name())
+            .replace('\\', '/')
+        return normalizeZipPath(listOf(baseDirectory, decoded).filter(String::isNotBlank).joinToString("/"))
+    }
+
+    private fun normalizeZipPath(path: String): String {
+        val parts = mutableListOf<String>()
+        path.replace('\\', '/').split('/').forEach { part ->
+            when (part) {
+                "", "." -> Unit
+                ".." -> require(parts.isNotEmpty()) { "EPUB path escapes archive" }.also { parts.removeAt(parts.lastIndex) }
+                else -> parts += part
+            }
+        }
+        return parts.joinToString("/").also { require(it.isNotBlank()) { "EPUB path is empty" } }
+    }
+
+    private data class EpubManifestItem(
+        val href: String,
+        val mediaType: String,
+    )
+
     private val SHEET_ENTRY_PATTERN = Regex("xl/worksheets/sheet\\d+\\.xml")
+    private val EPUB_HTML_MEDIA_TYPES = setOf("application/xhtml+xml", "text/html")
+    private const val MAX_EPUB_CHAPTERS = 100
+    private const val MAX_EPUB_PARAGRAPHS = 10_000
 }

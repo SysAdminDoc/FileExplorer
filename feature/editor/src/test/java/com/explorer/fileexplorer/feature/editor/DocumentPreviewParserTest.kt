@@ -61,6 +61,40 @@ class DocumentPreviewParserTest {
     }
 
     @Test
+    fun readsEpubPackageAndSpineOrder() {
+        val file = zipFile(
+            ".epub",
+            "META-INF/container.xml" to """
+                <container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+                  <rootfiles><rootfile full-path="OPS/package.opf" media-type="application/oebps-package+xml"/></rootfiles>
+                </container>
+            """.trimIndent(),
+            "OPS/package.opf" to """
+                <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+                  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Test book</dc:title></metadata>
+                  <manifest>
+                    <item id="second" href="text/second.xhtml" media-type="application/xhtml+xml"/>
+                    <item id="first" href="text/first.xhtml" media-type="application/xhtml+xml"/>
+                  </manifest>
+                  <spine><itemref idref="first"/><itemref idref="second"/></spine>
+                </package>
+            """.trimIndent(),
+            "OPS/text/first.xhtml" to "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body><h1>First</h1><p>One.</p></body></html>",
+            "OPS/text/second.xhtml" to "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body><h1>Second</h1><p>Two.</p></body></html>",
+        )
+        try {
+            val preview = DocumentPreviewParser.parse(file.path)
+
+            assertEquals(PreviewDocumentType.EPUB, preview.type)
+            assertEquals("Test book", preview.title)
+            assertEquals(listOf("First", "Second"), preview.epubChapters.map(EpubChapter::title))
+            assertEquals(listOf("First", "One."), preview.epubChapters.first().paragraphs)
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
     fun rejectsXmlDoctypeBeforeParsing() {
         val file = zipFile(
             ".docx",

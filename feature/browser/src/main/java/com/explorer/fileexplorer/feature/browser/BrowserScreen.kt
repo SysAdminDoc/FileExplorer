@@ -124,7 +124,7 @@ fun BrowserScreen(
                 is BrowserEvent.Toast -> Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
                 is BrowserEvent.OpenFile -> {
                     val extension = event.item.extension.lowercase()
-                    if (event.item.path.startsWith("/") && extension in setOf("pdf", "docx", "xlsx")) {
+                    if (event.item.path.startsWith("/") && extension in setOf("pdf", "docx", "xlsx", "epub")) {
                         onOpenPreview(event.item.path)
                     } else if (event.item.path.startsWith("/") &&
                         (event.item.isText || extension in setOf("kt", "java", "py", "js", "ts", "json", "xml", "html", "css", "sh", "ps1", "md", "txt", "yml", "yaml", "toml", "cfg", "ini", "conf", "log", "csv", "sql", "c", "cpp", "h", "rs", "go", "rb", "php", "swift", "gradle", "properties"))) {

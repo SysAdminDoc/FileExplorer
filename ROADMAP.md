@@ -94,12 +94,6 @@ root features. Termux integration via intent may be simpler.
 
 - **Source:** Community requests; Termux; MiXplorer shell feature.
 
-### U-03: EPUB / e-book reader
-Lightweight EPUB renderer. MiXplorer's Codecs add-on handles this. Very niche for a file
-manager.
-
-- **Source:** MiXplorer Codecs; community request signal: low.
-
 ### U-04: SELinux context editor with policy suggestions
 Beyond the current read-only display. Would require root + deep SELinux knowledge.
 Risky to expose to casual users.

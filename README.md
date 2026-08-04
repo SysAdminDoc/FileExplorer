@@ -72,7 +72,7 @@ cd FileExplorer
 | Text Editor | Built-in editor with syntax highlighting, line numbers, find/replace, undo/redo | Complete |
 | App Manager | List all apps, filter user/system/disabled, search, sort, share APK, uninstall | Complete |
 | APK Analyzer | Manifest, permissions, signing certificate SHA-256, shared UID, DEX method count, and ZIP directory size breakdown | Complete |
-| PDF / Document Preview | Native paginated PDF rendering plus bounded DOCX paragraph and XLSX worksheet previews | Complete |
+| PDF / Document Preview | Native paginated PDF rendering plus bounded DOCX, XLSX worksheet, and EPUB chapter previews | Complete |
 | Hex Editor | Paginated hexadecimal view with byte editing up to 64 MiB and read-only larger-file inspection | Complete |
 | Gesture Actions | Configurable swipe-left/right actions for delete, share, compress, and cut-to-move | Complete |
 | Automation Intents | Exported Tasker / Automate actions for copy, move, archive creation, and network upload | Complete |

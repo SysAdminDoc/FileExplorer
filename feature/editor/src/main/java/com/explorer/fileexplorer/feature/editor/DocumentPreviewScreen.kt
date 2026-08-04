@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -93,6 +94,7 @@ class DocumentPreviewViewModel @Inject constructor() : ViewModel() {
             "pdf" -> PreviewDocumentType.PDF
             "docx" -> PreviewDocumentType.DOCX
             "xlsx" -> PreviewDocumentType.XLSX
+            "epub" -> PreviewDocumentType.EPUB
             else -> null
         }
         _state.value = DocumentPreviewUiState(
@@ -115,7 +117,7 @@ class DocumentPreviewViewModel @Inject constructor() : ViewModel() {
                         rendered = null
                     }
 
-                    PreviewDocumentType.DOCX, PreviewDocumentType.XLSX -> {
+                    PreviewDocumentType.DOCX, PreviewDocumentType.XLSX, PreviewDocumentType.EPUB -> {
                         val document = withContext(Dispatchers.IO) { DocumentPreviewParser.parse(path) }
                         _state.value = _state.value.copy(isLoading = false, document = document)
                     }
@@ -254,6 +256,7 @@ fun DocumentPreviewScreen(
                 state.type == PreviewDocumentType.PDF -> PdfPreviewContent(state, viewModel)
                 state.type == PreviewDocumentType.DOCX -> DocxPreviewContent(state.document?.paragraphs.orEmpty())
                 state.type == PreviewDocumentType.XLSX -> XlsxPreviewContent(state.document?.rows.orEmpty())
+                state.type == PreviewDocumentType.EPUB -> EpubPreviewContent(state.document)
             }
         }
     }
@@ -342,6 +345,33 @@ private fun XlsxPreviewContent(rows: List<List<String>>) {
                 }
             }
             HorizontalDivider()
+        }
+    }
+}
+
+@Composable
+private fun EpubPreviewContent(document: DocumentPreviewData?) {
+    val chapters = document?.epubChapters.orEmpty()
+    if (chapters.isEmpty()) {
+        EmptyPreviewMessage(stringResource(DesignSystemR.string.epub_no_text))
+        return
+    }
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        document?.title?.takeIf(String::isNotBlank)?.let { title ->
+            item {
+                Text(title, style = MaterialTheme.typography.headlineSmall)
+            }
+        }
+        chapters.forEach { chapter ->
+            item {
+                Text(chapter.title, style = MaterialTheme.typography.titleLarge)
+            }
+            items(chapter.paragraphs) { paragraph ->
+                Text(paragraph, style = MaterialTheme.typography.bodyLarge)
+            }
         }
     }
 }
