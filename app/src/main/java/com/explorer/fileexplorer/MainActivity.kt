@@ -41,8 +41,10 @@ class MainActivity : ComponentActivity() {
         hasPermissionState.value = permissionHelper.hasFullStorageAccess()
 
         setContent {
-            val themeMode by settingsRepository.settings
-                .map { it.themeMode }
+            val themeModeFlow = remember(settingsRepository) {
+                settingsRepository.settings.map { it.themeMode }
+            }
+            val themeMode by themeModeFlow
                 .collectAsStateWithLifecycle(initialValue = ThemeMode.SYSTEM)
 
             FileExplorerTheme(themeMode = themeMode) {
