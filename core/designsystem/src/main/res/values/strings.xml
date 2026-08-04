@@ -119,6 +119,16 @@
     <string name="display">Display</string>
     <string name="behavior">Behavior</string>
     <string name="gestures">Gestures</string>
+    <string name="thumbnail_cache">Thumbnail cache</string>
+    <string name="thumbnail_cache_description">Limit image previews stored on this device</string>
+    <string name="thumbnail_cache_size">Cache size: %1$d MB</string>
+    <string name="thumbnail_cache_size_description">The cache is trimmed automatically when it reaches this size.</string>
+    <string name="thumbnail_cache_location">Storage location</string>
+    <string name="thumbnail_cache_internal">Internal app cache</string>
+    <string name="thumbnail_cache_external">External app cache</string>
+    <string name="purge_thumbnail_cache">Purge thumbnail cache</string>
+    <string name="purge_thumbnail_cache_description">Remove all stored image previews now</string>
+    <string name="thumbnail_cache_cleared">Thumbnail cache cleared</string>
     <string name="backup">Backup</string>
     <string name="about">About</string>
     <string name="show_hidden_files">Show hidden files</string>

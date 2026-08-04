@@ -77,13 +77,6 @@ already have rclone configured; importing saves re-entering credentials.
 - **Impact:** 2/5 (niche but sticky). **Effort:** 2/5.
 - **Source:** Existing ROADMAP item; rclone community.
 
-### L-18: Thumbnail cache control
-Size cap, storage location, and purge button in Settings. Coil 3.x provides disk cache
-configuration. Prevents thumbnail cache from growing unbounded on devices with limited storage.
-
-- **Impact:** 2/5. **Effort:** 1/5.
-- **Source:** Existing ROADMAP item; Coil disk cache API.
-
 ### L-19: Real-time directory size
 Opt-in setting to show recursive directory sizes in list view. Background-computed via coroutines
 with a per-directory LRU cache. DiskUsage and X-plore both show this.

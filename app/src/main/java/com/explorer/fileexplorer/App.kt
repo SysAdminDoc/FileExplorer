@@ -1,6 +1,9 @@
 package com.explorer.fileexplorer
 
 import android.app.Application
+import android.content.Context
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
 import com.explorer.fileexplorer.core.data.FileRepositoryFactory
 import com.explorer.fileexplorer.core.data.NetworkRepoProvider
 import com.explorer.fileexplorer.core.data.PluginFileRepository
@@ -13,12 +16,13 @@ import com.explorer.fileexplorer.core.network.sftp.SftpFileRepository
 import com.explorer.fileexplorer.core.network.ftp.FtpFileRepository
 import com.explorer.fileexplorer.core.network.webdav.WebDavFileRepository
 import com.explorer.fileexplorer.plugin.PluginManager
+import com.explorer.fileexplorer.feature.settings.ThumbnailCacheController
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 
 @HiltAndroidApp
-class App : Application() {
+class App : Application(), SingletonImageLoader.Factory {
 
     @Inject lateinit var repoFactory: FileRepositoryFactory
     @Inject lateinit var smbRepo: SmbFileRepository
@@ -29,6 +33,7 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        SingletonImageLoader.setSafe(this)
         repoFactory.registerSchemeResolver { scheme ->
             val repo: NetworkFileRepository? = when (scheme) {
                 "smb" -> smbRepo.takeIf { it.isConnected }
@@ -43,6 +48,8 @@ class App : Application() {
             pluginManager.findByScheme(scheme)?.let { PluginFileRepository(pluginManager, it) }
         }
     }
+
+    override fun newImageLoader(context: Context): ImageLoader = ThumbnailCacheController.newImageLoader(context)
 
     private fun wrap(repo: NetworkFileRepository) = object : NetworkRepoProvider {
         override fun listFiles(path: String): Flow<List<FileItem>> = repo.listFiles(path)

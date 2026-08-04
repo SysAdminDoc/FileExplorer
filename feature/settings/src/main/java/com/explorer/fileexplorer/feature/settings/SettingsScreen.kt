@@ -46,11 +46,48 @@ object SettingsKeys {
     val SORT_FIELD = stringPreferencesKey("sort_field")
     val SORT_DIRECTION = stringPreferencesKey("sort_direction")
     val THUMBNAIL_SIZE = intPreferencesKey("thumbnail_size")
+    val THUMBNAIL_CACHE_SIZE_MB = intPreferencesKey("thumbnail_cache_size_mb")
+    val THUMBNAIL_CACHE_LOCATION = stringPreferencesKey("thumbnail_cache_location")
     val THEME_MODE = stringPreferencesKey("theme_mode")
     val TRASH_TTL_DAYS = intPreferencesKey("trash_ttl_days")
     val COMPACT_DENSITY = booleanPreferencesKey("compact_density")
     val SWIPE_LEFT_ACTION = stringPreferencesKey("swipe_left_action")
     val SWIPE_RIGHT_ACTION = stringPreferencesKey("swipe_right_action")
+}
+
+enum class ThumbnailCacheLocation(@androidx.annotation.StringRes val labelRes: Int, val key: String) {
+    INTERNAL(DesignSystemR.string.thumbnail_cache_internal, "internal"),
+    EXTERNAL(DesignSystemR.string.thumbnail_cache_external, "external"),
+    ;
+
+    companion object {
+        fun fromKey(key: String?): ThumbnailCacheLocation = entries.firstOrNull { it.key == key } ?: INTERNAL
+    }
+}
+
+object ThumbnailCacheSettings {
+    const val DEFAULT_SIZE_MB = 256
+    const val MIN_SIZE_MB = 32
+    const val MAX_SIZE_MB = 1024
+    private const val PREFS_NAME = "thumbnail_cache"
+    private const val PREF_SIZE_MB = "size_mb"
+    private const val PREF_LOCATION = "location"
+
+    fun normalizeSize(sizeMb: Int): Int = sizeMb.coerceIn(MIN_SIZE_MB, MAX_SIZE_MB)
+
+    fun read(context: android.content.Context): Pair<Int, ThumbnailCacheLocation> {
+        val prefs = context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+        val size = normalizeSize(prefs.getInt(PREF_SIZE_MB, DEFAULT_SIZE_MB))
+        return size to ThumbnailCacheLocation.fromKey(prefs.getString(PREF_LOCATION, ThumbnailCacheLocation.INTERNAL.key))
+    }
+
+    fun write(context: android.content.Context, sizeMb: Int, location: ThumbnailCacheLocation) {
+        context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putInt(PREF_SIZE_MB, normalizeSize(sizeMb))
+            .putString(PREF_LOCATION, location.key)
+            .apply()
+    }
 }
 
 enum class SwipeAction(@androidx.annotation.StringRes val labelRes: Int, @androidx.annotation.StringRes val descriptionRes: Int) {
@@ -74,6 +111,8 @@ data class SettingsState(
     val sortField: String = "NAME",
     val sortDirection: String = "ASCENDING",
     val thumbnailSize: Int = 48,
+    val thumbnailCacheSizeMb: Int = ThumbnailCacheSettings.DEFAULT_SIZE_MB,
+    val thumbnailCacheLocation: ThumbnailCacheLocation = ThumbnailCacheLocation.INTERNAL,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val trashTtlDays: Int = LocalTrashManager.DEFAULT_TTL_DAYS,
     val compactDensity: Boolean = false,
@@ -96,6 +135,10 @@ class SettingsRepository @Inject constructor(
             sortField = prefs[SettingsKeys.SORT_FIELD] ?: "NAME",
             sortDirection = prefs[SettingsKeys.SORT_DIRECTION] ?: "ASCENDING",
             thumbnailSize = prefs[SettingsKeys.THUMBNAIL_SIZE] ?: 48,
+            thumbnailCacheSizeMb = ThumbnailCacheSettings.normalizeSize(
+                prefs[SettingsKeys.THUMBNAIL_CACHE_SIZE_MB] ?: ThumbnailCacheSettings.DEFAULT_SIZE_MB,
+            ),
+            thumbnailCacheLocation = ThumbnailCacheLocation.fromKey(prefs[SettingsKeys.THUMBNAIL_CACHE_LOCATION]),
             themeMode = ThemeMode.fromKey(prefs[SettingsKeys.THEME_MODE]),
             trashTtlDays = prefs[SettingsKeys.TRASH_TTL_DAYS] ?: LocalTrashManager.DEFAULT_TTL_DAYS,
             compactDensity = prefs[SettingsKeys.COMPACT_DENSITY] ?: false,
@@ -107,6 +150,15 @@ class SettingsRepository @Inject constructor(
     suspend fun <T> update(key: Preferences.Key<T>, value: T) {
         ds.edit { it[key] = value }
     }
+
+    suspend fun updateThumbnailCache(sizeMb: Int, location: ThumbnailCacheLocation) {
+        val normalizedSize = ThumbnailCacheSettings.normalizeSize(sizeMb)
+        ds.edit {
+            it[SettingsKeys.THUMBNAIL_CACHE_SIZE_MB] = normalizedSize
+            it[SettingsKeys.THUMBNAIL_CACHE_LOCATION] = location.key
+        }
+        ThumbnailCacheSettings.write(context, normalizedSize, location)
+    }
 }
 
 @HiltViewModel
@@ -114,6 +166,7 @@ class SettingsViewModel @Inject constructor(
     private val repo: SettingsRepository,
     private val backupManager: com.explorer.fileexplorer.core.data.BackupManager,
     private val diagnosticLog: com.explorer.fileexplorer.core.data.DiagnosticLog,
+    @ApplicationContext private val context: android.content.Context,
 ) : ViewModel() {
     val state = repo.settings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsState())
 
@@ -128,6 +181,24 @@ class SettingsViewModel @Inject constructor(
     fun toggleCompactDensity() { viewModelScope.launch { repo.update(SettingsKeys.COMPACT_DENSITY, !state.value.compactDensity) } }
     fun setSwipeLeftAction(action: SwipeAction) { viewModelScope.launch { repo.update(SettingsKeys.SWIPE_LEFT_ACTION, action.name) } }
     fun setSwipeRightAction(action: SwipeAction) { viewModelScope.launch { repo.update(SettingsKeys.SWIPE_RIGHT_ACTION, action.name) } }
+    fun setThumbnailCacheSize(sizeMb: Int) {
+        viewModelScope.launch {
+            repo.updateThumbnailCache(sizeMb, state.value.thumbnailCacheLocation)
+            ThumbnailCacheController.reset(context)
+        }
+    }
+    fun setThumbnailCacheLocation(location: ThumbnailCacheLocation) {
+        viewModelScope.launch {
+            repo.updateThumbnailCache(state.value.thumbnailCacheSizeMb, location)
+            ThumbnailCacheController.reset(context)
+        }
+    }
+    fun purgeThumbnailCache() {
+        viewModelScope.launch {
+            ThumbnailCacheController.clear(context)
+            _toasts.emit(context.getString(DesignSystemR.string.thumbnail_cache_cleared))
+        }
+    }
 
     fun exportBackup(out: java.io.OutputStream) {
         viewModelScope.launch {
@@ -233,6 +304,13 @@ fun SettingsScreen(
                 onToggle = viewModel::toggleCompactDensity,
             )
 
+            ThumbnailCacheSettingsPanel(
+                state = state,
+                onSizeChange = viewModel::setThumbnailCacheSize,
+                onLocationChange = viewModel::setThumbnailCacheLocation,
+                onPurge = viewModel::purgeThumbnailCache,
+            )
+
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
             // Behavior section
@@ -334,6 +412,63 @@ fun SettingsScreen(
                 supportingContent = { Text(stringResource(DesignSystemR.string.version_value)) },
             )
         }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ThumbnailCacheSettingsPanel(
+    state: SettingsState,
+    onSizeChange: (Int) -> Unit,
+    onLocationChange: (ThumbnailCacheLocation) -> Unit,
+    onPurge: () -> Unit,
+) {
+    var sliderValue by remember(state.thumbnailCacheSizeMb) {
+        mutableFloatStateOf(state.thumbnailCacheSizeMb.toFloat())
+    }
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text(stringResource(DesignSystemR.string.thumbnail_cache), style = MaterialTheme.typography.titleMedium)
+        Text(
+            stringResource(DesignSystemR.string.thumbnail_cache_description),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(stringResource(DesignSystemR.string.thumbnail_cache_size, sliderValue.toInt()))
+        Slider(
+            value = sliderValue,
+            onValueChange = { sliderValue = it },
+            valueRange = ThumbnailCacheSettings.MIN_SIZE_MB.toFloat()..ThumbnailCacheSettings.MAX_SIZE_MB.toFloat(),
+            steps = 15,
+            onValueChangeFinished = { onSizeChange(sliderValue.toInt()) },
+        )
+        Text(
+            stringResource(DesignSystemR.string.thumbnail_cache_size_description),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            stringResource(DesignSystemR.string.thumbnail_cache_location),
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ThumbnailCacheLocation.entries.forEach { location ->
+                FilterChip(
+                    selected = state.thumbnailCacheLocation == location,
+                    onClick = { onLocationChange(location) },
+                    label = { Text(stringResource(location.labelRes)) },
+                )
+            }
+        }
+        OutlinedButton(onClick = onPurge, modifier = Modifier.padding(top = 8.dp)) {
+            Text(stringResource(DesignSystemR.string.purge_thumbnail_cache))
+        }
+        Text(
+            stringResource(DesignSystemR.string.purge_thumbnail_cache_description),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
