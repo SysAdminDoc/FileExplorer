@@ -37,6 +37,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added opt-in recursive directory sizes in list view with coroutine-backed calculation and a bounded per-directory LRU cache.
 - Added named saved searches with regex/path recall from the navigation drawer.
 - Added automatic recent-directory tracking with a separate drawer section and Room migration.
+- Added SMB3 server-side copy through SMBJ with streamed fallback for NAS devices that reject the copy ioctl.
 
 ## [v1.3.3] - 2026-06-30
 

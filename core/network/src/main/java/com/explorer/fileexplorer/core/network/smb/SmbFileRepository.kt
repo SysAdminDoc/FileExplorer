@@ -135,7 +135,9 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
                 val destPath = "${normalizePath(destination)}\\$name"
                 onProgress(0, 0, name)
 
-                val srcFile = s.openFile(normalizePath(src),
+                val sourcePath = normalizePath(src)
+                val sourceSize = s.getFileInformation(sourcePath).standardInformation.endOfFile
+                val srcFile = s.openFile(sourcePath,
                     EnumSet.of(AccessMask.GENERIC_READ), null,
                     EnumSet.of(SMB2ShareAccess.FILE_SHARE_READ),
                     SMB2CreateDisposition.FILE_OPEN, null)
@@ -145,19 +147,32 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
                     EnumSet.of(SMB2ShareAccess.FILE_SHARE_WRITE),
                     SMB2CreateDisposition.FILE_OVERWRITE_IF, null)
 
-                srcFile.inputStream.use { input ->
-                    dstFile.outputStream.use { output ->
-                        val buf = ByteArray(65536)
-                        var totalRead = 0L
-                        var len: Int
-                        while (input.read(buf).also { len = it } != -1) {
-                            output.write(buf, 0, len)
-                            totalRead += len
-                            onProgress(totalRead, 0, name)
+                srcFile.use { source ->
+                    dstFile.use { destinationFile ->
+                        onProgress(0, sourceSize, name)
+                        try {
+                            // SMBJ maps this to FSCTL_SRV_COPYCHUNK so the server copies
+                            // within the share without sending file bytes through Android.
+                            source.remoteCopyTo(destinationFile)
+                            onProgress(sourceSize, sourceSize, name)
+                        } catch (_: Exception) {
+                            // Older NAS firmware may reject FSCTL_SRV_COPYCHUNK. Preserve
+                            // compatibility by falling back to the existing streamed copy.
+                            source.inputStream.use { input ->
+                                destinationFile.outputStream.use { output ->
+                                    val buf = ByteArray(65536)
+                                    var totalRead = 0L
+                                    var len: Int
+                                    while (input.read(buf).also { len = it } != -1) {
+                                        output.write(buf, 0, len)
+                                        totalRead += len
+                                        onProgress(totalRead, sourceSize, name)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-                srcFile.close(); dstFile.close()
                 count++
             }
             Result.success(count)

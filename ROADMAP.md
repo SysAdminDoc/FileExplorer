@@ -112,12 +112,6 @@ native NFS library (none exist for Android Kotlin).
 
 - **Source:** HN comment requesting NFS; no existing implementation to reference.
 
-### U-06: Server-side copy for SMB3
-Extend server-side copy (already done for WebDAV) to SMB3 `FSCTL_SRV_COPYCHUNK`.
-Significant performance gain for large file copies on the same NAS.
-
-- **Source:** Existing ROADMAP item; SMB3 protocol specification.
-
 ### U-07: Syncthing integration
 Detect Syncthing-synced folders and show sync status badges. Would require Syncthing's
 REST API or reading its config.
