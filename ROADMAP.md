@@ -77,13 +77,6 @@ already have rclone configured; importing saves re-entering credentials.
 - **Impact:** 2/5 (niche but sticky). **Effort:** 2/5.
 - **Source:** Existing ROADMAP item; rclone community.
 
-### L-15: Wi-Fi Direct / Quick Share integration
-Send files to nearby devices via Wi-Fi Direct or Quick Share (Nearby Share successor).
-Uses `android.nearby` APIs.
-
-- **Impact:** 2/5. **Effort:** 3/5.
-- **Source:** Android Nearby Share API; existing ROADMAP item.
-
 ### L-16: Media casting (Chromecast)
 Cast local media (photo/video/audio) to Chromecast or DLNA receivers directly from the file
 browser. Solid Explorer offers this as a paid plugin.

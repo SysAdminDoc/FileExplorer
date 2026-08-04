@@ -127,6 +127,7 @@ sealed interface BrowserEvent {
     data class Toast(val message: String) : BrowserEvent
     data class OpenFile(val item: FileItem) : BrowserEvent
     data class ShareFiles(val items: List<FileItem>) : BrowserEvent
+    data class SendNearbyFiles(val items: List<FileItem>) : BrowserEvent
     data class RequestDecrypt(val paths: List<String>) : BrowserEvent
 }
 
@@ -874,6 +875,9 @@ class BrowserViewModel @Inject constructor(
     fun showRename(item: FileItem) { _state.update { it.copy(renameItem = item) } }
     fun dismissRename() { _state.update { it.copy(renameItem = null) } }
     fun shareSelected() { viewModelScope.launch { _events.emit(BrowserEvent.ShareFiles(getSelectedFileItems())) } }
+    fun sendNearbySelected() {
+        viewModelScope.launch { _events.emit(BrowserEvent.SendNearbyFiles(getSelectedFileItems())) }
+    }
 
     fun encryptSelected() {
         val paths = _state.value.selectedItems.toList()

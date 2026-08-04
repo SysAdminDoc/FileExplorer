@@ -1,6 +1,7 @@
 package com.explorer.fileexplorer.feature.browser
 
 import android.content.BroadcastReceiver
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -125,6 +126,7 @@ fun BrowserScreen(
                     }
                 }
                 is BrowserEvent.ShareFiles -> shareFiles(context, event.items)
+                is BrowserEvent.SendNearbyFiles -> sendNearbyFiles(context, event.items)
                 is BrowserEvent.RequestDecrypt -> {
                     val activity = context as? FragmentActivity
                     if (activity == null) {
@@ -191,6 +193,7 @@ fun BrowserScreen(
                         onDelete = viewModel::deleteSelected,
                         onPermanentDelete = viewModel::permanentlyDeleteSelected,
                         onShare = viewModel::shareSelected,
+                        onSendNearby = viewModel::sendNearbySelected,
                         onEncrypt = viewModel::encryptSelected,
                         onDecrypt = viewModel::requestDecryptSelected,
                         onCompress = viewModel::showCompressDialog,
@@ -519,6 +522,7 @@ private fun SelectionTopBar(
     selectedCount: Int, insideArchive: Boolean,
     onClear: () -> Unit, onSelectAll: () -> Unit,
     onCopy: () -> Unit, onCut: () -> Unit, onDelete: () -> Unit, onPermanentDelete: () -> Unit, onShare: () -> Unit,
+    onSendNearby: () -> Unit,
     onEncrypt: () -> Unit, onDecrypt: () -> Unit,
     onCompress: () -> Unit, onWatchIntegrity: () -> Unit, onTag: () -> Unit, onBatchRename: () -> Unit,
     onRename: () -> Unit, onProperties: () -> Unit,
@@ -559,6 +563,8 @@ private fun SelectionTopBar(
                         leadingIcon = { Icon(Icons.Filled.Label, null) })
                     DropdownMenuItem(text = { Text("Share") }, onClick = { onShare(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.Share, null) })
+                    DropdownMenuItem(text = { Text("Send with Quick Share") }, onClick = { onSendNearby(); moreExpanded = false },
+                        leadingIcon = { Icon(Icons.Filled.NearMe, null) })
                     DropdownMenuItem(text = { Text("Encrypt files") }, onClick = { onEncrypt(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.Lock, null) })
                     DropdownMenuItem(text = { Text("Decrypt files") }, onClick = { onDecrypt(); moreExpanded = false },
@@ -742,15 +748,40 @@ private fun openFile(context: android.content.Context, item: FileItem) {
 }
 
 private fun shareFiles(context: android.content.Context, items: List<FileItem>) {
+    launchShare(context, items, "Share")
+}
+
+private fun sendNearbyFiles(context: android.content.Context, items: List<FileItem>) {
+    launchShare(context, items, "Send with Quick Share")
+}
+
+private fun launchShare(context: android.content.Context, items: List<FileItem>, chooserTitle: String) {
     try {
-        val uris = items.mapNotNull {
-            try { it.uri ?: FileProvider.getUriForFile(context, "${context.packageName}.provider", File(it.path)) }
+        val shareItems = items.mapNotNull { item ->
+            try {
+                (item.uri ?: FileProvider.getUriForFile(context, "${context.packageName}.provider", File(item.path)))
+                    .let { uri -> item to uri }
+            }
             catch (_: Exception) { null }
         }
-        if (uris.isEmpty()) return
-        val intent = if (uris.size == 1) Intent(Intent.ACTION_SEND).apply { putExtra(Intent.EXTRA_STREAM, uris.first()); type = items.first().mimeType }
-        else Intent(Intent.ACTION_SEND_MULTIPLE).apply { putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris)); type = "*/*" }
+        if (shareItems.isEmpty()) return
+        val uris = shareItems.map { it.second }
+        val intent = if (shareItems.size == 1) {
+            Intent(Intent.ACTION_SEND).apply {
+                putExtra(Intent.EXTRA_STREAM, uris.first())
+                type = shareItems.first().first.mimeType
+            }
+        } else {
+            Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+                type = "*/*"
+            }
+        }
+        intent.clipData = ClipData.newUri(context.contentResolver, shareItems.first().first.name, uris.first()).apply {
+            uris.drop(1).forEach { addItem(ClipData.Item(it)) }
+        }
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        context.startActivity(Intent.createChooser(intent, "Share"))
-    } catch (e: Exception) { Toast.makeText(context, "Share failed", Toast.LENGTH_SHORT).show() }
+        intent.putExtra(Intent.EXTRA_TITLE, chooserTitle)
+        context.startActivity(Intent.createChooser(intent, chooserTitle))
+    } catch (_: Exception) { Toast.makeText(context, "Share failed", Toast.LENGTH_SHORT).show() }
 }

@@ -35,6 +35,7 @@ cd FileExplorer
 | Transfer Queue | Pausable and reorderable copy, move, and delete queue with throttling, conflict choices, and text diff preview | Complete |
 | DocumentsProvider | SAF access to the local storage root with browsing, search, recent files, and document mutations | Complete |
 | USB OTG | UsbManager mass-storage detection, persistent SAF tree access, and DocumentFile read/write browsing | Requires configuration |
+| Quick Share | Selection menu action backed by the Android Sharesheet for nearby-device delivery | Requires Quick Share or another compatible receiver |
 | Share Server | Authenticated HTTP web access and passive FTP sharing with foreground service and Quick Settings start/stop | Complete |
 | File Encryption | AES-256-GCM encryption with an Android Keystore key and biometric-gated decryption from the browser | Complete |
 | Shizuku Android/data and obb | Optional UserService backend for scoped browsing and file operations under Android/data and Android/obb | Optional |
@@ -200,6 +201,7 @@ Cloud providers require OAuth configuration. Each is optional and the app works 
 | Integrity watch | Security screen or Browser selection → More → Watch for changes | Recompute watched SHA-256 fingerprints every 15 minutes and notify on drift |
 | File tags | Browser selection → More → Set tags; drawer → Tags; Search → tag chips | Apply normalized tags and combine multiple tags with filename or regex search |
 | USB OTG | Drawer → USB OTG → Choose USB folder | Connect a mass-storage device, choose its SAF folder, then browse and mutate it with persisted access |
+| Quick Share | Select files → More → Send with Quick Share | Opens the Android Sharesheet with read grants so Quick Share can send one or many files |
 | Encrypted volumes | Security → Encrypted volumes | Requires root, an installed gocryptfs or EncFS binary, FUSE support, and existing cipher directories |
 
 ## Theme
