@@ -77,13 +77,6 @@ already have rclone configured; importing saves re-entering credentials.
 - **Impact:** 2/5 (niche but sticky). **Effort:** 2/5.
 - **Source:** Existing ROADMAP item; rclone community.
 
-### L-07: PDF and document preview
-Embedded PDF viewer via PdfRenderer (Android native) and lightweight DOCX/XLSX preview.
-MiXplorer's MiX PDF add-on and X-plore's PDF viewer are reference implementations.
-
-- **Impact:** 3/5. **Effort:** 3/5.
-- **Source:** MiXplorer MiX PDF; X-plore; existing ROADMAP item.
-
 ### L-08: Gesture customization
 Assign swipe-left / swipe-right on list items to configurable actions (delete, share, compress,
 move to folder, etc.). Solid Explorer offers this.

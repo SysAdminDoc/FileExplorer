@@ -59,6 +59,7 @@ fun BrowserScreen(
     onOpenTransfers: () -> Unit = {},
     onOpenEditor: (String) -> Unit = {},
     onOpenHexEditor: (String) -> Unit = {},
+    onOpenPreview: (String) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -81,8 +82,10 @@ fun BrowserScreen(
             when (event) {
                 is BrowserEvent.Toast -> Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
                 is BrowserEvent.OpenFile -> {
-                    // Open text files in built-in editor
-                    if (event.item.isText || event.item.extension in setOf("kt", "java", "py", "js", "ts", "json", "xml", "html", "css", "sh", "ps1", "md", "txt", "yml", "yaml", "toml", "cfg", "ini", "conf", "log", "csv", "sql", "c", "cpp", "h", "rs", "go", "rb", "php", "swift", "gradle", "properties")) {
+                    val extension = event.item.extension.lowercase()
+                    if (event.item.path.startsWith("/") && extension in setOf("pdf", "docx", "xlsx")) {
+                        onOpenPreview(event.item.path)
+                    } else if (event.item.isText || extension in setOf("kt", "java", "py", "js", "ts", "json", "xml", "html", "css", "sh", "ps1", "md", "txt", "yml", "yaml", "toml", "cfg", "ini", "conf", "log", "csv", "sql", "c", "cpp", "h", "rs", "go", "rb", "php", "swift", "gradle", "properties")) {
                         onOpenEditor(event.item.path)
                     } else {
                         openFile(context, event.item)

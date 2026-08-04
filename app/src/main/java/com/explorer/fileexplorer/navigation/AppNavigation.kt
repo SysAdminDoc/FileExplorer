@@ -15,6 +15,7 @@ import com.explorer.fileexplorer.feature.browser.StorageAnalyzerScreen
 import com.explorer.fileexplorer.feature.cloud.CloudScreen
 import com.explorer.fileexplorer.feature.editor.EditorScreen
 import com.explorer.fileexplorer.feature.editor.HexEditorScreen
+import com.explorer.fileexplorer.feature.editor.DocumentPreviewScreen
 import com.explorer.fileexplorer.feature.network.NetworkScreen
 import com.explorer.fileexplorer.feature.network.ShareServerScreen
 import com.explorer.fileexplorer.feature.search.SearchScreen
@@ -36,6 +37,7 @@ object Routes {
     const val SECURITY = "security"
     const val EDITOR = "editor/{filePath}"
     const val HEX_EDITOR = "hex/{filePath}"
+    const val PREVIEW = "preview/{filePath}"
     const val APPS = "apps"
     const val TRASH = "trash"
     const val ANALYZER = "analyzer"
@@ -43,6 +45,7 @@ object Routes {
 
     fun editorRoute(filePath: String) = "editor/${java.net.URLEncoder.encode(filePath, "UTF-8")}"
     fun hexEditorRoute(filePath: String) = "hex/${java.net.URLEncoder.encode(filePath, "UTF-8")}"
+    fun previewRoute(filePath: String) = "preview/${java.net.URLEncoder.encode(filePath, "UTF-8")}"
     fun browserAtPath(path: String) = "browser/${java.net.URLEncoder.encode(path, "UTF-8")}"
 }
 
@@ -67,6 +70,7 @@ fun AppNavigation(
                 onOpenTransfers = { navController.navigate(Routes.TRANSFERS) },
                 onOpenEditor = { path -> navController.navigate(Routes.editorRoute(path)) },
                 onOpenHexEditor = { path -> navController.navigate(Routes.hexEditorRoute(path)) },
+                onOpenPreview = { path -> navController.navigate(Routes.previewRoute(path)) },
             )
         }
         composable(
@@ -91,6 +95,7 @@ fun AppNavigation(
                 onOpenTransfers = { navController.navigate(Routes.TRANSFERS) },
                 onOpenEditor = { path -> navController.navigate(Routes.editorRoute(path)) },
                 onOpenHexEditor = { path -> navController.navigate(Routes.hexEditorRoute(path)) },
+                onOpenPreview = { path -> navController.navigate(Routes.previewRoute(path)) },
             )
         }
 
@@ -137,6 +142,15 @@ fun AppNavigation(
             val filePath = java.net.URLDecoder.decode(
                 backStackEntry.arguments?.getString("filePath") ?: "", "UTF-8")
             HexEditorScreen(filePath = filePath, onNavigateBack = { navController.popBackStack() })
+        }
+
+        composable(
+            route = Routes.PREVIEW,
+            arguments = listOf(navArgument("filePath") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val filePath = java.net.URLDecoder.decode(
+                backStackEntry.arguments?.getString("filePath") ?: "", "UTF-8")
+            DocumentPreviewScreen(filePath = filePath, onNavigateBack = { navController.popBackStack() })
         }
     }
 }
