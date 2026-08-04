@@ -77,21 +77,6 @@ already have rclone configured; importing saves re-entering credentials.
 - **Impact:** 2/5 (niche but sticky). **Effort:** 2/5.
 - **Source:** Existing ROADMAP item; rclone community.
 
-### L-22: F-Droid publication
-Reproducible build metadata, no proprietary dependencies in the F-Droid flavor, removal of
-Google Play Services auth (already optional). F-Droid is the primary distribution channel for
-privacy-focused users.
-
-- **Impact:** 3/5 (distribution reach). **Effort:** 3/5.
-- **Source:** Existing ROADMAP item; F-Droid submission guidelines.
-
-### L-23: Play Store AAB with conditional install
-Root module as a conditional install (only downloaded when user enables root mode). Reduces
-base APK size for non-root users.
-
-- **Impact:** 2/5. **Effort:** 3/5.
-- **Source:** Existing ROADMAP item; Play Asset Delivery documentation.
-
 ---
 
 ## Under Consideration
