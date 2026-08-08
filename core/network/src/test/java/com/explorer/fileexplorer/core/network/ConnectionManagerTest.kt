@@ -2,6 +2,7 @@ package com.explorer.fileexplorer.core.network
 
 import com.explorer.fileexplorer.core.database.ConnectionDao
 import com.explorer.fileexplorer.core.database.ConnectionEntity
+import com.explorer.fileexplorer.core.data.DiagnosticLog
 import com.explorer.fileexplorer.core.network.sftp.SftpKnownHostsStore
 import com.explorer.fileexplorer.core.storage.CredentialCipher
 import kotlinx.coroutines.flow.Flow
@@ -53,7 +54,12 @@ class ConnectionManagerTest {
 
     private fun connectionManager(dao: ConnectionDao): ConnectionManager {
         val knownHostsFile = Files.createTempDirectory("fileexplorer-known-hosts").resolve("known_hosts").toFile()
-        return ConnectionManager(dao, FakeCredentialCipher(), SftpKnownHostsStore(knownHostsFile, testOnly = true))
+        return ConnectionManager(
+            dao,
+            FakeCredentialCipher(),
+            SftpKnownHostsStore(knownHostsFile, testOnly = true),
+            DiagnosticLog(),
+        )
     }
 
     private fun connection(

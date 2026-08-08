@@ -1,7 +1,5 @@
 package com.explorer.fileexplorer.core.data
 
-import android.content.Context
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,9 +21,7 @@ data class DiagnosticEntry(
 )
 
 @Singleton
-class DiagnosticLog @Inject constructor(
-    @ApplicationContext private val context: Context,
-) {
+class DiagnosticLog @Inject constructor() {
     private val maxEntries = 200
     private val _entries = MutableStateFlow<List<DiagnosticEntry>>(emptyList())
     val entries: Flow<List<DiagnosticEntry>> = _entries.asStateFlow()
