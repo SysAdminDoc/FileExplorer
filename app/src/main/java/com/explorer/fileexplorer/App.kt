@@ -11,6 +11,10 @@ import com.explorer.fileexplorer.core.data.PluginFileRepository
 import com.explorer.fileexplorer.core.data.SchemeResolver
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.cloud.CloudAccountManager
+import com.explorer.fileexplorer.core.cloud.dropbox.DropboxProvider
+import com.explorer.fileexplorer.core.cloud.drive.GoogleDriveProvider
+import com.explorer.fileexplorer.core.cloud.onedrive.OneDriveProvider
 import com.explorer.fileexplorer.core.network.NetworkFileRepository
 import com.explorer.fileexplorer.core.network.smb.SmbFileRepository
 import com.explorer.fileexplorer.core.network.sftp.SftpFileRepository
@@ -31,10 +35,17 @@ class App : Application(), SingletonImageLoader.Factory {
     @Inject lateinit var ftpRepo: FtpFileRepository
     @Inject lateinit var webDavRepo: WebDavFileRepository
     @Inject lateinit var pluginManager: PluginManager
+    @Inject lateinit var cloudAccountManager: CloudAccountManager
+    @Inject lateinit var googleDriveProvider: GoogleDriveProvider
+    @Inject lateinit var dropboxProvider: DropboxProvider
+    @Inject lateinit var oneDriveProvider: OneDriveProvider
 
     override fun onCreate() {
         super.onCreate()
         SingletonImageLoader.setSafe(this)
+        cloudAccountManager.registerProvider(googleDriveProvider)
+        cloudAccountManager.registerProvider(dropboxProvider)
+        cloudAccountManager.registerProvider(oneDriveProvider)
         repoFactory.registerSchemeResolver { scheme ->
             val repo: NetworkFileRepository? = when (scheme) {
                 "smb" -> smbRepo.takeIf { it.isConnected }

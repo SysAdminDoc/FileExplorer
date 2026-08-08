@@ -118,6 +118,10 @@
     <string name="stay_signed_in">Stay signed in</string>
     <string name="cloud_quota">%1$s / %2$s GB</string>
     <string name="cloud_account_identity">%1$s - %2$s</string>
+    <string name="cloud_status_verified">Ready for sign-in</string>
+    <string name="cloud_status_requires_configuration">Requires OAuth configuration</string>
+    <string name="cloud_status_unavailable">Unavailable in this build</string>
+    <string name="cloud_status_signed_in">Signed in</string>
     <string name="no_transfers_queued">No transfers queued</string>
 
     <string name="theme">Theme</string>

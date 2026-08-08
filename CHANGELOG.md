@@ -8,6 +8,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Hardened ZIP, 7z, TAR, and RAR extraction with shared path containment, depth and resource limits, symlink/hard-link rejection, cancellation checks, and staged commits.
 - Replaced SFTP shell-based copy with SSHJ-native staged transfers and verified rename/move operations, including remote-path safety, timeout, cancellation, and partial-output handling.
 - Made permanent deletion capability-aware: local overwrite is explicitly best effort, unsupported providers cannot claim secure deletion, and the browser reports partial outcomes with an irreversible-action confirmation.
+- Made cloud readiness truthful: all built-in providers register with explicit status states, OAuth launch/callback results are represented, signed-out accounts are retained on revoke failure, and unconfigured connect actions stay disabled.
 
 ### Added
 - Added an independent dual-pane browser layout with per-pane navigation, refresh, sorting, hidden-file filtering, and selection.

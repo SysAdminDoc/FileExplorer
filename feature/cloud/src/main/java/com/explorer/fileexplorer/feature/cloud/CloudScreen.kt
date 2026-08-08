@@ -1,6 +1,10 @@
 package com.explorer.fileexplorer.feature.cloud
 
+import android.app.Activity
+import android.content.Intent
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,7 +25,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.explorer.fileexplorer.core.cloud.CloudAccount
 import com.explorer.fileexplorer.core.cloud.CloudAccountManager
+import com.explorer.fileexplorer.core.cloud.CloudAuthState
 import com.explorer.fileexplorer.core.cloud.CloudService
+import com.explorer.fileexplorer.core.cloud.CloudServiceStatus
 import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.ui.FileListItem
@@ -32,12 +38,18 @@ import javax.inject.Inject
 
 data class CloudUiState(
     val accounts: List<CloudAccount> = emptyList(),
+    val serviceStatuses: Map<CloudService, CloudServiceStatus> = emptyMap(),
     val browsingAccount: CloudAccount? = null,
     val currentFolderId: String = "root",
     val folderStack: List<Pair<String, String>> = emptyList(), // (id, name) pairs
     val files: List<FileItem> = emptyList(),
     val isLoading: Boolean = false,
     val showAddDialog: Boolean = false,
+)
+
+data class CloudAuthRequest(
+    val service: CloudService,
+    val intent: Intent,
 )
 
 @HiltViewModel
@@ -51,10 +63,15 @@ class CloudViewModel @Inject constructor(
     private val _toasts = MutableSharedFlow<String>()
     val toasts: SharedFlow<String> = _toasts.asSharedFlow()
 
+    private val _authRequests = MutableSharedFlow<CloudAuthRequest>(extraBufferCapacity = 1)
+    val authRequests: SharedFlow<CloudAuthRequest> = _authRequests.asSharedFlow()
+
     init {
         viewModelScope.launch {
             accountManager.accounts.collect { accounts ->
-                _state.update { it.copy(accounts = accounts) }
+                _state.update {
+                    it.copy(accounts = accounts, serviceStatuses = accountManager.statuses())
+                }
             }
         }
     }
@@ -112,10 +129,14 @@ class CloudViewModel @Inject constructor(
     fun removeAccount(account: CloudAccount) {
         val provider = accountManager.getProvider(account.service)
         viewModelScope.launch {
-            provider?.signOut(account)
-            accountManager.removeAccount(account.id)
-                .onSuccess { _toasts.emit("Account removed") }
-                .onFailure { e -> _toasts.emit("Remove failed: ${e.message}") }
+            val signOutResult = provider?.signOut(account) ?: Result.success(Unit)
+            signOutResult
+                .onSuccess {
+                    accountManager.removeAccount(account.id)
+                        .onSuccess { _toasts.emit("Account removed") }
+                        .onFailure { e -> _toasts.emit("Remove failed: ${e.message}") }
+                }
+                .onFailure { e -> _toasts.emit("Sign-out failed: ${e.message}") }
         }
     }
 
@@ -139,9 +160,45 @@ class CloudViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            val intent = provider.getAuthIntent()
-            if (intent == null) { _toasts.emit("${service.displayName} OAuth not configured yet") }
-            // In production: launch intent via Activity result launcher
+            val intent = try {
+                provider.getAuthIntent()
+            } catch (error: Exception) {
+                _toasts.emit("${service.displayName} sign-in unavailable: ${error.message}")
+                return@launch
+            }
+            if (intent == null) {
+                _toasts.emit("${service.displayName} requires OAuth configuration")
+            } else {
+                _authRequests.emit(CloudAuthRequest(service, intent))
+            }
+        }
+    }
+
+    fun handleAuthResult(service: CloudService, resultCode: Int, data: Intent?) {
+        val provider = accountManager.getProvider(service)
+        if (provider == null) {
+            viewModelScope.launch { _toasts.emit("${service.displayName} provider is unavailable") }
+            return
+        }
+        if (resultCode != Activity.RESULT_OK || data == null) {
+            viewModelScope.launch { _toasts.emit("${service.displayName} sign-in cancelled") }
+            return
+        }
+        viewModelScope.launch {
+            provider.handleAuthResult(data)
+                .onSuccess { account ->
+                    if (account.service != service) {
+                        _toasts.emit("Sign-in returned the wrong provider")
+                        return@onSuccess
+                    }
+                    accountManager.addAccount(account, staySignedIn = false)
+                        .onSuccess {
+                            _state.update { it.copy(showAddDialog = false) }
+                            _toasts.emit("${service.displayName} signed in")
+                        }
+                        .onFailure { error -> _toasts.emit("Account storage failed: ${error.message}") }
+                }
+                .onFailure { error -> _toasts.emit("${service.displayName} sign-in failed: ${error.message}") }
         }
     }
 }
@@ -154,8 +211,25 @@ fun CloudScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var pendingAuthService by remember { mutableStateOf<CloudService?>(null) }
+    val authLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        pendingAuthService?.let { service ->
+            pendingAuthService = null
+            viewModel.handleAuthResult(service, result.resultCode, result.data)
+        }
+    }
 
-    LaunchedEffect(Unit) { viewModel.toasts.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() } }
+    LaunchedEffect(Unit) {
+        launch {
+            viewModel.toasts.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+        }
+        launch {
+            viewModel.authRequests.collect { request ->
+                pendingAuthService = request.service
+                authLauncher.launch(request.intent)
+            }
+        }
+    }
 
     // Browsing cloud files
     if (state.browsingAccount != null) {
@@ -213,6 +287,8 @@ fun CloudScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     CloudService.entries.forEach { service ->
+                        val status = state.serviceStatuses[service]
+                            ?: CloudServiceStatus(service, CloudAuthState.UNAVAILABLE)
                         val icon = when (service) {
                             CloudService.GOOGLE_DRIVE -> Icons.Filled.CloudCircle
                             CloudService.DROPBOX -> Icons.Filled.CloudUpload
@@ -220,10 +296,12 @@ fun CloudScreen(
                         }
                         ListItem(
                             headlineContent = { Text(service.displayName) },
+                            supportingContent = { Text(cloudStatusLabel(status.state)) },
                             leadingContent = { Icon(icon, null) },
                             modifier = Modifier.fillMaxWidth(),
                         )
                         FilledTonalButton(
+                            enabled = status.state == CloudAuthState.VERIFIED,
                             onClick = { viewModel.addAccount(service); viewModel.hideAddDialog() },
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                         ) { Text("${stringResource(DesignSystemR.string.connect)} ${service.displayName}") }
@@ -236,6 +314,16 @@ fun CloudScreen(
         )
     }
 }
+
+@Composable
+private fun cloudStatusLabel(state: CloudAuthState): String = stringResource(
+    when (state) {
+        CloudAuthState.VERIFIED -> DesignSystemR.string.cloud_status_verified
+        CloudAuthState.REQUIRES_CONFIGURATION -> DesignSystemR.string.cloud_status_requires_configuration
+        CloudAuthState.UNAVAILABLE -> DesignSystemR.string.cloud_status_unavailable
+        CloudAuthState.SIGNED_IN -> DesignSystemR.string.cloud_status_signed_in
+    },
+)
 
 @Composable
 private fun CloudAccountItem(

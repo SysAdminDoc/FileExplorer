@@ -186,13 +186,13 @@ The host validates the metadata, binds only to the declared component, checks th
 
 ## Cloud Setup
 
-Cloud providers require OAuth configuration. Each is optional and the app works without them.
+Cloud providers are optional. The Cloud Storage screen reports `Requires OAuth configuration`, `Unavailable in this build`, `Ready for sign-in`, or `Signed in` and keeps the connect action disabled until a real provider auth intent is available. The default build does not contain production OAuth credentials or client secrets; credentials must remain external to the repository.
 
-**Google Drive:** Create OAuth 2.0 client in [Google Cloud Console](https://console.cloud.google.com/), add your app's package name and SHA-1 fingerprint.
+**Google Drive:** For a configured build, create an OAuth 2.0 client in [Google Cloud Console](https://console.cloud.google.com/), add your app's package name and SHA-1 fingerprint, and provide the client configuration through the approved external secret/build mechanism.
 
-**Dropbox:** Register an app at [Dropbox App Console](https://www.dropbox.com/developers/apps), copy the App Key.
+**Dropbox:** For a configured build, register an app at [Dropbox App Console](https://www.dropbox.com/developers/apps) and provide the App Key through the approved external secret/build mechanism.
 
-**OneDrive:** Register an app in [Azure AD Portal](https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps), add `Files.ReadWrite.All offline_access` scope.
+**OneDrive:** For a configured build, register an app in [Azure AD Portal](https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps), add `Files.ReadWrite.All offline_access`, and provide the client configuration through the approved external secret/build mechanism.
 
 ## Configuration
 

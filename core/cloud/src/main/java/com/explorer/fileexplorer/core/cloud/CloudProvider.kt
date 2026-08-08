@@ -21,6 +21,18 @@ enum class CloudService(val displayName: String, val iconName: String) {
     ONEDRIVE("OneDrive", "onedrive"),
 }
 
+enum class CloudAuthState {
+    VERIFIED,
+    REQUIRES_CONFIGURATION,
+    UNAVAILABLE,
+    SIGNED_IN,
+}
+
+data class CloudServiceStatus(
+    val service: CloudService,
+    val state: CloudAuthState,
+)
+
 /** Persisted cloud account info. */
 data class CloudAccount(
     val id: String,
@@ -39,6 +51,10 @@ data class CloudAccount(
 interface CloudProvider {
     val service: CloudService
     val isAuthenticated: Boolean
+
+    /** Readiness of the provider implementation before an account is signed in. */
+    val readiness: CloudAuthState
+        get() = if (isAuthenticated) CloudAuthState.SIGNED_IN else CloudAuthState.REQUIRES_CONFIGURATION
 
     /** Begin OAuth flow — returns an Intent to launch. */
     suspend fun getAuthIntent(): android.content.Intent?
@@ -80,6 +96,21 @@ interface CloudProvider {
     suspend fun getQuota(account: CloudAccount): Pair<Long, Long>
 }
 
+fun resolveCloudServiceStatus(
+    service: CloudService,
+    provider: CloudProvider?,
+    accounts: List<CloudAccount>,
+): CloudServiceStatus {
+    if (provider == null) return CloudServiceStatus(service, CloudAuthState.UNAVAILABLE)
+    val hasToken = accounts.any {
+        it.service == service && (it.accessToken.isNotBlank() || it.refreshToken.isNotBlank())
+    }
+    return CloudServiceStatus(
+        service = service,
+        state = if (hasToken) CloudAuthState.SIGNED_IN else provider.readiness,
+    )
+}
+
 /** Manages cloud accounts across all providers. */
 @Singleton
 class CloudAccountManager @Inject constructor(
@@ -101,6 +132,12 @@ class CloudAccountManager @Inject constructor(
     }
 
     fun getProvider(service: CloudService): CloudProvider? = providers[service]
+
+    fun statusFor(service: CloudService): CloudServiceStatus =
+        resolveCloudServiceStatus(service, providers[service], _accounts.value)
+
+    fun statuses(): Map<CloudService, CloudServiceStatus> =
+        CloudService.entries.associateWith(::statusFor)
 
     fun addAccount(account: CloudAccount, staySignedIn: Boolean = account.staySignedIn): Result<Unit> = runCatching {
         _accounts.value = _accounts.value.filter { it.id != account.id } + account.copy(staySignedIn = staySignedIn)

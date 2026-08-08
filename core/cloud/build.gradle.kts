@@ -27,4 +27,5 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.datastore.preferences)
     implementation(libs.workmanager)
+    testImplementation(kotlin("test"))
 }
