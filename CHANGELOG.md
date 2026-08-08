@@ -6,6 +6,7 @@ All notable changes to FileExplorer will be documented in this file.
 
 ### Security
 - Hardened ZIP, 7z, TAR, and RAR extraction with shared path containment, depth and resource limits, symlink/hard-link rejection, cancellation checks, and staged commits.
+- Replaced SFTP shell-based copy with SSHJ-native staged transfers and verified rename/move operations, including remote-path safety, timeout, cancellation, and partial-output handling.
 
 ### Added
 - Added an independent dual-pane browser layout with per-pane navigation, refresh, sorting, hidden-file filtering, and selection.
