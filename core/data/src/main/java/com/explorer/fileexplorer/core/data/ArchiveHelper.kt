@@ -1,16 +1,12 @@
 package com.explorer.fileexplorer.core.data
 
-import android.content.Context
 import android.webkit.MimeTypeMap
-import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
 import com.github.junrar.Archive
 import com.github.junrar.rarfile.FileHeader
-import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import net.lingala.zip4j.ZipFile
 import net.lingala.zip4j.model.ZipParameters
@@ -25,8 +21,11 @@ import org.apache.commons.compress.archivers.sevenz.SevenZFile
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.CompressorStreamFactory
 import java.io.*
+import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
-import java.nio.file.Paths
+import java.nio.file.StandardCopyOption
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.coroutineContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -35,9 +34,7 @@ import javax.inject.Singleton
  * Supports: ZIP (via zip4j for encryption), RAR (read-only), TAR, GZ, BZ2, XZ, 7z, Zstandard.
  */
 @Singleton
-class ArchiveHelper @Inject constructor(
-    @ApplicationContext private val context: Context,
-) {
+class ArchiveHelper @Inject constructor() {
     /** List entries in an archive at a given internal path. */
     suspend fun listArchive(
         archivePath: String,
@@ -99,15 +96,31 @@ class ArchiveHelper @Inject constructor(
     ): Result<Int> = withContext(Dispatchers.IO) {
         try {
             val ext = archivePath.substringAfterLast('.').lowercase()
-            val count = when {
-                ext == "zip" || ext == "jar" -> extractZip(archivePath, destination, entriesToExtract, password, onProgress)
-                ext == "7z" -> extract7z(archivePath, destination, entriesToExtract, onProgress)
-                ext == "rar" -> extractRar(archivePath, destination, entriesToExtract, password, onProgress)
-                ext in setOf("tar", "tgz", "tbz2", "txz") || isTarCompressed(archivePath) ->
-                    extractTar(archivePath, destination, entriesToExtract, onProgress)
-                else -> 0
+            val destinationRoot = prepareDestination(destination)
+            val stagingRoot = Files.createTempDirectory(destinationRoot.toPath(), ".fileexplorer-extract-").toFile()
+            val count = try {
+                val extractedCount = when {
+                    ext == "zip" || ext == "jar" -> extractZip(
+                        archivePath,
+                        stagingRoot,
+                        entriesToExtract,
+                        password,
+                        onProgress,
+                    )
+                    ext == "7z" -> extract7z(archivePath, stagingRoot, entriesToExtract, onProgress)
+                    ext == "rar" -> extractRar(archivePath, stagingRoot, entriesToExtract, password, onProgress)
+                    ext in setOf("tar", "tgz", "tbz2", "txz") || isTarCompressed(archivePath) ->
+                        extractTar(archivePath, stagingRoot, entriesToExtract, onProgress)
+                    else -> 0
+                }
+                commitStagedExtraction(stagingRoot, destinationRoot)
+                extractedCount
+            } finally {
+                stagingRoot.deleteRecursively()
             }
             Result.success(count)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -141,6 +154,157 @@ class ArchiveHelper @Inject constructor(
             "bz2", "tbz2", "xz", "txz", "zst", "rar")
     }
 
+    private fun prepareDestination(destination: String): File {
+        val root = File(destination).canonicalFile
+        if (root.exists()) {
+            if (!root.isDirectory) throw ArchiveExtractionException("Extraction destination is not a directory: $destination")
+        } else if (!root.mkdirs() && !root.isDirectory) {
+            throw ArchiveExtractionException("Unable to create extraction destination: $destination")
+        }
+        return root
+    }
+
+    private fun normalizedSelection(entries: List<String>?): Set<String>? {
+        return entries?.map { entry ->
+            ArchiveEntryPathPolicy.normalizeEntryName(entry)
+                ?: throw ArchiveExtractionException("Invalid requested archive entry: $entry")
+        }?.toSet()
+    }
+
+    private fun stagedEntry(
+        stagingRoot: File,
+        entryName: String,
+        declaredSize: Long,
+        budget: ArchiveExtractionBudget,
+    ): File {
+        val normalizedName = ArchiveEntryPathPolicy.normalizeEntryName(entryName)
+            ?: throw ArchiveExtractionException("Unsafe archive entry path: $entryName")
+        val output = ArchiveEntryPathPolicy.safeDestination(stagingRoot.path, normalizedName)
+            ?: throw ArchiveExtractionException("Unsafe archive entry path: $entryName")
+        budget.register(normalizedName, declaredSize)
+        return output
+    }
+
+    private suspend fun copyArchiveEntry(
+        input: InputStream,
+        outputFile: File,
+        entryName: String,
+        declaredSize: Long,
+        budget: ArchiveExtractionBudget,
+        onProgress: (Long, Long, String) -> Unit,
+    ) {
+        outputFile.parentFile?.let { parent ->
+            if (!parent.exists() && !parent.mkdirs()) {
+                throw ArchiveExtractionException("Unable to create extraction directory: ${parent.path}")
+            }
+        }
+        FileOutputStream(outputFile).use { fileOutput ->
+            val boundedOutput = BoundedArchiveOutputStream(
+                delegate = fileOutput,
+                entryName = entryName,
+                declaredSize = declaredSize,
+                budget = budget,
+                coroutineContext = coroutineContext,
+                onProgress = onProgress,
+            )
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            input.use { source ->
+                while (true) {
+                    coroutineContext.ensureActive()
+                    val length = source.read(buffer)
+                    if (length == -1) break
+                    boundedOutput.write(buffer, 0, length)
+                }
+            }
+            boundedOutput.finish()
+        }
+    }
+
+    private fun commitStagedExtraction(stagingRoot: File, destinationRoot: File) {
+        val stagedEntries = stagingRoot.walkTopDown()
+            .filter { it != stagingRoot }
+            .toList()
+            .sortedWith(compareBy<File> { it.toPath().nameCount }.thenBy { if (it.isDirectory) 0 else 1 })
+
+        for (source in stagedEntries) {
+            if (Files.isSymbolicLink(source.toPath())) {
+                throw ArchiveExtractionException("Staged symbolic links are not supported: ${source.name}")
+            }
+            val relativeName = stagingRoot.toPath().relativize(source.toPath()).toString()
+            val target = ArchiveEntryPathPolicy.safeDestination(destinationRoot.path, relativeName)
+                ?: throw ArchiveExtractionException("Unsafe archive entry path: $relativeName")
+            if (Files.isSymbolicLink(target.toPath())) {
+                throw ArchiveExtractionException("Refusing to overwrite a symbolic link: ${target.path}")
+            }
+
+            if (source.isDirectory) {
+                if (target.exists() && !target.isDirectory) {
+                    throw ArchiveExtractionException("Extraction target is not a directory: ${target.path}")
+                }
+                if (!target.exists() && !target.mkdirs() && !target.isDirectory) {
+                    throw ArchiveExtractionException("Unable to create extraction directory: ${target.path}")
+                }
+            } else {
+                target.parentFile?.let { parent ->
+                    if (!parent.exists() && !parent.mkdirs()) {
+                        throw ArchiveExtractionException("Unable to create extraction directory: ${parent.path}")
+                    }
+                }
+                try {
+                    Files.move(
+                        source.toPath(),
+                        target.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE,
+                    )
+                } catch (_: AtomicMoveNotSupportedException) {
+                    Files.move(source.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                }
+            }
+        }
+    }
+
+    private class BoundedArchiveOutputStream(
+        private val delegate: OutputStream,
+        private val entryName: String,
+        private val declaredSize: Long,
+        private val budget: ArchiveExtractionBudget,
+        private val coroutineContext: CoroutineContext,
+        private val onProgress: (Long, Long, String) -> Unit,
+    ) : OutputStream() {
+        private var entryBytes = 0L
+
+        override fun write(value: Int) {
+            write(byteArrayOf(value.toByte()), 0, 1)
+        }
+
+        override fun write(bytes: ByteArray, offset: Int, length: Int) {
+            coroutineContext.ensureActive()
+            if (length == 0) return
+            val nextEntryBytes = entryBytes + length
+            budget.consume(entryName, nextEntryBytes, declaredSize, length)
+            delegate.write(bytes, offset, length)
+            entryBytes = nextEntryBytes
+            onProgress(budget.writtenBytes, budget.progressTotal, entryName)
+        }
+
+        fun finish() {
+            budget.finish(entryName, entryBytes, declaredSize)
+        }
+    }
+
+    private class SevenZEntryInputStream(
+        private val archive: SevenZFile,
+    ) : InputStream() {
+        override fun read(): Int = archive.read()
+
+        override fun read(bytes: ByteArray, offset: Int, length: Int): Int = archive.read(bytes, offset, length)
+
+        override fun close() {
+            // The enclosing SevenZFile owns the archive stream and closes it.
+        }
+    }
+
     // -- ZIP (via zip4j for encryption support) --
 
     private fun listZipEntries(path: String): List<FileItem> {
@@ -162,23 +326,35 @@ class ArchiveHelper @Inject constructor(
         }
     }
 
-    private fun extractZip(
-        archivePath: String, destination: String,
+    private suspend fun extractZip(
+        archivePath: String, stagingRoot: File,
         entries: List<String>?, password: CharArray?,
         onProgress: (Long, Long, String) -> Unit,
     ): Int {
-        val zipFile = ZipFile(archivePath)
-        if (password != null) zipFile.setPassword(password)
-
+        val selection = normalizedSelection(entries)
+        val budget = ArchiveExtractionBudget()
         var count = 0
-        if (entries == null) {
-            zipFile.extractAll(destination)
-            count = zipFile.fileHeaders.size
-        } else {
-            for (entry in entries) {
-                val header = zipFile.getFileHeader(entry) ?: continue
-                zipFile.extractFile(header, destination)
-                onProgress(0, 0, header.fileName)
+        ZipFile(archivePath).use { zipFile ->
+            if (password != null) zipFile.setPassword(password)
+            for (header in zipFile.fileHeaders) {
+                val entryName = header.fileName.trimEnd('/')
+                if (entryName.isEmpty() || (selection != null && entryName !in selection)) continue
+
+                val outputFile = stagedEntry(stagingRoot, entryName, header.uncompressedSize, budget)
+                if (header.isDirectory) {
+                    if (!outputFile.exists() && !outputFile.mkdirs()) {
+                        throw ArchiveExtractionException("Unable to create extraction directory: ${outputFile.path}")
+                    }
+                } else {
+                    copyArchiveEntry(
+                        input = zipFile.getInputStream(header),
+                        outputFile = outputFile,
+                        entryName = entryName,
+                        declaredSize = header.uncompressedSize,
+                        budget = budget,
+                        onProgress = onProgress,
+                    )
+                }
                 count++
             }
         }
@@ -247,31 +423,36 @@ class ArchiveHelper @Inject constructor(
         return entries
     }
 
-    private fun extract7z(
-        archivePath: String, destination: String,
+    private suspend fun extract7z(
+        archivePath: String, stagingRoot: File,
         entries: List<String>?,
         onProgress: (Long, Long, String) -> Unit,
     ): Int {
+        val selection = normalizedSelection(entries)
+        val budget = ArchiveExtractionBudget()
         var count = 0
         SevenZFile.builder().setFile(File(archivePath)).get().use { sevenZ ->
             var entry: SevenZArchiveEntry?
             while (sevenZ.nextEntry.also { entry = it } != null) {
+                coroutineContext.ensureActive()
                 val e = entry ?: continue
-                if (entries != null && e.name.trimEnd('/') !in entries) continue
+                val entryName = e.name.trimEnd('/')
+                if (entryName.isEmpty() || (selection != null && entryName !in selection)) continue
 
-                val outFile = File(destination, e.name)
+                val outFile = stagedEntry(stagingRoot, entryName, e.size, budget)
                 if (e.isDirectory) {
-                    outFile.mkdirs()
-                } else {
-                    outFile.parentFile?.mkdirs()
-                    FileOutputStream(outFile).use { fos ->
-                        val buf = ByteArray(8192)
-                        var len: Int
-                        while (sevenZ.read(buf).also { len = it } != -1) {
-                            fos.write(buf, 0, len)
-                        }
+                    if (!outFile.exists() && !outFile.mkdirs()) {
+                        throw ArchiveExtractionException("Unable to create extraction directory: ${outFile.path}")
                     }
-                    onProgress(0, 0, e.name)
+                } else {
+                    copyArchiveEntry(
+                        input = SevenZEntryInputStream(sevenZ),
+                        outputFile = outFile,
+                        entryName = entryName,
+                        declaredSize = e.size,
+                        budget = budget,
+                        onProgress = onProgress,
+                    )
                 }
                 count++
             }
@@ -330,13 +511,15 @@ class ArchiveHelper @Inject constructor(
         return entries
     }
 
-    private fun extractRar(
+    private suspend fun extractRar(
         archivePath: String,
-        destination: String,
+        stagingRoot: File,
         entries: List<String>?,
         password: CharArray?,
         onProgress: (Long, Long, String) -> Unit,
     ): Int {
+        val selection = normalizedSelection(entries)
+        val budget = ArchiveExtractionBudget()
         val archive = if (password == null) {
             Archive(File(archivePath))
         } else {
@@ -345,18 +528,35 @@ class ArchiveHelper @Inject constructor(
         var count = 0
         archive.use {
             for (header in archive) {
+                coroutineContext.ensureActive()
                 val entryName = header.fileName.trimEnd('/')
-                if (entryName.isEmpty() || (entries != null && entryName !in entries)) continue
+                if (entryName.isEmpty() || (selection != null && entryName !in selection)) continue
 
-                val outputFile = ArchiveEntryPathPolicy.safeDestination(destination, entryName) ?: continue
+                val outputFile = stagedEntry(stagingRoot, entryName, header.fullUnpackSize, budget)
                 if (header.isDirectory) {
-                    outputFile.mkdirs()
+                    if (!outputFile.exists() && !outputFile.mkdirs()) {
+                        throw ArchiveExtractionException("Unable to create extraction directory: ${outputFile.path}")
+                    }
                 } else {
-                    outputFile.parentFile?.mkdirs()
-                    FileOutputStream(outputFile).use { output -> archive.extractFile(header, output) }
+                    outputFile.parentFile?.let { parent ->
+                        if (!parent.exists() && !parent.mkdirs()) {
+                            throw ArchiveExtractionException("Unable to create extraction directory: ${parent.path}")
+                        }
+                    }
+                    FileOutputStream(outputFile).use { output ->
+                        val boundedOutput = BoundedArchiveOutputStream(
+                            delegate = output,
+                            entryName = entryName,
+                            declaredSize = header.fullUnpackSize,
+                            budget = budget,
+                            coroutineContext = coroutineContext,
+                            onProgress = onProgress,
+                        )
+                        archive.extractFile(header, boundedOutput)
+                        boundedOutput.finish()
+                    }
                 }
                 count++
-                onProgress(count.toLong(), -1L, entryName)
             }
         }
         return count
@@ -427,35 +627,43 @@ class ArchiveHelper @Inject constructor(
         return entries
     }
 
-    private fun extractTar(
-        archivePath: String, destination: String,
+    private suspend fun extractTar(
+        archivePath: String, stagingRoot: File,
         entries: List<String>?,
         onProgress: (Long, Long, String) -> Unit,
     ): Int {
+        val selection = normalizedSelection(entries)
+        val budget = ArchiveExtractionBudget()
         var count = 0
         val stream = TarArchiveInputStream(openTarInputStream(archivePath))
         stream.use { tar ->
             var entry: ArchiveEntry?
             while (tar.nextEntry.also { entry = it } != null) {
+                coroutineContext.ensureActive()
                 val e = entry ?: continue
-                if (entries != null && e.name.trimEnd('/') !in entries) continue
+                val entryName = e.name.trimEnd('/')
+                if (entryName.isEmpty() || (selection != null && entryName !in selection)) continue
+                val tarEntry = e as? org.apache.commons.compress.archivers.tar.TarArchiveEntry
+                    ?: throw ArchiveExtractionException("Unsupported TAR entry: $entryName")
+                if (tarEntry.isSymbolicLink || tarEntry.isLink || !tarEntry.isDirectory && !tarEntry.isFile) {
+                    throw ArchiveExtractionException("Symbolic, hard-link, or special TAR entry is not supported: $entryName")
+                }
 
-                val outFile = File(destination, e.name)
-                // Protect against zip-slip
-                if (!outFile.canonicalPath.startsWith(File(destination).canonicalPath)) continue
+                val outFile = stagedEntry(stagingRoot, entryName, e.size, budget)
 
                 if (e.isDirectory) {
-                    outFile.mkdirs()
-                } else {
-                    outFile.parentFile?.mkdirs()
-                    FileOutputStream(outFile).use { fos ->
-                        val buf = ByteArray(8192)
-                        var len: Int
-                        while (tar.read(buf).also { len = it } != -1) {
-                            fos.write(buf, 0, len)
-                        }
+                    if (!outFile.exists() && !outFile.mkdirs()) {
+                        throw ArchiveExtractionException("Unable to create extraction directory: ${outFile.path}")
                     }
-                    onProgress(0, 0, e.name)
+                } else {
+                    copyArchiveEntry(
+                        input = tar,
+                        outputFile = outFile,
+                        entryName = entryName,
+                        declaredSize = e.size,
+                        budget = budget,
+                        onProgress = onProgress,
+                    )
                 }
                 count++
             }

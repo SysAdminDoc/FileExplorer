@@ -4,6 +4,9 @@ All notable changes to FileExplorer will be documented in this file.
 
 ## [v1.5.0] - 2026-08-03
 
+### Security
+- Hardened ZIP, 7z, TAR, and RAR extraction with shared path containment, depth and resource limits, symlink/hard-link rejection, cancellation checks, and staged commits.
+
 ### Added
 - Added an independent dual-pane browser layout with per-pane navigation, refresh, sorting, hidden-file filtering, and selection.
 - Added long-press drag-and-drop transfers between panes with self/descendant path protection and explicit Copy or Move confirmation.
