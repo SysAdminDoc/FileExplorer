@@ -218,6 +218,9 @@
     <string name="select_all">Select all</string>
     <string name="cut">Cut</string>
     <string name="delete_permanently">Delete permanently</string>
+    <string name="permanent_delete_warning">Permanently delete %1$d item(s)? This cannot be undone.</string>
+    <string name="permanent_delete_best_effort_warning">Secure overwrite is enabled. Local overwrite is best effort and cannot guarantee erasure on flash storage, snapshots, or copy-on-write filesystems.</string>
+    <string name="permanent_delete_unsupported_warning">Secure overwrite is unavailable for this provider. Items will be deleted without overwrite-based erasure.</string>
     <string name="share">Share</string>
     <string name="rename">Rename</string>
     <string name="folder_name">Folder name</string>
@@ -257,7 +260,7 @@
     <string name="vault_description">Protected storage for sensitive files, accessible only with biometrics</string>
     <string name="file_security">File security</string>
     <string name="secure_delete">Secure Delete</string>
-    <string name="secure_delete_description">Overwrite files before deletion (3-pass DoD 5220.22-M)</string>
+    <string name="secure_delete_description">Best-effort overwrite before local deletion; flash storage and snapshots cannot guarantee erasure</string>
     <string name="checksum_verification">Checksum Verification</string>
     <string name="checksum_description">Verify file integrity with MD5, SHA-1, SHA-256, SHA-512</string>
     <string name="file_encryption">File Encryption</string>

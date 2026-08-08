@@ -55,4 +55,22 @@ class SecureDeleteTest {
         val result = SecureDelete.secureDelete("/nonexistent/path/xyz.tmp")
         assertTrue(result.isFailure)
     }
+
+    @Test
+    fun secureDeleteRejectsNonPositivePasses() = runBlocking {
+        val f = Files.createTempFile("secdel-passes", ".txt").also { temps.add(it) }
+        Files.write(f, "secret data".toByteArray())
+
+        val result = SecureDelete.secureDelete(f.toString(), passes = 0)
+
+        assertTrue(result.isFailure)
+        assertTrue(Files.exists(f))
+    }
+
+    @Test
+    fun secureDeleteRejectsBlankPath() = runBlocking {
+        val result = SecureDelete.secureDelete(" ")
+
+        assertTrue(result.isFailure)
+    }
 }

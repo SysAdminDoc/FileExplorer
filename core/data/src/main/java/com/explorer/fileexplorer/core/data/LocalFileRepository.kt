@@ -23,6 +23,8 @@ class LocalFileRepository @Inject constructor(
     @ApplicationContext private val context: Context,
 ) : FileRepository {
 
+    override fun deleteCapabilities(paths: List<String>): DeleteCapabilities = DeleteCapabilities.LOCAL_BEST_EFFORT
+
     override fun listFiles(path: String): Flow<List<FileItem>> = flow {
         val dir = Paths.get(path)
         if (!Files.isDirectory(dir)) {

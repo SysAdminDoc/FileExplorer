@@ -8,6 +8,7 @@ import com.explorer.fileexplorer.core.data.ArchiveFormat
 import com.explorer.fileexplorer.core.data.ArchiveHelper
 import com.explorer.fileexplorer.core.data.BatchRenameEngine
 import com.explorer.fileexplorer.core.data.BatchRenameOptions
+import com.explorer.fileexplorer.core.data.DeleteCapabilities
 import com.explorer.fileexplorer.core.data.FileRepository
 import com.explorer.fileexplorer.core.data.FileRepositoryFactory
 import com.explorer.fileexplorer.core.data.LocalFileRepository
@@ -15,6 +16,7 @@ import com.explorer.fileexplorer.core.data.LocalTrashManager
 import com.explorer.fileexplorer.core.data.NetworkRepoAdapter
 import com.explorer.fileexplorer.core.data.RootFileRepository
 import com.explorer.fileexplorer.core.data.SecureDelete
+import com.explorer.fileexplorer.core.data.SecureDeleteCapability
 import com.explorer.fileexplorer.core.data.TagRepository
 import com.explorer.fileexplorer.core.data.UsbDeviceInfo
 import com.explorer.fileexplorer.core.data.UsbPathCodec
@@ -58,6 +60,12 @@ data class BrowserTab(
     val path: String,
 )
 
+data class PermanentDeleteConfirmation(
+    val paths: List<String>,
+    val capabilities: DeleteCapabilities,
+    val secureDeleteEnabled: Boolean,
+)
+
 data class BrowserUiState(
     val currentPath: String = Environment.getExternalStorageDirectory().absolutePath,
     val files: List<FileItem> = emptyList(),
@@ -93,6 +101,7 @@ data class BrowserUiState(
     val archiveInternalPath: String = "",
     val showCompressDialog: Boolean = false,
     val deleteConfirmationItem: FileItem? = null,
+    val permanentDeleteConfirmation: PermanentDeleteConfirmation? = null,
     val showExtractDialog: Boolean = false,
     val compactDensity: Boolean = false,
     val showDirectorySizes: Boolean = false,
@@ -932,12 +941,51 @@ class BrowserViewModel @Inject constructor(
     }
 
     fun permanentlyDeleteSelected() {
-        deleteSelected(useTrash = false)
+        val paths = _state.value.selectedItems.toList()
+        if (paths.isEmpty()) return
+        viewModelScope.launch {
+            val repo = repoFactory.getRepository(paths.first())
+            val capabilities = repo.deleteCapabilities(paths)
+            if (!capabilities.supportsPermanentDelete) {
+                _events.emit(BrowserEvent.Toast("Permanent deletion is not supported by this provider"))
+                return@launch
+            }
+            val secureDeleteEnabled = securityRepository.settings.first().secureDeleteEnabled
+            _state.update {
+                it.copy(
+                    permanentDeleteConfirmation = PermanentDeleteConfirmation(
+                        paths = paths,
+                        capabilities = capabilities,
+                        secureDeleteEnabled = secureDeleteEnabled,
+                    ),
+                )
+            }
+        }
     }
 
-    private fun deleteSelected(useTrash: Boolean) {
+    fun dismissPermanentDeleteConfirmation() {
+        _state.update { it.copy(permanentDeleteConfirmation = null) }
+    }
+
+    fun confirmPermanentDelete() {
+        val confirmation = _state.value.permanentDeleteConfirmation ?: return
+        _state.update { it.copy(permanentDeleteConfirmation = null) }
+        deleteSelected(
+            useTrash = false,
+            confirmedPaths = confirmation.paths,
+            confirmedCapabilities = confirmation.capabilities,
+            confirmedSecureDelete = confirmation.secureDeleteEnabled,
+        )
+    }
+
+    private fun deleteSelected(
+        useTrash: Boolean,
+        confirmedPaths: List<String>? = null,
+        confirmedCapabilities: DeleteCapabilities? = null,
+        confirmedSecureDelete: Boolean? = null,
+    ) {
         viewModelScope.launch {
-            val paths = _state.value.selectedItems.toList()
+            val paths = confirmedPaths ?: _state.value.selectedItems.toList()
             if (paths.isEmpty()) return@launch
 
             if (useTrash) {
@@ -954,23 +1002,46 @@ class BrowserViewModel @Inject constructor(
                     .onFailure { e -> _events.emit(BrowserEvent.Toast("Trash failed: ${e.message}")) }
             } else {
                 val repo = repoFactory.getRepository(paths.first())
-                val secureEnabled = securityRepository.settings.first().secureDeleteEnabled
-                if (secureEnabled && repo is LocalFileRepository) {
-                    var failed = false
+                val capabilities = confirmedCapabilities ?: repo.deleteCapabilities(paths)
+                if (!capabilities.supportsPermanentDelete) {
+                    _events.emit(BrowserEvent.Toast("Permanent deletion is not supported by this provider"))
+                    return@launch
+                }
+                val secureEnabled = confirmedSecureDelete ?: securityRepository.settings.first().secureDeleteEnabled
+                if (secureEnabled && capabilities.secureDelete == SecureDeleteCapability.BEST_EFFORT) {
+                    var deleted = 0
+                    var failed = 0
+                    val failedPaths = mutableSetOf<String>()
                     for (p in paths) {
                         SecureDelete.secureDelete(p).onFailure { e ->
                             _events.emit(BrowserEvent.Toast("Secure delete failed: ${e.message}"))
-                            failed = true
-                        }
+                            failed++
+                            failedPaths += p
+                        }.onSuccess { deleted++ }
                     }
-                    if (!failed) _events.emit(BrowserEvent.Toast("${paths.size} items securely deleted"))
-                    clearSelection(); refresh()
+                    if (failed == 0) {
+                        _events.emit(BrowserEvent.Toast("$deleted items deleted with best-effort overwrite"))
+                    } else {
+                        _events.emit(BrowserEvent.Toast("$deleted items deleted; $failed failed"))
+                    }
+                    if (failed == 0) clearSelection()
+                    else _state.update { it.copy(selectedItems = failedPaths) }
+                    if (deleted > 0 || failed == 0) refresh()
                 } else {
-                    if (secureEnabled && repo !is LocalFileRepository) {
-                        _events.emit(BrowserEvent.Toast("Secure delete is only available for local files"))
+                    if (secureEnabled && capabilities.secureDelete == SecureDeleteCapability.UNSUPPORTED) {
+                        _events.emit(BrowserEvent.Toast("Secure overwrite unavailable: ${capabilities.secureDeleteDescription}"))
                     }
                     repo.deleteFiles(paths)
-                        .onSuccess { c -> _events.emit(BrowserEvent.Toast("$c items deleted permanently")); clearSelection(); refresh() }
+                        .onSuccess { c ->
+                            val message = if (c == paths.size) {
+                                "$c items deleted permanently"
+                            } else {
+                                "$c of ${paths.size} items deleted; partial failure"
+                            }
+                            _events.emit(BrowserEvent.Toast(message))
+                            if (c == paths.size) clearSelection()
+                            refresh()
+                        }
                         .onFailure { e -> _events.emit(BrowserEvent.Toast("Delete failed: ${e.message}")) }
                 }
             }

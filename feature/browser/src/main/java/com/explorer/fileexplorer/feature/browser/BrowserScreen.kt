@@ -40,6 +40,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.explorer.fileexplorer.core.data.ArchiveFormat
+import com.explorer.fileexplorer.core.data.SecureDeleteCapability
 import com.explorer.fileexplorer.core.database.TagEntity
 import com.explorer.fileexplorer.core.database.RecentLocationEntity
 import com.explorer.fileexplorer.core.database.SavedSearchEntity
@@ -460,6 +461,43 @@ fun BrowserScreen(
             },
             dismissButton = {
                 TextButton(onClick = viewModel::dismissDeleteConfirmation) { Text(stringResource(DesignSystemR.string.cancel)) }
+            },
+        )
+    }
+    state.permanentDeleteConfirmation?.let { confirmation ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissPermanentDeleteConfirmation,
+            title = { Text(stringResource(DesignSystemR.string.delete_permanently)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        stringResource(
+                            DesignSystemR.string.permanent_delete_warning,
+                            confirmation.paths.size,
+                        ),
+                    )
+                    if (confirmation.secureDeleteEnabled) {
+                        Text(
+                            stringResource(
+                                if (confirmation.capabilities.secureDelete == SecureDeleteCapability.BEST_EFFORT) {
+                                    DesignSystemR.string.permanent_delete_best_effort_warning
+                                } else {
+                                    DesignSystemR.string.permanent_delete_unsupported_warning
+                                },
+                            ),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmPermanentDelete) {
+                    Text(stringResource(DesignSystemR.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissPermanentDeleteConfirmation) {
+                    Text(stringResource(DesignSystemR.string.cancel))
+                }
             },
         )
     }

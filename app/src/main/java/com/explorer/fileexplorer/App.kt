@@ -5,6 +5,7 @@ import android.content.Context
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import com.explorer.fileexplorer.core.data.FileRepositoryFactory
+import com.explorer.fileexplorer.core.data.DeleteCapabilities
 import com.explorer.fileexplorer.core.data.NetworkRepoProvider
 import com.explorer.fileexplorer.core.data.PluginFileRepository
 import com.explorer.fileexplorer.core.data.SchemeResolver
@@ -52,6 +53,7 @@ class App : Application(), SingletonImageLoader.Factory {
     override fun newImageLoader(context: Context): ImageLoader = ThumbnailCacheController.newImageLoader(context)
 
     private fun wrap(repo: NetworkFileRepository) = object : NetworkRepoProvider {
+        override fun deleteCapabilities(paths: List<String>): DeleteCapabilities = repo.deleteCapabilities(paths)
         override fun listFiles(path: String): Flow<List<FileItem>> = repo.listFiles(path)
         override suspend fun getFileInfo(path: String): FileItem? = repo.getFileInfo(path)
         override suspend fun exists(path: String): Boolean = repo.exists(path)

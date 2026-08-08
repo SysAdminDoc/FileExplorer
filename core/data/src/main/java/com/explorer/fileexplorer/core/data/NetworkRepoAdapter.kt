@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
 interface NetworkRepoProvider {
+    fun deleteCapabilities(paths: List<String>): DeleteCapabilities = DeleteCapabilities.PROVIDER_DELETE_ONLY
     fun listFiles(path: String): Flow<List<FileItem>>
     suspend fun getFileInfo(path: String): FileItem?
     suspend fun exists(path: String): Boolean
@@ -17,6 +18,7 @@ interface NetworkRepoProvider {
 }
 
 class NetworkRepoAdapter(private val delegate: NetworkRepoProvider) : FileRepository {
+    override fun deleteCapabilities(paths: List<String>): DeleteCapabilities = delegate.deleteCapabilities(paths)
     override fun listFiles(path: String): Flow<List<FileItem>> = delegate.listFiles(path)
     override suspend fun getFileInfo(path: String): FileItem? = delegate.getFileInfo(path)
     override suspend fun exists(path: String): Boolean = delegate.exists(path)

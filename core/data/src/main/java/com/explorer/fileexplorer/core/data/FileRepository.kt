@@ -4,11 +4,34 @@ import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
 import kotlinx.coroutines.flow.Flow
 
+enum class SecureDeleteCapability {
+    BEST_EFFORT,
+    UNSUPPORTED,
+}
+
+data class DeleteCapabilities(
+    val supportsPermanentDelete: Boolean = true,
+    val secureDelete: SecureDeleteCapability = SecureDeleteCapability.UNSUPPORTED,
+    val secureDeleteDescription: String = "This provider can delete the item but cannot verify overwrite-based erasure.",
+) {
+    companion object {
+        val LOCAL_BEST_EFFORT = DeleteCapabilities(
+            secureDelete = SecureDeleteCapability.BEST_EFFORT,
+            secureDeleteDescription = "Local overwrite is best effort and cannot guarantee erasure on flash storage, snapshots, or copy-on-write filesystems.",
+        )
+
+        val PROVIDER_DELETE_ONLY = DeleteCapabilities()
+    }
+}
+
 /**
  * Abstract filesystem provider — analogous to PowerShell's PSDrive/Provider system.
  * Each implementation handles a different backend: local, root, SAF, SMB, SFTP, cloud, archive.
  */
 interface FileRepository {
+
+    /** Capabilities for irreversible deletion at this provider/location. */
+    fun deleteCapabilities(paths: List<String>): DeleteCapabilities = DeleteCapabilities.PROVIDER_DELETE_ONLY
 
     /** List files in a directory. Returns Flow for streaming large directories. */
     fun listFiles(path: String): Flow<List<FileItem>>
