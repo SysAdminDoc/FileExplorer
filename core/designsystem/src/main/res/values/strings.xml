@@ -161,6 +161,14 @@
     <string name="restore_backup">Restore from a previously exported backup</string>
     <string name="export_diagnostic_log">Export diagnostic log</string>
     <string name="share_error_logs">Share error logs for troubleshooting</string>
+    <string name="plugin_extensions">Plugin extensions</string>
+    <string name="plugin_extensions_description">Review installed FileExplorer plugins before they can access file operations.</string>
+    <string name="plugin_trust_warning">Only approve plugins you installed and recognize. Approval is tied to the installed signing certificate and can be revoked here.</string>
+    <string name="plugin_none_installed">No plugin services were discovered.</string>
+    <string name="plugin_trusted">Trusted</string>
+    <string name="plugin_needs_approval">Needs approval</string>
+    <string name="plugin_signature_changed">Signing certificate changed; review approval</string>
+    <string name="plugin_capabilities">Declared capabilities: %1$s</string>
     <string name="version">Version</string>
     <string name="version_value">1.5.0</string>
     <string name="days_short">%1$dd</string>

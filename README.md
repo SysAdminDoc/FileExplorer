@@ -60,6 +60,7 @@ cd FileExplorer
 | WebDAV | HTTP/HTTPS via sardine-android 0.9 with server-side copy/move | Complete |
 | Connection Manager | Save, edit, test network connections with Android Keystore-encrypted passwords. Remote file browser | Complete |
 | Provider Contracts | Shared capabilities and typed unsupported/auth/permission/transport/conflict/corrupt errors across local, root, USB, plugin, network, and cloud adapters, with bounded redacted diagnostics | Complete |
+| Plugin Trust | Explicit certificate-bound approval and revocation, declared-capability checks, bounded isolated IPC, and path-free audit events | Verified (local trust boundary) |
 | Google Drive | REST API v3. Browse, upload, download, delete, rename, quota display | Requires configuration |
 | Dropbox | HTTP API v2. Browse, upload, download, folder operations | Requires configuration |
 | OneDrive | Microsoft Graph API. Full file operations, quota tracking | Requires configuration |
@@ -183,7 +184,7 @@ A plugin declares one exported service and the protocol metadata in its manifest
 </service>
 ```
 
-The host validates the metadata, binds only to the declared component, checks the negotiated protocol version, and sends `list`, `info`, `exists`, `copy`, `move`, `delete`, `create_directory`, `create_file`, `rename`, `size`, `search`, and `checksum` requests as `Bundle` messages. Each response must set `ok=true`; file entries use `PluginFileCodec` bundles. The binder boundary keeps failures and plugin dependencies out of the host process.
+The host validates the metadata, binds only to the declared component, and keeps each discovered plugin untrusted until it is approved in Settings. Approval is tied to the exact service component and SHA-256 signing-certificate digest, can be revoked, and grants only the declared capabilities. The host negotiates protocol version 1, rejects unknown operations, checks every requested path through the plugin, and sends `list`, `info`, `exists`, `copy`, `move`, `delete`, `create_directory`, `create_file`, `rename`, `size`, `search`, and `checksum` requests as `Bundle` messages. Calls are limited to four concurrent requests, 15 seconds, 256 KiB requests, and 512 KiB responses; binder death and protocol/resource failures are isolated as unavailable provider errors. Each response must set `ok=true`; file entries use `PluginFileCodec` bundles. The binder boundary keeps failures and plugin dependencies out of the host process.
 
 ## Cloud Setup
 

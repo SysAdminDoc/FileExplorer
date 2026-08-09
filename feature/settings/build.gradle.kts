@@ -19,6 +19,7 @@ android {
 }
 dependencies {
     implementation(project(":core:model"))
+    implementation(project(":core:plugin"))
     implementation(project(":core:data"))
     implementation(project(":core:storage"))
     implementation(project(":core:database"))

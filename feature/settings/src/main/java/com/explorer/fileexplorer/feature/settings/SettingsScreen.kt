@@ -28,8 +28,12 @@ import androidx.lifecycle.viewModelScope
 import com.explorer.fileexplorer.core.data.LocalTrashManager
 import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.designsystem.ThemeMode
+import com.explorer.fileexplorer.plugin.PluginDescriptor
+import com.explorer.fileexplorer.plugin.PluginManager
+import com.explorer.fileexplorer.plugin.PluginTrustState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -169,12 +173,28 @@ class SettingsViewModel @Inject constructor(
     private val repo: SettingsRepository,
     private val backupManager: com.explorer.fileexplorer.core.data.BackupManager,
     private val diagnosticLog: com.explorer.fileexplorer.core.data.DiagnosticLog,
+    private val pluginManager: PluginManager,
     @ApplicationContext private val context: android.content.Context,
 ) : ViewModel() {
     val state = repo.settings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsState())
+    private val _plugins = MutableStateFlow<List<PluginDescriptor>>(emptyList())
+    val plugins: StateFlow<List<PluginDescriptor>> = _plugins.asStateFlow()
 
     private val _toasts = kotlinx.coroutines.flow.MutableSharedFlow<String>()
     val toasts: kotlinx.coroutines.flow.SharedFlow<String> = _toasts.asSharedFlow()
+
+    init { refreshPlugins() }
+
+    fun refreshPlugins() {
+        viewModelScope.launch(Dispatchers.IO) { _plugins.value = pluginManager.discover() }
+    }
+
+    fun setPluginApproval(plugin: PluginDescriptor, approved: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (approved) pluginManager.approve(plugin.id) else pluginManager.revoke(plugin.id)
+            _plugins.value = pluginManager.discover()
+        }
+    }
 
     fun toggleShowHidden() { viewModelScope.launch { repo.update(SettingsKeys.SHOW_HIDDEN, !state.value.showHidden) } }
     fun toggleFoldersFirst() { viewModelScope.launch { repo.update(SettingsKeys.FOLDERS_FIRST, !state.value.foldersFirst) } }
@@ -243,6 +263,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val plugins by viewModel.plugins.collectAsStateWithLifecycle()
     val appContext = LocalContext.current
 
     LaunchedEffect(Unit) { viewModel.toasts.collect { Toast.makeText(appContext, it, Toast.LENGTH_SHORT).show() } }
@@ -410,6 +431,13 @@ fun SettingsScreen(
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
+            PluginSettingsPanel(
+                plugins = plugins,
+                onApprovalChanged = viewModel::setPluginApproval,
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
             // About
             Text(
                 text = stringResource(DesignSystemR.string.about).uppercase(),
@@ -421,6 +449,66 @@ fun SettingsScreen(
             ListItem(
                 headlineContent = { Text(stringResource(DesignSystemR.string.version)) },
                 supportingContent = { Text(stringResource(DesignSystemR.string.version_value)) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PluginSettingsPanel(
+    plugins: List<PluginDescriptor>,
+    onApprovalChanged: (PluginDescriptor, Boolean) -> Unit,
+) {
+    Text(
+        text = stringResource(DesignSystemR.string.plugin_extensions).uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+    )
+    Text(
+        text = stringResource(DesignSystemR.string.plugin_extensions_description),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp),
+    )
+    Text(
+        text = stringResource(DesignSystemR.string.plugin_trust_warning),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.error,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+    if (plugins.isEmpty()) {
+        Text(
+            text = stringResource(DesignSystemR.string.plugin_none_installed),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+    } else {
+        plugins.forEach { plugin ->
+            val status = when (plugin.trustState) {
+                PluginTrustState.TRUSTED -> DesignSystemR.string.plugin_trusted
+                PluginTrustState.UNTRUSTED -> DesignSystemR.string.plugin_needs_approval
+                PluginTrustState.SIGNATURE_CHANGED -> DesignSystemR.string.plugin_signature_changed
+            }
+            ListItem(
+                headlineContent = { Text(plugin.displayName) },
+                supportingContent = {
+                    Column {
+                        Text(stringResource(status))
+                        Text(
+                            stringResource(
+                                DesignSystemR.string.plugin_capabilities,
+                                plugin.capabilities.joinToString(", ") { it.wireName },
+                            ),
+                        )
+                    }
+                },
+                trailingContent = {
+                    Switch(
+                        checked = plugin.trustState == PluginTrustState.TRUSTED,
+                        onCheckedChange = { onApprovalChanged(plugin, it) },
+                    )
+                },
             )
         }
     }

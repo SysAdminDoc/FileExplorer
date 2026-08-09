@@ -53,7 +53,40 @@ object PluginContract {
 enum class PluginCapability(val wireName: String) {
     FILESYSTEM("filesystem"),
     ARCHIVE("archive"),
-    TOOL("tool"),
+    TOOL("tool");
+
+    companion object {
+        fun fromWireName(value: String): PluginCapability? =
+            entries.firstOrNull { it.wireName == value }
+
+        /** The current IPC operations are filesystem operations. Unknown operations fail closed. */
+        fun requiredFor(operation: String): PluginCapability? = when (operation) {
+            PluginContract.OP_LIST,
+            PluginContract.OP_INFO,
+            PluginContract.OP_EXISTS,
+            PluginContract.OP_COPY,
+            PluginContract.OP_MOVE,
+            PluginContract.OP_DELETE,
+            PluginContract.OP_CREATE_DIRECTORY,
+            PluginContract.OP_CREATE_FILE,
+            PluginContract.OP_RENAME,
+            PluginContract.OP_SIZE,
+            PluginContract.OP_SEARCH,
+            PluginContract.OP_CHECKSUM -> FILESYSTEM
+            else -> null
+        }
+    }
+}
+
+enum class PluginTrustState {
+    /** No explicit approval has been recorded for this component and signing certificate. */
+    UNTRUSTED,
+
+    /** The component and signing certificate match an explicit user approval. */
+    TRUSTED,
+
+    /** An approval exists, but the installed component or signing certificate changed. */
+    SIGNATURE_CHANGED,
 }
 
 data class PluginDescriptor(
@@ -65,6 +98,9 @@ data class PluginDescriptor(
     val serviceClassName: String,
     val schemes: Set<String>,
     val capabilities: Set<PluginCapability>,
+    val signatureDigest: String = "",
+    val trustState: PluginTrustState = PluginTrustState.UNTRUSTED,
+    val approvedCapabilities: Set<PluginCapability> = emptySet(),
 )
 
 data class PluginMetadata(
@@ -89,9 +125,7 @@ object PluginDescriptorCodec {
         val schemes = parseNames(metadata.schemes)
         if (schemes.any { !it.matches(identifierPattern) }) return null
 
-        val capabilities = parseNames(metadata.capabilities).mapNotNull { value ->
-            PluginCapability.entries.firstOrNull { it.wireName == value }
-        }.toSet()
+        val capabilities = parseNames(metadata.capabilities).mapNotNull(PluginCapability::fromWireName).toSet()
 
         return PluginDescriptor(
             id = metadata.id,
@@ -173,13 +207,43 @@ object PluginRequests {
 object PluginResponses {
     fun requireSuccess(response: Bundle): Bundle {
         if (!response.getBoolean(PluginContract.KEY_OK, false)) {
-            throw PluginCallException(response.getString(PluginContract.KEY_ERROR) ?: "Plugin operation failed")
+            throw PluginCallException(
+                kind = PluginFailureKind.REMOTE_ERROR,
+                message = response.getString(PluginContract.KEY_ERROR)
+                    ?.take(MAX_PLUGIN_ERROR_LENGTH)
+                    ?: "Plugin operation failed",
+            )
         }
         return response
     }
 }
 
-class PluginCallException(message: String) : IllegalStateException(message)
+object PluginProtocol {
+    /** Returns the only protocol version this host can safely execute, or null to fail closed. */
+    fun negotiate(remoteVersion: Int): Int? =
+        remoteVersion.takeIf { it == PluginContract.PROTOCOL_VERSION }
+}
+
+enum class PluginFailureKind {
+    UNTRUSTED,
+    CAPABILITY_DENIED,
+    PROTOCOL_MISMATCH,
+    INVALID_REQUEST,
+    INVALID_RESPONSE,
+    RESOURCE_LIMIT,
+    TIMEOUT,
+    BIND_FAILED,
+    BINDER_DIED,
+    REMOTE_ERROR,
+}
+
+class PluginCallException(
+    val kind: PluginFailureKind,
+    message: String,
+    cause: Throwable? = null,
+) : IllegalStateException(message.take(MAX_PLUGIN_ERROR_LENGTH), cause)
+
+private const val MAX_PLUGIN_ERROR_LENGTH = 256
 
 object PluginFileCodec {
     fun toBundle(item: FileItem): Bundle = Bundle().apply {
