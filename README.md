@@ -63,7 +63,7 @@ cd FileExplorer
 | Dropbox | HTTP API v2. Browse, upload, download, folder operations | Requires configuration |
 | OneDrive | Microsoft Graph API. Full file operations, quota tracking | Requires configuration |
 | Biometric Lock | Fingerprint/face/device credential via AndroidX Biometric | Complete |
-| Encrypted Vault | AES-256-GCM encrypted storage with Android Keystore-backed keys | Complete |
+| Encrypted Vault | Opaque-ID AES-256-GCM storage with an encrypted index, Android Keystore key, and biometric/device-credential gate | Verified (local files) |
 | Secure Delete | DoD 5220.22-M 3-pass overwrite before deletion | Complete |
 | Checksum Verify | MD5, SHA-1, SHA-256, SHA-512 via java.security.MessageDigest | Complete |
 | Integrity Watch | Room-backed SHA-256 watches for files and directory trees, with periodic drift notifications | Complete |
@@ -206,7 +206,7 @@ Cloud providers are optional. The Cloud Storage screen reports `Requires OAuth c
 | Root mode | Drawer toggle | Enable/disable root shell access |
 | App lock | Security screen | Biometric requirement on launch |
 | Secure delete | Security screen | 3-pass overwrite before deletion |
-| Vault | Security screen | Protected private storage area |
+| Vault | Browser selection → More → Add to Vault; Security screen | Authenticate, move local regular files into opaque encrypted storage, inspect entries only while unlocked, restore to Downloads, or delete atomically |
 | File encryption | Browser selection → More | Encrypt files to `.encrypted`; biometric authentication is required to decrypt |
 | Shizuku access | Shizuku Access screen / drawer | Optional Android/data and Android/obb backend; requires a separately started Shizuku or Sui service and granted permission |
 | Large-screen layout | Automatic on windows at least 840dp wide | Three-pane places, files, and preview workspace with Ctrl+A, Delete, F5, Escape, and Up shortcuts |

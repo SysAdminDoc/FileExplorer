@@ -80,6 +80,7 @@
     <string name="compress">Compress</string>
     <string name="encrypt_files">Encrypt files</string>
     <string name="decrypt_files">Decrypt files</string>
+    <string name="add_to_vault">Add to Vault</string>
     <string name="batch_rename">Batch rename</string>
     <string name="watch_for_changes">Watch for changes</string>
     <string name="hex_view">Hex view</string>
@@ -261,7 +262,13 @@
     <string name="biometrics_unavailable">Biometrics not available on this device</string>
     <string name="encrypted_vault">Encrypted vault</string>
     <string name="enable_vault">Enable Vault</string>
-    <string name="vault_description">Protected storage for sensitive files, accessible only with biometrics</string>
+    <string name="vault_description">Encrypted storage for sensitive files; access requires biometric or device-credential authentication</string>
+    <string name="vault_unlock">Unlock vault</string>
+    <string name="vault_lock">Lock vault</string>
+    <string name="vault_restore">Restore to Downloads</string>
+    <string name="vault_delete">Delete from vault</string>
+    <string name="vault_empty">No protected files are stored in the vault.</string>
+    <string name="vault_entry_size">%1$d bytes</string>
     <string name="file_security">File security</string>
     <string name="secure_delete">Secure Delete</string>
     <string name="secure_delete_description">Best-effort overwrite before local deletion; flash storage and snapshots cannot guarantee erasure</string>

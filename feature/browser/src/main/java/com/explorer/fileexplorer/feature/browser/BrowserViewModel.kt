@@ -24,6 +24,7 @@ import com.explorer.fileexplorer.core.data.UsbStorageManager
 import com.explorer.fileexplorer.core.data.UsbStorageRoot
 import com.explorer.fileexplorer.feature.security.FileEncryptionManager
 import com.explorer.fileexplorer.feature.security.FileEncryptionBatchResult
+import com.explorer.fileexplorer.feature.security.VaultManager
 import com.explorer.fileexplorer.feature.security.SecurityRepository
 import com.explorer.fileexplorer.feature.security.IntegrityRepository
 import com.explorer.fileexplorer.feature.transfer.TransferQueueManager
@@ -157,6 +158,7 @@ sealed interface BrowserEvent {
     data class ShareFiles(val items: List<FileItem>) : BrowserEvent
     data class SendNearbyFiles(val items: List<FileItem>) : BrowserEvent
     data class RequestDecrypt(val paths: List<String>) : BrowserEvent
+    data class RequestVaultAdd(val paths: List<String>) : BrowserEvent
 }
 
 @HiltViewModel
@@ -172,6 +174,7 @@ class BrowserViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val securityRepository: SecurityRepository,
     private val fileEncryptionManager: FileEncryptionManager,
+    private val vaultManager: VaultManager,
     private val integrityRepository: IntegrityRepository,
     private val tagRepository: TagRepository,
     private val transferQueueManager: TransferQueueManager,
@@ -1186,6 +1189,54 @@ class BrowserViewModel @Inject constructor(
         val paths = _state.value.selectedItems.toList()
         if (paths.isNotEmpty()) {
             viewModelScope.launch { _events.emit(BrowserEvent.RequestDecrypt(paths)) }
+        }
+    }
+
+    fun requestAddToVaultSelected() {
+        val paths = _state.value.selectedItems.toList()
+        if (paths.isEmpty()) return
+        viewModelScope.launch {
+            if (!securityRepository.settings.first().vaultEnabled) {
+                _events.emit(BrowserEvent.Toast("Enable Vault in Security before adding files"))
+            } else {
+                _events.emit(BrowserEvent.RequestVaultAdd(paths))
+            }
+        }
+    }
+
+    /** Call only from a UI callback after biometric/device-credential success. */
+    fun addToVault(paths: List<String>) {
+        if (paths.isEmpty()) return
+        viewModelScope.launch {
+            if (!securityRepository.settings.first().vaultEnabled) {
+                _events.emit(BrowserEvent.Toast("Vault is disabled"))
+                return@launch
+            }
+            val session = vaultManager.unlock().getOrElse { error ->
+                _events.emit(BrowserEvent.Toast("Vault unlock failed: ${error.message}"))
+                return@launch
+            }
+            val succeeded = mutableListOf<String>()
+            val failures = mutableListOf<String>()
+            try {
+                paths.distinct().forEach { path ->
+                    vaultManager.addToVault(path, session)
+                        .onSuccess { succeeded += path }
+                        .onFailure { error -> failures += "$path: ${error.message ?: "operation failed"}" }
+                }
+            } finally {
+                vaultManager.lock(session)
+            }
+            val summary = when {
+                failures.isEmpty() -> "Added ${succeeded.size} file(s) to vault"
+                succeeded.isEmpty() -> "Vault add failed: ${failures.first()}"
+                else -> "Added ${succeeded.size} file(s) to vault; ${failures.size} failed"
+            }
+            _events.emit(BrowserEvent.Toast(summary))
+            if (succeeded.isNotEmpty()) {
+                _state.update { current -> current.copy(selectedItems = current.selectedItems - succeeded.toSet()) }
+                refresh()
+            }
         }
     }
 

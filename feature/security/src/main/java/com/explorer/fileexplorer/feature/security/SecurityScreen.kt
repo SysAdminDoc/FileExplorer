@@ -1,6 +1,7 @@
 package com.explorer.fileexplorer.feature.security
 
 import android.content.Context
+import android.os.Environment
 import android.widget.Toast
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -36,6 +37,7 @@ import com.explorer.fileexplorer.core.data.EncryptedVolumeMount
 import com.explorer.fileexplorer.core.data.EncryptedVolumeRequest
 import com.explorer.fileexplorer.core.database.IntegrityEntryEntity
 import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
+import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -43,7 +45,13 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -158,10 +166,12 @@ class VaultManager @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
     private val vaultDir: File get() = File(context.filesDir, ".vault")
+    private val indexFile: File get() = File(vaultDir, INDEX_NAME)
+
     private companion object {
-        const val KEYSTORE_ALIAS = "file_explorer_vault"
-        const val IV_SIZE = 12
-        const val BUFFER_SIZE = 65536
+        const val KEYSTORE_ALIAS = "file_explorer_vault_v2"
+        const val INDEX_NAME = "index.v1"
+        const val TEMP_PREFIX = ".fileexplorer-vault-"
     }
 
     private fun getOrCreateKey(): javax.crypto.SecretKey {
@@ -183,83 +193,217 @@ class VaultManager @Inject constructor(
         return keygen.generateKey()
     }
 
-    fun getVaultPath(): String {
-        vaultDir.mkdirs()
-        vaultDir.setReadable(false, false)
-        vaultDir.setReadable(true, true)
-        vaultDir.setWritable(false, false)
-        vaultDir.setWritable(true, true)
-        vaultDir.setExecutable(false, false)
-        vaultDir.setExecutable(true, true)
-        return vaultDir.absolutePath
+    /**
+     * Opens a vault session. The caller must invoke this only after the configured
+     * biometric/device-credential gate has completed successfully.
+     */
+    suspend fun unlock(): Result<VaultSession> = withContext(Dispatchers.IO) {
+        runCatching {
+            ensureVaultDirectory()
+            val key = getOrCreateKey()
+            readRecords(key)
+            VaultSession(key)
+        }
     }
 
-    suspend fun lockFile(sourcePath: String): Result<String> = withContext(Dispatchers.IO) {
-        try {
+    suspend fun listVaultEntries(session: VaultSession): Result<List<VaultEntry>> = withContext(Dispatchers.IO) {
+        runCatching {
+            session.requireUnlocked()
+            readRecords(session.key).map { record ->
+                VaultEntry(record.id, record.originalName, record.size, record.modifiedAt)
+            }
+        }
+    }
+
+    suspend fun addToVault(sourcePath: String, session: VaultSession): Result<VaultEntry> = withContext(Dispatchers.IO) {
+        runCatching {
+            session.requireUnlocked()
+            ensureVaultDirectory()
             val source = File(sourcePath)
-            if (!source.exists()) return@withContext Result.failure(Exception("Source not found"))
-            val encName = source.name + ".enc"
-            var dest = File(getVaultPath(), encName)
-            if (dest.exists()) {
-                var counter = 1
-                while (dest.exists()) {
-                    dest = File(getVaultPath(), "${source.nameWithoutExtension} ($counter).${source.extension}.enc")
-                    counter++
-                }
+            require(Files.isRegularFile(source.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                "Only regular local files can enter the vault"
             }
-            val key = getOrCreateKey()
-            val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, key)
-            val iv = cipher.iv
-            dest.outputStream().buffered().use { out ->
-                out.write(iv)
-                source.inputStream().buffered().use { input ->
-                    val buf = ByteArray(BUFFER_SIZE)
-                    var len: Int
-                    while (input.read(buf).also { len = it } != -1) {
-                        out.write(cipher.update(buf, 0, len) ?: ByteArray(0))
-                    }
-                    out.write(cipher.doFinal())
+            VaultFilePolicy.validateName(source.name)
+            val records = readRecords(session.key)
+            val record = VaultIndexRecord(
+                id = UUID.randomUUID().toString(),
+                originalName = source.name,
+                size = source.length(),
+                modifiedAt = source.lastModified().coerceAtLeast(0),
+            )
+            val temporary = createTemporaryFile()
+            val destination = payloadFile(record.id)
+            var moved = false
+            try {
+                VaultPayloadFormat.encrypt(source, temporary, session.key)
+                moveIntoPlace(temporary, destination)
+                moved = true
+                writeRecords(records + record, session.key)
+                try {
+                    require(Files.deleteIfExists(source.toPath())) { "Unable to remove plaintext source" }
+                } catch (error: Exception) {
+                    runCatching { writeRecords(records, session.key) }
+                    runCatching { Files.deleteIfExists(destination.toPath()) }
+                    throw error
                 }
+                VaultEntry(record.id, record.originalName, record.size, record.modifiedAt)
+            } catch (error: Exception) {
+                if (moved) runCatching { Files.deleteIfExists(destination.toPath()) }
+                throw error
+            } finally {
+                runCatching { Files.deleteIfExists(temporary.toPath()) }
             }
-            source.delete()
-            Result.success(dest.absolutePath)
-        } catch (e: Exception) { Result.failure(e) }
+        }
     }
 
-    suspend fun unlockFile(vaultPath: String, destinationDir: String): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun restoreFile(
+        entryId: String,
+        destinationDir: String,
+        session: VaultSession,
+    ): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            session.requireUnlocked()
+            val records = readRecords(session.key)
+            val record = records.firstOrNull { it.id == entryId }
+                ?: error("Vault entry not found")
+            val directory = File(destinationDir).canonicalFile
+            require(Files.isDirectory(directory.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                "Restore destination is not a directory"
+            }
+            val destination = File(directory, record.originalName)
+            require(destination.parentFile?.canonicalFile == directory) { "Invalid restore destination" }
+            require(!Files.exists(destination.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                "Restore destination already exists"
+            }
+            val payload = payloadFile(record.id)
+            require(Files.isRegularFile(payload.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                "Vault payload is missing"
+            }
+            val temporary = File(directory, TEMP_PREFIX + UUID.randomUUID() + ".tmp")
+            Files.createFile(temporary.toPath())
+            var moved = false
+            try {
+                VaultPayloadFormat.decrypt(payload, temporary, session.key)
+                writeRecords(records - record, session.key)
+                try {
+                    moveIntoPlace(temporary, destination)
+                    moved = true
+                    require(Files.deleteIfExists(payload.toPath())) { "Unable to remove restored vault payload" }
+                } catch (error: Exception) {
+                    if (moved) runCatching { Files.deleteIfExists(destination.toPath()) }
+                    runCatching { writeRecords(records, session.key) }
+                    throw error
+                }
+                destination.absolutePath
+            } finally {
+                runCatching { Files.deleteIfExists(temporary.toPath()) }
+            }
+        }
+    }
+
+    suspend fun deleteFromVault(entryId: String, session: VaultSession): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            session.requireUnlocked()
+            val records = readRecords(session.key)
+            val record = records.firstOrNull { it.id == entryId }
+                ?: error("Vault entry not found")
+            val payload = payloadFile(record.id)
+            require(Files.isRegularFile(payload.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                "Vault payload is missing"
+            }
+            writeRecords(records - record, session.key)
+            try {
+                require(Files.deleteIfExists(payload.toPath())) { "Unable to delete vault payload" }
+            } catch (error: Exception) {
+                runCatching { writeRecords(records, session.key) }
+                throw error
+            }
+        }
+    }
+
+    fun lock(session: VaultSession?) {
+        session?.lock()
+    }
+
+    private fun ensureVaultDirectory() {
+        if (Files.exists(vaultDir.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+            require(Files.isDirectory(vaultDir.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                "Vault storage is not a directory"
+            }
+        } else {
+            Files.createDirectories(vaultDir.toPath())
+        }
+    }
+
+    private fun readRecords(key: javax.crypto.SecretKey): List<VaultIndexRecord> {
+        ensureVaultDirectory()
+        val files = vaultDir.listFiles().orEmpty()
+        val unexpected = files.filter { file ->
+            file.name != INDEX_NAME && !file.name.startsWith(TEMP_PREFIX) &&
+                !file.name.endsWith(VaultFilePolicy.PAYLOAD_SUFFIX)
+        }
+        require(unexpected.isEmpty()) { "Unrecognized vault storage entry" }
+        if (!Files.exists(indexFile.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+            require(files.none { it.name.endsWith(VaultFilePolicy.PAYLOAD_SUFFIX) }) {
+                "Vault index is missing"
+            }
+            return emptyList()
+        }
+        require(Files.isRegularFile(indexFile.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+            "Vault index is not a regular file"
+        }
+        val records = VaultIndexCodec.decode(indexFile.readBytes(), key)
+        require(records.map { it.id }.toSet().size == records.size) { "Duplicate vault entry id" }
+        val payloadNames = records.mapTo(hashSetOf()) { VaultFilePolicy.payloadName(it.id) }
+        val actualPayloads = files.filter { it.name.endsWith(VaultFilePolicy.PAYLOAD_SUFFIX) }
+        require(actualPayloads.all { it.name in payloadNames }) { "Untracked vault payload" }
+        require(payloadNames.all { expected -> actualPayloads.any { it.name == expected } }) {
+            "Vault payload is missing"
+        }
+        actualPayloads.forEach { payload ->
+            require(Files.isRegularFile(payload.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                "Vault payload is not a regular file"
+            }
+        }
+        return records
+    }
+
+    private fun writeRecords(records: List<VaultIndexRecord>, key: javax.crypto.SecretKey) {
+        val temporary = File(vaultDir, TEMP_PREFIX + UUID.randomUUID() + ".index.tmp")
         try {
-            val source = File(vaultPath)
-            if (!source.exists()) return@withContext Result.failure(Exception("Vault file not found"))
-            val originalName = if (source.name.endsWith(".enc")) source.name.removeSuffix(".enc") else source.name
-            val dest = File(destinationDir, originalName)
-            val key = getOrCreateKey()
-            source.inputStream().buffered().use { input ->
-                val iv = ByteArray(IV_SIZE)
-                var read = 0
-                while (read < IV_SIZE) {
-                    val n = input.read(iv, read, IV_SIZE - read)
-                    if (n < 0) return@withContext Result.failure(Exception("Truncated vault file"))
-                    read += n
-                }
-                val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
-                cipher.init(javax.crypto.Cipher.DECRYPT_MODE, key, javax.crypto.spec.GCMParameterSpec(128, iv))
-                dest.outputStream().buffered().use { out ->
-                    val buf = ByteArray(BUFFER_SIZE)
-                    var len: Int
-                    while (input.read(buf).also { len = it } != -1) {
-                        out.write(cipher.update(buf, 0, len) ?: ByteArray(0))
-                    }
-                    out.write(cipher.doFinal())
-                }
+            FileOutputStream(temporary, false).use { output ->
+                output.write(VaultIndexCodec.encode(records, key))
+                output.fd.sync()
             }
-            source.delete()
-            Result.success(dest.absolutePath)
-        } catch (e: Exception) { Result.failure(e) }
+            moveIntoPlace(temporary, indexFile)
+        } finally {
+            runCatching { Files.deleteIfExists(temporary.toPath()) }
+        }
     }
 
-    fun listVaultFiles(): List<File> {
-        return vaultDir.listFiles()?.toList() ?: emptyList()
+    private fun payloadFile(id: String): File {
+        val file = File(vaultDir, VaultFilePolicy.payloadName(id))
+        require(file.parentFile?.canonicalFile == vaultDir.canonicalFile) { "Invalid vault payload path" }
+        return file
+    }
+
+    private fun createTemporaryFile(): File {
+        val file = File(vaultDir, TEMP_PREFIX + UUID.randomUUID() + ".tmp")
+        Files.createFile(file.toPath())
+        return file
+    }
+
+    private fun moveIntoPlace(source: File, destination: File) {
+        try {
+            Files.move(
+                source.toPath(),
+                destination.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(source.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }
     }
 }
 
@@ -268,6 +412,9 @@ class VaultManager @Inject constructor(
 data class SecurityUiState(
     val settings: SecuritySettings = SecuritySettings(),
     val canUseBiometrics: Boolean = false,
+    val vaultEntries: List<VaultEntry> = emptyList(),
+    val vaultUnlocked: Boolean = false,
+    val isVaultBusy: Boolean = false,
     val checksumResult: String? = null,
     val isComputing: Boolean = false,
     val integrityEntries: List<IntegrityEntryEntity> = emptyList(),
@@ -293,11 +440,14 @@ class SecurityViewModel @Inject constructor(
     private val _toasts = MutableSharedFlow<String>()
     val toasts: SharedFlow<String> = _toasts.asSharedFlow()
 
+    private var vaultSession: VaultSession? = null
+
     init {
         _state.update { it.copy(canUseBiometrics = securityRepo.canUseBiometrics()) }
         viewModelScope.launch {
             securityRepo.settings.collect { settings ->
                 _state.update { it.copy(settings = settings) }
+                if (!settings.vaultEnabled) lockVault()
             }
         }
         viewModelScope.launch {
@@ -309,8 +459,101 @@ class SecurityViewModel @Inject constructor(
     }
 
     fun toggleAppLock() { viewModelScope.launch { securityRepo.setAppLock(!_state.value.settings.appLockEnabled) } }
-    fun toggleVault() { viewModelScope.launch { securityRepo.setVaultEnabled(!_state.value.settings.vaultEnabled) } }
+    fun toggleVault() {
+        val enabled = !_state.value.settings.vaultEnabled
+        if (enabled && !_state.value.canUseBiometrics) {
+            viewModelScope.launch { _toasts.emit("Vault requires biometric or device-credential authentication") }
+            return
+        }
+        viewModelScope.launch {
+            if (!enabled) lockVault()
+            securityRepo.setVaultEnabled(enabled)
+        }
+    }
     fun toggleSecureDelete() { viewModelScope.launch { securityRepo.setSecureDelete(!_state.value.settings.secureDeleteEnabled) } }
+
+    /** Call only from a UI callback after biometric/device-credential success. */
+    fun unlockVault() {
+        if (_state.value.isVaultBusy || !_state.value.settings.vaultEnabled) return
+        viewModelScope.launch {
+            _state.update { it.copy(isVaultBusy = true) }
+            vaultManager.unlock()
+                .onSuccess { session ->
+                    vaultManager.listVaultEntries(session)
+                        .onSuccess { entries ->
+                            vaultManager.lock(vaultSession)
+                            vaultSession = session
+                            _state.update {
+                                it.copy(
+                                    vaultEntries = entries,
+                                    vaultUnlocked = true,
+                                    isVaultBusy = false,
+                                )
+                            }
+                        }
+                        .onFailure { error ->
+                            vaultManager.lock(session)
+                            _state.update { it.copy(isVaultBusy = false) }
+                            _toasts.emit("Vault unlock failed: ${error.message}")
+                        }
+                }
+                .onFailure { error ->
+                    _state.update { it.copy(isVaultBusy = false) }
+                    _toasts.emit("Vault unlock failed: ${error.message}")
+                }
+        }
+    }
+
+    fun lockVault() {
+        vaultManager.lock(vaultSession)
+        vaultSession = null
+        _state.update { it.copy(vaultEntries = emptyList(), vaultUnlocked = false, isVaultBusy = false) }
+    }
+
+    fun restoreVaultEntry(entry: VaultEntry) {
+        val session = vaultSession ?: run {
+            viewModelScope.launch { _toasts.emit("Unlock the vault first") }
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(isVaultBusy = true) }
+            @Suppress("DEPRECATION")
+            val downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            vaultManager.restoreFile(entry.id, downloads.absolutePath, session)
+                .onSuccess { restoredPath ->
+                    _toasts.emit("Restored to Downloads: ${File(restoredPath).name}")
+                    refreshVaultEntries(session)
+                }
+                .onFailure { error -> _toasts.emit("Restore failed: ${error.message}") }
+            _state.update { it.copy(isVaultBusy = false) }
+        }
+    }
+
+    fun deleteVaultEntry(entry: VaultEntry) {
+        val session = vaultSession ?: run {
+            viewModelScope.launch { _toasts.emit("Unlock the vault first") }
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(isVaultBusy = true) }
+            vaultManager.deleteFromVault(entry.id, session)
+                .onSuccess { _toasts.emit("Deleted ${entry.displayName} from vault") }
+                .onFailure { error -> _toasts.emit("Vault deletion failed: ${error.message}") }
+            refreshVaultEntries(session)
+            _state.update { it.copy(isVaultBusy = false) }
+        }
+    }
+
+    private suspend fun refreshVaultEntries(session: VaultSession) {
+        vaultManager.listVaultEntries(session)
+            .onSuccess { entries -> _state.update { it.copy(vaultEntries = entries) } }
+            .onFailure { error ->
+                vaultManager.lock(session)
+                if (vaultSession === session) vaultSession = null
+                _state.update { it.copy(vaultEntries = emptyList(), vaultUnlocked = false) }
+                _toasts.emit("Vault refresh failed: ${error.message}")
+            }
+    }
 
     fun computeChecksum(path: String, algorithm: String = "SHA-256") {
         viewModelScope.launch {
@@ -420,6 +663,12 @@ class SecurityViewModel @Inject constructor(
             refreshEncryptedVolumes()
         }
     }
+
+    override fun onCleared() {
+        vaultManager.lock(vaultSession)
+        vaultSession = null
+        super.onCleared()
+    }
 }
 
 // -- Screen --
@@ -432,8 +681,32 @@ fun SecurityScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val securityEntryPoint = remember(context) {
+        EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            SecurityEntryPoint::class.java,
+        )
+    }
     var showIntegrityPathDialog by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { viewModel.toasts.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() } }
+    DisposableEffect(Unit) { onDispose { viewModel.lockVault() } }
+
+    fun authenticateVault(title: String, subtitle: String, onSuccess: () -> Unit) {
+        val activity = context as? FragmentActivity
+        if (activity == null) {
+            Toast.makeText(context, "Biometric authentication unavailable", Toast.LENGTH_SHORT).show()
+        } else {
+            securityEntryPoint.biometricHelper().showBiometricPrompt(
+                activity = activity,
+                title = title,
+                subtitle = subtitle,
+                onSuccess = onSuccess,
+                onFailure = { reason ->
+                    Toast.makeText(context, "Vault authentication cancelled: $reason", Toast.LENGTH_SHORT).show()
+                },
+            )
+        }
+    }
 
     if (showIntegrityPathDialog) {
         IntegrityPathDialog(
@@ -501,8 +774,83 @@ fun SecurityScreen(
                     headlineContent = { Text(stringResource(DesignSystemR.string.enable_vault)) },
                     supportingContent = { Text(stringResource(DesignSystemR.string.vault_description)) },
                     leadingContent = { Icon(Icons.Filled.Lock, null) },
-                    trailingContent = { Switch(checked = state.settings.vaultEnabled, onCheckedChange = { viewModel.toggleVault() }) },
+                    trailingContent = {
+                        Switch(
+                            checked = state.settings.vaultEnabled,
+                            onCheckedChange = { viewModel.toggleVault() },
+                            enabled = state.canUseBiometrics,
+                        )
+                    },
                 )
+            }
+            if (state.settings.vaultEnabled) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        if (state.vaultUnlocked) {
+                            OutlinedButton(
+                                onClick = viewModel::lockVault,
+                                enabled = !state.isVaultBusy,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Icon(Icons.Filled.Lock, null)
+                                Spacer(Modifier.width(8.dp))
+                                Text(stringResource(DesignSystemR.string.vault_lock))
+                            }
+                        } else {
+                            Button(
+                                onClick = {
+                                    authenticateVault(
+                                        title = "Unlock vault",
+                                        subtitle = "Authenticate to view protected files",
+                                        onSuccess = viewModel::unlockVault,
+                                    )
+                                },
+                                enabled = !state.isVaultBusy && state.canUseBiometrics,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Icon(Icons.Filled.LockOpen, null)
+                                Spacer(Modifier.width(8.dp))
+                                Text(stringResource(DesignSystemR.string.vault_unlock))
+                            }
+                        }
+                    }
+                }
+                if (state.vaultUnlocked && state.vaultEntries.isEmpty()) {
+                    item {
+                        Text(
+                            stringResource(DesignSystemR.string.vault_empty),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    }
+                }
+                if (state.vaultUnlocked) {
+                    items(state.vaultEntries, key = { it.id }) { entry ->
+                        ListItem(
+                            headlineContent = { Text(entry.displayName) },
+                            supportingContent = {
+                                Text(stringResource(DesignSystemR.string.vault_entry_size, entry.size))
+                            },
+                            leadingContent = { Icon(Icons.Filled.Lock, null) },
+                            trailingContent = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    TextButton(
+                                        onClick = { viewModel.restoreVaultEntry(entry) },
+                                        enabled = !state.isVaultBusy,
+                                    ) { Text(stringResource(DesignSystemR.string.vault_restore)) }
+                                    IconButton(
+                                        onClick = { viewModel.deleteVaultEntry(entry) },
+                                        enabled = !state.isVaultBusy,
+                                    ) { Icon(Icons.Filled.DeleteForever, stringResource(DesignSystemR.string.vault_delete)) }
+                                }
+                            },
+                        )
+                    }
+                }
             }
 
             // Secure Delete

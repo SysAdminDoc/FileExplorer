@@ -152,6 +152,22 @@ fun BrowserScreen(
                         )
                     }
                 }
+                is BrowserEvent.RequestVaultAdd -> {
+                    val activity = context as? FragmentActivity
+                    if (activity == null) {
+                        Toast.makeText(context, "Biometric authentication unavailable", Toast.LENGTH_SHORT).show()
+                    } else {
+                        securityEntryPoint.biometricHelper().showBiometricPrompt(
+                            activity = activity,
+                            title = "Add to Vault",
+                            subtitle = "Authenticate to protect selected files",
+                            onSuccess = { viewModel.addToVault(event.paths) },
+                            onFailure = { reason ->
+                                Toast.makeText(context, "Vault authentication cancelled: $reason", Toast.LENGTH_SHORT).show()
+                            },
+                        )
+                    }
+                }
             }
         }
     }
@@ -216,6 +232,7 @@ fun BrowserScreen(
                         onCast = viewModel::castSelected,
                         onEncrypt = viewModel::encryptSelected,
                         onDecrypt = viewModel::requestDecryptSelected,
+                        onAddToVault = viewModel::requestAddToVaultSelected,
                         onCompress = viewModel::showCompressDialog,
                         onWatchIntegrity = viewModel::watchSelectedIntegrity,
                         onTag = viewModel::showTagDialog,
@@ -585,7 +602,7 @@ private fun SelectionTopBar(
     onCopy: () -> Unit, onCut: () -> Unit, onDelete: () -> Unit, onPermanentDelete: () -> Unit, onShare: () -> Unit,
     onSendNearby: () -> Unit,
     onCast: () -> Unit,
-    onEncrypt: () -> Unit, onDecrypt: () -> Unit,
+    onEncrypt: () -> Unit, onDecrypt: () -> Unit, onAddToVault: () -> Unit,
     onCompress: () -> Unit, onWatchIntegrity: () -> Unit, onTag: () -> Unit, onBatchRename: () -> Unit,
     onRename: () -> Unit, onProperties: () -> Unit,
     onHexView: () -> Unit,
@@ -633,6 +650,8 @@ private fun SelectionTopBar(
                         leadingIcon = { Icon(Icons.Filled.Lock, null) })
                     DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.decrypt_files)) }, onClick = { onDecrypt(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.LockOpen, null) })
+                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.add_to_vault)) }, onClick = { onAddToVault(); moreExpanded = false },
+                        leadingIcon = { Icon(Icons.Filled.EnhancedEncryption, null) })
                     DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.batch_rename)) }, onClick = { onBatchRename(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.EditNote, null) })
                     if (selectedCount == 1) {
