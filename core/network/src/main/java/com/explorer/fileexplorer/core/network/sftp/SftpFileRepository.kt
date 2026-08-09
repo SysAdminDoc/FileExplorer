@@ -3,6 +3,13 @@ package com.explorer.fileexplorer.core.network.sftp
 import android.webkit.MimeTypeMap
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.model.RepositoryCapabilities
+import com.explorer.fileexplorer.core.model.RepositoryErrorKind
+import com.explorer.fileexplorer.core.model.RepositoryOperation
+import com.explorer.fileexplorer.core.model.asRepositoryException
+import com.explorer.fileexplorer.core.model.isMissingRepositoryResource
+import com.explorer.fileexplorer.core.model.notConnectedRepositoryException
+import com.explorer.fileexplorer.core.model.repositoryException
 import com.explorer.fileexplorer.core.network.NetworkConnection
 import com.explorer.fileexplorer.core.network.NetworkFileRepository
 import kotlinx.coroutines.CancellationException
@@ -34,6 +41,8 @@ class SftpFileRepository @Inject constructor(
     private val knownHostsStore: SftpKnownHostsStore,
     private val diagnosticLog: com.explorer.fileexplorer.core.data.DiagnosticLog,
 ) : NetworkFileRepository {
+
+    override val capabilities: RepositoryCapabilities = RepositoryCapabilities.network("sftp")
 
     private companion object {
         const val CONNECT_TIMEOUT_MS = 15_000
@@ -75,9 +84,10 @@ class SftpFileRepository @Inject constructor(
             currentConnection = connection
             Result.success(Unit)
         } catch (e: Exception) {
-            diagnosticLog.log("SFTP", "connect", e, "${connection.host}:${connection.port}")
+            val typedError = e.asRepositoryException("sftp", RepositoryOperation.CONNECT)
+            diagnosticLog.log(typedError.error, "${connection.host}:${connection.port}")
             disconnect()
-            Result.failure(e)
+            Result.failure(typedError)
         }
     }
 
@@ -88,7 +98,7 @@ class SftpFileRepository @Inject constructor(
     }
 
     override fun listFiles(path: String): Flow<List<FileItem>> = flow {
-        val s = sftp ?: run { emit(emptyList()); return@flow }
+        val s = sftp ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.LIST)
         val items = mutableListOf<FileItem>()
         try {
             val entries = s.ls(path)
@@ -97,21 +107,33 @@ class SftpFileRepository @Inject constructor(
                 if (name == "." || name == "..") continue
                 items.add(remoteInfoToFileItem(entry, path))
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.LIST)
+        }
         emit(items)
     }.flowOn(Dispatchers.IO)
 
     override suspend fun getFileInfo(path: String): FileItem? = withContext(Dispatchers.IO) {
-        val s = sftp ?: return@withContext null
+        val s = sftp ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.INFO)
         try {
             val attrs = s.stat(path)
             val name = path.trimEnd('/').substringAfterLast('/')
             attrsToFileItem(name, path, attrs)
-        } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            if (e.isMissingRepositoryResource() || (e is SFTPException && e.statusCode == Response.StatusCode.NO_SUCH_FILE)) null
+            else throw e.asRepositoryException(capabilities.provider, RepositoryOperation.INFO)
+        }
     }
 
     override suspend fun exists(path: String): Boolean = withContext(Dispatchers.IO) {
-        try { sftp?.stat(path); true } catch (_: Exception) { false }
+        val s = sftp ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.EXISTS)
+        try {
+            s.stat(path)
+            true
+        } catch (e: Exception) {
+            if (e.isMissingRepositoryResource() || (e is SFTPException && e.statusCode == Response.StatusCode.NO_SUCH_FILE)) false
+            else throw e.asRepositoryException(capabilities.provider, RepositoryOperation.EXISTS)
+        }
     }
 
     override suspend fun copyFiles(
@@ -119,11 +141,13 @@ class SftpFileRepository @Inject constructor(
         conflictResolution: ConflictResolution,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
-        val s = sftp ?: return@withContext Result.failure(Exception("Not connected"))
+        val s = sftp ?: return@withContext Result.failure(
+            notConnectedRepositoryException(capabilities.provider, RepositoryOperation.COPY),
+        )
         val tempRoot = try {
             Files.createTempDirectory("fileexplorer-sftp-copy-").toFile()
         } catch (e: Exception) {
-            return@withContext Result.failure(IOException("Unable to create SFTP staging space", e))
+            return@withContext Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.COPY))
         }
         var transferred = 0L
         try {
@@ -154,8 +178,9 @@ class SftpFileRepository @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            diagnosticLog.log("SFTP", "copy", e, destination)
-            Result.failure(e)
+            val typedError = e.asRepositoryException(capabilities.provider, RepositoryOperation.COPY)
+            diagnosticLog.log(typedError.error, destination)
+            Result.failure(typedError)
         } finally {
             tempRoot.deleteRecursively()
         }
@@ -166,7 +191,9 @@ class SftpFileRepository @Inject constructor(
         conflictResolution: ConflictResolution,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
-        val s = sftp ?: return@withContext Result.failure(Exception("Not connected"))
+        val s = sftp ?: return@withContext Result.failure(
+            notConnectedRepositoryException(capabilities.provider, RepositoryOperation.MOVE),
+        )
         try {
             ensureRemoteDirectory(s, destination)
             val totalSize = sources.sumOf { remoteSize(s, it) }
@@ -208,13 +235,16 @@ class SftpFileRepository @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            diagnosticLog.log("SFTP", "move", e, destination)
-            Result.failure(e)
+            val typedError = e.asRepositoryException(capabilities.provider, RepositoryOperation.MOVE)
+            diagnosticLog.log(typedError.error, destination)
+            Result.failure(typedError)
         }
     }
 
     override suspend fun deleteFiles(paths: List<String>, onProgress: (String) -> Unit): Result<Int> = withContext(Dispatchers.IO) {
-        val s = sftp ?: return@withContext Result.failure(Exception("Not connected"))
+        val s = sftp ?: return@withContext Result.failure(
+            notConnectedRepositoryException(capabilities.provider, RepositoryOperation.DELETE),
+        )
         var count = 0
         try {
             for (path in paths) {
@@ -228,7 +258,9 @@ class SftpFileRepository @Inject constructor(
                 count++
             }
             Result.success(count)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.DELETE))
+        }
     }
 
     private fun ensureRemoteDirectory(sftp: SFTPClient, path: String) {
@@ -530,20 +562,42 @@ class SftpFileRepository @Inject constructor(
 
     override suspend fun createDirectory(path: String): Result<FileItem> = withContext(Dispatchers.IO) {
         try {
-            sftp?.mkdir(path)
+            val s = sftp ?: return@withContext Result.failure(
+                notConnectedRepositoryException(capabilities.provider, RepositoryOperation.CREATE_DIRECTORY),
+            )
+            s.mkdir(path)
             getFileInfo(path)?.let { Result.success(it) }
-                ?: Result.failure(Exception("Created but stat failed"))
-        } catch (e: Exception) { Result.failure(e) }
+                ?: Result.failure(repositoryException(
+                    capabilities.provider,
+                    RepositoryOperation.CREATE_DIRECTORY,
+                    RepositoryErrorKind.TRANSPORT,
+                    "created but metadata could not be read",
+                    retryable = true,
+                ))
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.CREATE_DIRECTORY))
+        }
     }
 
     override suspend fun rename(path: String, newName: String): Result<FileItem> = withContext(Dispatchers.IO) {
         try {
+            val s = sftp ?: return@withContext Result.failure(
+                notConnectedRepositoryException(capabilities.provider, RepositoryOperation.RENAME),
+            )
             val parent = path.trimEnd('/').substringBeforeLast('/')
             val target = "$parent/$newName"
-            sftp?.rename(path, target)
+            s.rename(path, target)
             getFileInfo(target)?.let { Result.success(it) }
-                ?: Result.failure(Exception("Renamed but stat failed"))
-        } catch (e: Exception) { Result.failure(e) }
+                ?: Result.failure(repositoryException(
+                    capabilities.provider,
+                    RepositoryOperation.RENAME,
+                    RepositoryErrorKind.TRANSPORT,
+                    "renamed but metadata could not be read",
+                    retryable = true,
+                ))
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.RENAME))
+        }
     }
 
     override suspend fun download(
@@ -551,12 +605,16 @@ class SftpFileRepository @Inject constructor(
         onProgress: (Long, Long) -> Unit,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val s = sftp ?: return@withContext Result.failure(Exception("Not connected"))
+            val s = sftp ?: return@withContext Result.failure(
+                notConnectedRepositoryException(capabilities.provider, RepositoryOperation.DOWNLOAD),
+            )
             val totalSize = s.stat(remotePath).size
             s.get(remotePath, FileSystemFile(localPath))
             onProgress(totalSize, totalSize)
             Result.success(Unit)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.DOWNLOAD))
+        }
     }
 
     override suspend fun upload(
@@ -564,12 +622,16 @@ class SftpFileRepository @Inject constructor(
         onProgress: (Long, Long) -> Unit,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val s = sftp ?: return@withContext Result.failure(Exception("Not connected"))
+            val s = sftp ?: return@withContext Result.failure(
+                notConnectedRepositoryException(capabilities.provider, RepositoryOperation.UPLOAD),
+            )
             val localFile = File(localPath)
             s.put(FileSystemFile(localFile), remotePath)
             onProgress(localFile.length(), localFile.length())
             Result.success(Unit)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.UPLOAD))
+        }
     }
 
     /** Execute a command over SSH. */

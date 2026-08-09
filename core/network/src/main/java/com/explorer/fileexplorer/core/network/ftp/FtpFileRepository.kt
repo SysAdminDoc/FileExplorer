@@ -3,6 +3,14 @@ package com.explorer.fileexplorer.core.network.ftp
 import android.webkit.MimeTypeMap
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.model.RepositoryCapabilities
+import com.explorer.fileexplorer.core.model.RepositoryErrorKind
+import com.explorer.fileexplorer.core.model.RepositoryOperation
+import com.explorer.fileexplorer.core.model.asRepositoryException
+import com.explorer.fileexplorer.core.model.isMissingRepositoryResource
+import com.explorer.fileexplorer.core.model.notConnectedRepositoryException
+import com.explorer.fileexplorer.core.model.repositoryException
+import com.explorer.fileexplorer.core.model.unsupportedRepositoryOperation
 import com.explorer.fileexplorer.core.network.NetworkConnection
 import com.explorer.fileexplorer.core.network.NetworkFileRepository
 import kotlinx.coroutines.Dispatchers
@@ -20,6 +28,9 @@ import java.io.FileOutputStream
 import javax.inject.Inject
 
 class FtpFileRepository @Inject constructor() : NetworkFileRepository {
+
+    override val capabilities: RepositoryCapabilities
+        get() = RepositoryCapabilities.network(if (currentConnection?.useTls == true) "ftps" else "ftp", serverSideCopy = false)
 
     private var client: FTPClient? = null
     private var currentConnection: NetworkConnection? = null
@@ -47,7 +58,7 @@ class FtpFileRepository @Inject constructor() : NetworkFileRepository {
             Result.success(Unit)
         } catch (e: Exception) {
             disconnect()
-            Result.failure(e)
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.CONNECT))
         }
     }
 
@@ -59,7 +70,7 @@ class FtpFileRepository @Inject constructor() : NetworkFileRepository {
     }
 
     override fun listFiles(path: String): Flow<List<FileItem>> = flow {
-        val ftp = client ?: run { emit(emptyList()); return@flow }
+        val ftp = client ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.LIST)
         val items = mutableListOf<FileItem>()
         try {
             val entries = ftp.listFiles(path)
@@ -67,23 +78,31 @@ class FtpFileRepository @Inject constructor() : NetworkFileRepository {
                 if (entry.name == "." || entry.name == "..") continue
                 items.add(ftpFileToFileItem(entry, path))
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.LIST)
+        }
         emit(items)
     }.flowOn(Dispatchers.IO)
 
     override suspend fun getFileInfo(path: String): FileItem? = withContext(Dispatchers.IO) {
-        val ftp = client ?: return@withContext null
+        val ftp = client ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.INFO)
         try {
             val files = ftp.listFiles(path)
             files.firstOrNull()?.let { ftpFileToFileItem(it, path.substringBeforeLast('/')) }
-        } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            if (e.isMissingRepositoryResource()) null
+            else throw e.asRepositoryException(capabilities.provider, RepositoryOperation.INFO)
+        }
     }
 
     override suspend fun exists(path: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val ftp = client ?: return@withContext false
+            val ftp = client ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.EXISTS)
             ftp.listFiles(path).isNotEmpty()
-        } catch (_: Exception) { false }
+        } catch (e: Exception) {
+            if (e.isMissingRepositoryResource()) false
+            else throw e.asRepositoryException(capabilities.provider, RepositoryOperation.EXISTS)
+        }
     }
 
     override suspend fun copyFiles(
@@ -92,7 +111,7 @@ class FtpFileRepository @Inject constructor() : NetworkFileRepository {
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
         // FTP has no server-side copy. Would need download+upload.
-        Result.failure(UnsupportedOperationException("FTP does not support server-side copy"))
+        Result.failure(unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.COPY))
     }
 
     override suspend fun moveFiles(
@@ -100,7 +119,9 @@ class FtpFileRepository @Inject constructor() : NetworkFileRepository {
         conflictResolution: ConflictResolution,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
-        val ftp = client ?: return@withContext Result.failure(Exception("Not connected"))
+        val ftp = client ?: return@withContext Result.failure(
+            notConnectedRepositoryException(capabilities.provider, RepositoryOperation.MOVE),
+        )
         var count = 0
         try {
             for (src in sources) {
@@ -110,11 +131,15 @@ class FtpFileRepository @Inject constructor() : NetworkFileRepository {
                 if (ftp.rename(src, dest)) count++
             }
             Result.success(count)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.MOVE))
+        }
     }
 
     override suspend fun deleteFiles(paths: List<String>, onProgress: (String) -> Unit): Result<Int> = withContext(Dispatchers.IO) {
-        val ftp = client ?: return@withContext Result.failure(Exception("Not connected"))
+        val ftp = client ?: return@withContext Result.failure(
+            notConnectedRepositoryException(capabilities.provider, RepositoryOperation.DELETE),
+        )
         var count = 0
         try {
             for (path in paths) {
@@ -128,7 +153,9 @@ class FtpFileRepository @Inject constructor() : NetworkFileRepository {
                 count++
             }
             Result.success(count)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.DELETE))
+        }
     }
 
     private fun deleteFtpRecursive(ftp: FTPClient, path: String) {
@@ -143,24 +170,56 @@ class FtpFileRepository @Inject constructor() : NetworkFileRepository {
 
     override suspend fun createDirectory(path: String): Result<FileItem> = withContext(Dispatchers.IO) {
         try {
-            val ftp = client ?: return@withContext Result.failure(Exception("Not connected"))
+            val ftp = client ?: return@withContext Result.failure(
+                notConnectedRepositoryException(capabilities.provider, RepositoryOperation.CREATE_DIRECTORY),
+            )
             if (ftp.makeDirectory(path)) {
                 getFileInfo(path)?.let { Result.success(it) }
-                    ?: Result.failure(Exception("Created but stat failed"))
-            } else Result.failure(Exception("mkdir failed"))
-        } catch (e: Exception) { Result.failure(e) }
+                    ?: Result.failure(repositoryException(
+                        capabilities.provider,
+                        RepositoryOperation.CREATE_DIRECTORY,
+                        RepositoryErrorKind.TRANSPORT,
+                        "created but metadata could not be read",
+                        retryable = true,
+                    ))
+            } else Result.failure(repositoryException(
+                capabilities.provider,
+                RepositoryOperation.CREATE_DIRECTORY,
+                RepositoryErrorKind.TRANSPORT,
+                "mkdir failed",
+                retryable = true,
+            ))
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.CREATE_DIRECTORY))
+        }
     }
 
     override suspend fun rename(path: String, newName: String): Result<FileItem> = withContext(Dispatchers.IO) {
         try {
-            val ftp = client ?: return@withContext Result.failure(Exception("Not connected"))
+            val ftp = client ?: return@withContext Result.failure(
+                notConnectedRepositoryException(capabilities.provider, RepositoryOperation.RENAME),
+            )
             val parent = path.trimEnd('/').substringBeforeLast('/')
             val target = "$parent/$newName"
             if (ftp.rename(path, target)) {
                 getFileInfo(target)?.let { Result.success(it) }
-                    ?: Result.failure(Exception("Renamed but stat failed"))
-            } else Result.failure(Exception("rename failed"))
-        } catch (e: Exception) { Result.failure(e) }
+                    ?: Result.failure(repositoryException(
+                        capabilities.provider,
+                        RepositoryOperation.RENAME,
+                        RepositoryErrorKind.TRANSPORT,
+                        "renamed but metadata could not be read",
+                        retryable = true,
+                    ))
+            } else Result.failure(repositoryException(
+                capabilities.provider,
+                RepositoryOperation.RENAME,
+                RepositoryErrorKind.TRANSPORT,
+                "rename failed",
+                retryable = true,
+            ))
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.RENAME))
+        }
     }
 
     override suspend fun download(
@@ -168,14 +227,18 @@ class FtpFileRepository @Inject constructor() : NetworkFileRepository {
         onProgress: (Long, Long) -> Unit,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val ftp = client ?: return@withContext Result.failure(Exception("Not connected"))
+            val ftp = client ?: return@withContext Result.failure(
+                notConnectedRepositoryException(capabilities.provider, RepositoryOperation.DOWNLOAD),
+            )
             FileOutputStream(localPath).use { output ->
                 ftp.retrieveFile(remotePath, output)
             }
             val localSize = File(localPath).length()
             onProgress(localSize, localSize)
             Result.success(Unit)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.DOWNLOAD))
+        }
     }
 
     override suspend fun upload(
@@ -183,14 +246,18 @@ class FtpFileRepository @Inject constructor() : NetworkFileRepository {
         onProgress: (Long, Long) -> Unit,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val ftp = client ?: return@withContext Result.failure(Exception("Not connected"))
+            val ftp = client ?: return@withContext Result.failure(
+                notConnectedRepositoryException(capabilities.provider, RepositoryOperation.UPLOAD),
+            )
             val localFile = File(localPath)
             FileInputStream(localFile).use { input ->
                 ftp.storeFile(remotePath, input)
             }
             onProgress(localFile.length(), localFile.length())
             Result.success(Unit)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.UPLOAD))
+        }
     }
 
     private fun ftpFileToFileItem(file: FTPFile, parentPath: String): FileItem {

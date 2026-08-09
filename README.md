@@ -59,6 +59,7 @@ cd FileExplorer
 | FTP/FTPS | File transfer via Apache Commons Net 3.13.0 with TLS toggle | Complete |
 | WebDAV | HTTP/HTTPS via sardine-android 0.9 with server-side copy/move | Complete |
 | Connection Manager | Save, edit, test network connections with Android Keystore-encrypted passwords. Remote file browser | Complete |
+| Provider Contracts | Shared capabilities and typed unsupported/auth/permission/transport/conflict/corrupt errors across local, root, USB, plugin, network, and cloud adapters, with bounded redacted diagnostics | Complete |
 | Google Drive | REST API v3. Browse, upload, download, delete, rename, quota display | Requires configuration |
 | Dropbox | HTTP API v2. Browse, upload, download, folder operations | Requires configuration |
 | OneDrive | Microsoft Graph API. Full file operations, quota tracking | Requires configuration |

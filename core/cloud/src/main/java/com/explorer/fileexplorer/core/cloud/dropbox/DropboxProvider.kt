@@ -9,6 +9,11 @@ import com.explorer.fileexplorer.core.cloud.CloudProvider
 import com.explorer.fileexplorer.core.cloud.CloudService
 import com.explorer.fileexplorer.core.cloud.StreamingFileBody
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.model.RepositoryCapabilities
+import com.explorer.fileexplorer.core.model.RepositoryOperation
+import com.explorer.fileexplorer.core.model.asRepositoryException
+import com.explorer.fileexplorer.core.model.httpRepositoryException
+import com.explorer.fileexplorer.core.model.unsupportedRepositoryOperation
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +44,7 @@ class DropboxProvider @Inject constructor(
     private val contentBase = "https://content.dropboxapi.com/2"
 
     override val service = CloudService.DROPBOX
+    override val capabilities: RepositoryCapabilities = RepositoryCapabilities.cloud("dropbox")
     override val isAuthenticated: Boolean = false
 
     override suspend fun getAuthIntent(): Intent? {
@@ -48,7 +54,7 @@ class DropboxProvider @Inject constructor(
     }
 
     override suspend fun handleAuthResult(data: Intent): Result<CloudAccount> {
-        return Result.failure(NotImplementedError("Configure Dropbox App Console credentials"))
+        return Result.failure(unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.AUTHENTICATE))
     }
 
     override suspend fun refreshToken(account: CloudAccount): Result<CloudAccount> = withContext(Dispatchers.IO) {
@@ -61,13 +67,15 @@ class DropboxProvider @Inject constructor(
             val request = Request.Builder()
                 .url("https://api.dropboxapi.com/oauth2/token")
                 .post(body).build()
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.REFRESH_TOKEN)
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
             Result.success(account.copy(
                 accessToken = json.get("access_token")?.asString ?: account.accessToken,
                 tokenExpiry = System.currentTimeMillis() + (json.get("expires_in")?.asLong ?: 3600) * 1000,
             ))
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.REFRESH_TOKEN))
+        }
     }
 
     override suspend fun signOut(account: CloudAccount): Result<Unit> = withContext(Dispatchers.IO) {
@@ -75,9 +83,11 @@ class DropboxProvider @Inject constructor(
             val request = Request.Builder().url("$apiBase/auth/token/revoke")
                 .header("Authorization", "Bearer ${account.accessToken}")
                 .post("null".toRequestBody("application/json".toMediaType())).build()
-            client.newCall(request).execute()
+            client.newCall(request).execute().requireSuccess(RepositoryOperation.SIGN_OUT)
             Result.success(Unit)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.SIGN_OUT))
+        }
     }
 
     override fun listFiles(account: CloudAccount, folderId: String): Flow<List<FileItem>> = flow {
@@ -87,7 +97,7 @@ class DropboxProvider @Inject constructor(
             .header("Authorization", "Bearer ${account.accessToken}")
             .post(body.toString().toRequestBody("application/json".toMediaType())).build()
         try {
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.LIST)
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
             val entries = json.getAsJsonArray("entries")?.map { el ->
                 val obj = el.asJsonObject
@@ -106,7 +116,9 @@ class DropboxProvider @Inject constructor(
                 )
             } ?: emptyList()
             emit(entries)
-        } catch (_: Exception) { emit(emptyList()) }
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.LIST)
+        }
     }.flowOn(Dispatchers.IO)
 
     override suspend fun download(
@@ -119,7 +131,7 @@ class DropboxProvider @Inject constructor(
                 .header("Authorization", "Bearer ${account.accessToken}")
                 .header("Dropbox-API-Arg", arg.toString())
                 .post("".toRequestBody()).build()
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.DOWNLOAD)
             val total = response.body?.contentLength() ?: 0L
             FileOutputStream(localPath).use { out ->
                 response.body?.byteStream()?.use { input ->
@@ -130,7 +142,9 @@ class DropboxProvider @Inject constructor(
                 }
             }
             Result.success(Unit)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.DOWNLOAD))
+        }
     }
 
     override suspend fun upload(
@@ -149,14 +163,16 @@ class DropboxProvider @Inject constructor(
                 .header("Dropbox-API-Arg", arg.toString())
                 .header("Content-Type", "application/octet-stream")
                 .post(StreamingFileBody(file, "application/octet-stream".toMediaType(), onProgress)).build()
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.UPLOAD)
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
             Result.success(FileItem(
                 name = json.get("name")?.asString ?: file.name,
                 path = json.get("path_lower")?.asString ?: "",
                 size = json.get("size")?.asLong ?: file.length(),
             ))
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.UPLOAD))
+        }
     }
 
     override suspend fun delete(account: CloudAccount, fileId: String): Result<Unit> = withContext(Dispatchers.IO) {
@@ -165,9 +181,11 @@ class DropboxProvider @Inject constructor(
             val request = Request.Builder().url("$apiBase/files/delete_v2")
                 .header("Authorization", "Bearer ${account.accessToken}")
                 .post(body.toString().toRequestBody("application/json".toMediaType())).build()
-            client.newCall(request).execute()
+            client.newCall(request).execute().requireSuccess(RepositoryOperation.DELETE)
             Result.success(Unit)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.DELETE))
+        }
     }
 
     override suspend fun createFolder(account: CloudAccount, name: String, parentId: String): Result<FileItem> = withContext(Dispatchers.IO) {
@@ -177,7 +195,7 @@ class DropboxProvider @Inject constructor(
             val request = Request.Builder().url("$apiBase/files/create_folder_v2")
                 .header("Authorization", "Bearer ${account.accessToken}")
                 .post(body.toString().toRequestBody("application/json".toMediaType())).build()
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.CREATE_FOLDER)
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
             val metadata = json.getAsJsonObject("metadata")
             Result.success(FileItem(
@@ -185,7 +203,9 @@ class DropboxProvider @Inject constructor(
                 path = metadata?.get("path_lower")?.asString ?: "$parent/$name",
                 isDirectory = true, mimeType = "inode/directory",
             ))
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.CREATE_FOLDER))
+        }
     }
 
     override suspend fun rename(account: CloudAccount, fileId: String, newName: String): Result<FileItem> = withContext(Dispatchers.IO) {
@@ -196,24 +216,33 @@ class DropboxProvider @Inject constructor(
             val request = Request.Builder().url("$apiBase/files/move_v2")
                 .header("Authorization", "Bearer ${account.accessToken}")
                 .post(body.toString().toRequestBody("application/json".toMediaType())).build()
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.RENAME)
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
             val metadata = json.getAsJsonObject("metadata")
             Result.success(FileItem(name = newName, path = metadata?.get("path_lower")?.asString ?: newPath))
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.RENAME))
+        }
     }
 
-    override suspend fun getQuota(account: CloudAccount): Pair<Long, Long> = withContext(Dispatchers.IO) {
+    override suspend fun getQuota(account: CloudAccount): Result<Pair<Long, Long>> = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder().url("$apiBase/users/get_space_usage")
                 .header("Authorization", "Bearer ${account.accessToken}")
                 .post("null".toRequestBody("application/json".toMediaType())).build()
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.QUOTA)
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
             val used = json.get("used")?.asLong ?: 0L
             val alloc = json.getAsJsonObject("allocation")?.get("allocated")?.asLong ?: 0L
-            Pair(alloc, used)
-        } catch (_: Exception) { Pair(0L, 0L) }
+            Result.success(alloc to used)
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.QUOTA))
+        }
+    }
+
+    private fun Response.requireSuccess(operation: RepositoryOperation): Response {
+        if (!isSuccessful) throw httpRepositoryException(capabilities.provider, operation, code)
+        return this
     }
 
     private fun parseDropboxDate(date: String?): Long {

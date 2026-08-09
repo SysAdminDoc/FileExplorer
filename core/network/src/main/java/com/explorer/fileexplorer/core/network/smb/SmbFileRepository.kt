@@ -3,6 +3,13 @@ package com.explorer.fileexplorer.core.network.smb
 import android.webkit.MimeTypeMap
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.model.RepositoryCapabilities
+import com.explorer.fileexplorer.core.model.RepositoryErrorKind
+import com.explorer.fileexplorer.core.model.RepositoryOperation
+import com.explorer.fileexplorer.core.model.asRepositoryException
+import com.explorer.fileexplorer.core.model.isMissingRepositoryResource
+import com.explorer.fileexplorer.core.model.notConnectedRepositoryException
+import com.explorer.fileexplorer.core.model.repositoryException
 import com.explorer.fileexplorer.core.network.NetworkConnection
 import com.explorer.fileexplorer.core.network.NetworkFileRepository
 import com.hierynomus.msdtyp.AccessMask
@@ -30,6 +37,8 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 class SmbFileRepository @Inject constructor() : NetworkFileRepository {
+
+    override val capabilities: RepositoryCapabilities = RepositoryCapabilities.network("smb")
 
     private var client: SMBClient? = null
     private var connection: Connection? = null
@@ -64,7 +73,7 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
             Result.success(Unit)
         } catch (e: Exception) {
             disconnect()
-            Result.failure(e)
+            Result.failure(e.asRepositoryException("smb", RepositoryOperation.CONNECT))
         }
     }
 
@@ -77,7 +86,7 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
     }
 
     override fun listFiles(path: String): Flow<List<FileItem>> = flow {
-        val s = share ?: run { emit(emptyList()); return@flow }
+        val s = share ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.LIST)
         val smbPath = normalizePath(path)
         val items = mutableListOf<FileItem>()
         try {
@@ -88,13 +97,13 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
                 items.add(smbEntryToFileItem(entry, smbPath))
             }
         } catch (e: Exception) {
-            // Return whatever we have
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.LIST)
         }
         emit(items)
     }.flowOn(Dispatchers.IO)
 
     override suspend fun getFileInfo(path: String): FileItem? = withContext(Dispatchers.IO) {
-        val s = share ?: return@withContext null
+        val s = share ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.INFO)
         try {
             val info = s.getFileInformation(normalizePath(path))
             val name = path.trimEnd('/').substringAfterLast('/')
@@ -111,14 +120,20 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
                 isDirectory = isDir, isHidden = name.startsWith("."),
                 mimeType = mime, extension = ext,
             )
-        } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            if (e.isMissingRepositoryResource()) null
+            else throw e.asRepositoryException(capabilities.provider, RepositoryOperation.INFO)
+        }
     }
 
     override suspend fun exists(path: String): Boolean = withContext(Dispatchers.IO) {
-        share?.let { s ->
-            try { s.fileExists(normalizePath(path)) || s.folderExists(normalizePath(path)) }
-            catch (_: Exception) { false }
-        } ?: false
+        val s = share ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.EXISTS)
+        try {
+            s.fileExists(normalizePath(path)) || s.folderExists(normalizePath(path))
+        } catch (e: Exception) {
+            if (e.isMissingRepositoryResource()) false
+            else throw e.asRepositoryException(capabilities.provider, RepositoryOperation.EXISTS)
+        }
     }
 
     override suspend fun copyFiles(
@@ -129,7 +144,9 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
         // SMB copy: read from source, write to destination on same share
         var count = 0
         try {
-            val s = share ?: return@withContext Result.failure(Exception("Not connected"))
+            val s = share ?: return@withContext Result.failure(
+                notConnectedRepositoryException(capabilities.provider, RepositoryOperation.COPY),
+            )
             for (src in sources) {
                 val name = src.trimEnd('/').substringAfterLast('/')
                 val destPath = "${normalizePath(destination)}\\$name"
@@ -176,7 +193,9 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
                 count++
             }
             Result.success(count)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.COPY))
+        }
     }
 
     override suspend fun moveFiles(
@@ -184,7 +203,9 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
         conflictResolution: ConflictResolution,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
-        val s = share ?: return@withContext Result.failure(Exception("Not connected"))
+        val s = share ?: return@withContext Result.failure(
+            notConnectedRepositoryException(capabilities.provider, RepositoryOperation.MOVE),
+        )
         var count = 0
         try {
             for (src in sources) {
@@ -200,11 +221,15 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
                 count++
             }
             Result.success(count)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.MOVE))
+        }
     }
 
     override suspend fun deleteFiles(paths: List<String>, onProgress: (String) -> Unit): Result<Int> = withContext(Dispatchers.IO) {
-        val s = share ?: return@withContext Result.failure(Exception("Not connected"))
+        val s = share ?: return@withContext Result.failure(
+            notConnectedRepositoryException(capabilities.provider, RepositoryOperation.DELETE),
+        )
         var count = 0
         try {
             for (path in paths) {
@@ -214,19 +239,34 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
                 count++
             }
             Result.success(count)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.DELETE))
+        }
     }
 
     override suspend fun createDirectory(path: String): Result<FileItem> = withContext(Dispatchers.IO) {
         try {
-            share?.mkdir(normalizePath(path))
+            val s = share ?: return@withContext Result.failure(
+                notConnectedRepositoryException(capabilities.provider, RepositoryOperation.CREATE_DIRECTORY),
+            )
+            s.mkdir(normalizePath(path))
             getFileInfo(path)?.let { Result.success(it) }
-                ?: Result.failure(Exception("Created but stat failed"))
-        } catch (e: Exception) { Result.failure(e) }
+                ?: Result.failure(repositoryException(
+                    capabilities.provider,
+                    RepositoryOperation.CREATE_DIRECTORY,
+                    RepositoryErrorKind.TRANSPORT,
+                    "created but metadata could not be read",
+                    retryable = true,
+                ))
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.CREATE_DIRECTORY))
+        }
     }
 
     override suspend fun rename(path: String, newName: String): Result<FileItem> = withContext(Dispatchers.IO) {
-        val s = share ?: return@withContext Result.failure(Exception("Not connected"))
+        val s = share ?: return@withContext Result.failure(
+            notConnectedRepositoryException(capabilities.provider, RepositoryOperation.RENAME),
+        )
         try {
             val parent = path.trimEnd('/').substringBeforeLast('/')
             val target = "$parent/$newName"
@@ -237,8 +277,16 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
                 f.rename(normalizePath(target))
             }
             getFileInfo(target)?.let { Result.success(it) }
-                ?: Result.failure(Exception("Renamed but stat failed"))
-        } catch (e: Exception) { Result.failure(e) }
+                ?: Result.failure(repositoryException(
+                    capabilities.provider,
+                    RepositoryOperation.RENAME,
+                    RepositoryErrorKind.TRANSPORT,
+                    "renamed but metadata could not be read",
+                    retryable = true,
+                ))
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.RENAME))
+        }
     }
 
     override suspend fun download(
@@ -246,7 +294,9 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
         onProgress: (Long, Long) -> Unit,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val s = share ?: return@withContext Result.failure(Exception("Not connected"))
+            val s = share ?: return@withContext Result.failure(
+                notConnectedRepositoryException(capabilities.provider, RepositoryOperation.DOWNLOAD),
+            )
             val file = s.openFile(normalizePath(remotePath),
                 EnumSet.of(AccessMask.GENERIC_READ), null,
                 EnumSet.of(SMB2ShareAccess.FILE_SHARE_READ),
@@ -266,7 +316,9 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
             }
             file.close()
             Result.success(Unit)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.DOWNLOAD))
+        }
     }
 
     override suspend fun upload(
@@ -274,7 +326,9 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
         onProgress: (Long, Long) -> Unit,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val s = share ?: return@withContext Result.failure(Exception("Not connected"))
+            val s = share ?: return@withContext Result.failure(
+                notConnectedRepositoryException(capabilities.provider, RepositoryOperation.UPLOAD),
+            )
             val localFile = File(localPath)
             val totalSize = localFile.length()
             val file = s.openFile(normalizePath(remotePath),
@@ -295,7 +349,9 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
             }
             file.close()
             Result.success(Unit)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.UPLOAD))
+        }
     }
 
     private fun smbEntryToFileItem(entry: FileIdBothDirectoryInformation, parentPath: String): FileItem {

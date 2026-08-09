@@ -9,6 +9,10 @@ import com.explorer.fileexplorer.core.network.sftp.SftpKnownHostsStore
 import com.explorer.fileexplorer.core.network.smb.SmbFileRepository
 import com.explorer.fileexplorer.core.network.webdav.WebDavFileRepository
 import com.explorer.fileexplorer.core.storage.CredentialCipher
+import com.explorer.fileexplorer.core.model.RepositoryErrorKind
+import com.explorer.fileexplorer.core.model.RepositoryOperation
+import com.explorer.fileexplorer.core.model.asRepositoryException
+import com.explorer.fileexplorer.core.model.repositoryException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,7 +40,7 @@ class ConnectionManager @Inject constructor(
         val decryptedEntity = try {
             decryptPassword(entity)
         } catch (e: Exception) {
-            return Result.failure(e)
+            return Result.failure(e.asRepositoryException("connection", RepositoryOperation.CONNECT, RepositoryErrorKind.CORRUPT))
         }
         val connection = entityToConnection(decryptedEntity)
         val repo = createRepository(connection.protocol)
@@ -71,7 +75,13 @@ class ConnectionManager @Inject constructor(
         getActiveRepo(connectionId)?.takeIf { it.isConnected }?.let { return Result.success(it) }
         if (_activeConnections.value.containsKey(connectionId)) disconnect(connectionId)
         val entity = connectionDao.getById(connectionId)
-            ?: return Result.failure(IllegalArgumentException("Saved connection $connectionId was not found"))
+            ?: return Result.failure(repositoryException(
+                "connection",
+                RepositoryOperation.CONNECT,
+                RepositoryErrorKind.NOT_FOUND,
+                "saved connection was not found",
+                retryable = false,
+            ))
         return connect(entity)
     }
 
@@ -92,7 +102,7 @@ class ConnectionManager @Inject constructor(
         val decryptedEntity = try {
             decryptPassword(entity)
         } catch (e: Exception) {
-            return Result.failure(e)
+            return Result.failure(e.asRepositoryException("connection", RepositoryOperation.CONNECT, RepositoryErrorKind.CORRUPT))
         }
         val connection = entityToConnection(decryptedEntity)
         val repo = createRepository(connection.protocol)

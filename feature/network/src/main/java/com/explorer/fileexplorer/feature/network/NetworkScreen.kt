@@ -36,6 +36,7 @@ import com.explorer.fileexplorer.core.ui.FileListItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 import javax.inject.Inject
 
 // -- ViewModel --
@@ -116,9 +117,16 @@ class NetworkViewModel @Inject constructor(
         val repo = connectionManager.getActiveRepo(connectionId) ?: return
         viewModelScope.launch {
             _state.update { it.copy(isLoadingRemote = true, browsingConnectionId = connectionId, remotePath = path, remoteError = null) }
-            repo.listFiles(path).collect { files ->
-                val sorted = files.sortedWith(compareBy<FileItem> { if (it.isDirectory) 0 else 1 }.thenBy { it.name.lowercase() })
-                _state.update { it.copy(remoteFiles = sorted, isLoadingRemote = false) }
+            try {
+                repo.listFiles(path).collect { files ->
+                    val sorted = files.sortedWith(compareBy<FileItem> { if (it.isDirectory) 0 else 1 }.thenBy { it.name.lowercase() })
+                    _state.update { it.copy(remoteFiles = sorted, isLoadingRemote = false) }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _state.update { it.copy(isLoadingRemote = false, remoteError = "Unable to browse remote folder: ${error.message}") }
+                _toasts.emit("Browse failed: ${error.message ?: "remote operation failed"}")
             }
         }
     }

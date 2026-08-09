@@ -71,6 +71,6 @@ class CloudProviderStatusTest {
             Result.failure(UnsupportedOperationException())
         override suspend fun rename(account: CloudAccount, fileId: String, newName: String): Result<FileItem> =
             Result.failure(UnsupportedOperationException())
-        override suspend fun getQuota(account: CloudAccount): Pair<Long, Long> = 0L to 0L
+        override suspend fun getQuota(account: CloudAccount): Result<Pair<Long, Long>> = Result.success(0L to 0L)
     }
 }

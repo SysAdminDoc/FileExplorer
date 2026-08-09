@@ -10,6 +10,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Made permanent deletion capability-aware: local overwrite is explicitly best effort, unsupported providers cannot claim secure deletion, and the browser reports partial outcomes with an irreversible-action confirmation.
 - Made cloud readiness truthful: all built-in providers register with explicit status states, OAuth launch/callback results are represented, signed-out accounts are retained on revoke failure, and unconfigured connect actions stay disabled.
 - Replaced the vault scaffold with opaque encrypted payloads, an authenticated encrypted index, Keystore-backed sessions, biometric/device-credential gating, atomic add/restore/delete operations, and backup-excluded app-private storage.
+- Added shared repository capabilities and typed provider errors so unsupported operations and failed reads remain distinguishable from empty results, with bounded and redacted diagnostic context.
 
 ### Added
 - Added an independent dual-pane browser layout with per-pane navigation, refresh, sorting, hidden-file filtering, and selection.

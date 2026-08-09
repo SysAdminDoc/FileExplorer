@@ -4,13 +4,15 @@ import android.content.Context
 import android.webkit.MimeTypeMap
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.model.RepositoryCapabilities
+import com.explorer.fileexplorer.core.model.RepositoryOperation
+import com.explorer.fileexplorer.core.model.asRepositoryException
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
-import java.io.IOException
 import java.nio.file.*
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.attribute.PosixFileAttributes
@@ -22,6 +24,8 @@ import javax.inject.Singleton
 class LocalFileRepository @Inject constructor(
     @ApplicationContext private val context: Context,
 ) : FileRepository {
+
+    override val capabilities: RepositoryCapabilities = RepositoryCapabilities.local("local")
 
     override fun deleteCapabilities(paths: List<String>): DeleteCapabilities = DeleteCapabilities.LOCAL_BEST_EFFORT
 
@@ -38,10 +42,8 @@ class LocalFileRepository @Inject constructor(
                     items.add(pathToFileItem(entry))
                 }
             }
-        } catch (e: AccessDeniedException) {
-            // Partial results if some files are accessible
-        } catch (e: IOException) {
-            // Empty result on IO error
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.LIST)
         }
         emit(items)
     }.flowOn(Dispatchers.IO)
@@ -75,7 +77,7 @@ class LocalFileRepository @Inject constructor(
             }
             Result.success(count)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.COPY))
         }
     }
 
@@ -143,7 +145,7 @@ class LocalFileRepository @Inject constructor(
             }
             Result.success(count)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.MOVE))
         }
     }
 
@@ -161,7 +163,7 @@ class LocalFileRepository @Inject constructor(
             }
             Result.success(count)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.DELETE))
         }
     }
 
@@ -180,7 +182,7 @@ class LocalFileRepository @Inject constructor(
             Files.createDirectories(p)
             Result.success(pathToFileItem(p))
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.CREATE_DIRECTORY))
         }
     }
 
@@ -190,7 +192,7 @@ class LocalFileRepository @Inject constructor(
             Files.createFile(p)
             Result.success(pathToFileItem(p))
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.CREATE_FILE))
         }
     }
 
@@ -201,26 +203,30 @@ class LocalFileRepository @Inject constructor(
             Files.move(source, target)
             Result.success(pathToFileItem(target))
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.RENAME))
         }
     }
 
-    override suspend fun calculateSize(paths: List<String>): Long = withContext(Dispatchers.IO) {
-        var total = 0L
-        for (path in paths) {
-            val p = Paths.get(path)
-            if (Files.isDirectory(p)) {
-                Files.walkFileTree(p, object : SimpleFileVisitor<Path>() {
-                    override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
-                        total += attrs.size()
-                        return FileVisitResult.CONTINUE
-                    }
-                })
-            } else {
-                total += Files.size(p)
+    override suspend fun calculateSize(paths: List<String>): Long = try {
+        withContext(Dispatchers.IO) {
+            var total = 0L
+            for (path in paths) {
+                val p = Paths.get(path)
+                if (Files.isDirectory(p)) {
+                    Files.walkFileTree(p, object : SimpleFileVisitor<Path>() {
+                        override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                            total += attrs.size()
+                            return FileVisitResult.CONTINUE
+                        }
+                    })
+                } else {
+                    total += Files.size(p)
+                }
             }
+            total
         }
-        total
+    } catch (e: Exception) {
+        throw e.asRepositoryException(capabilities.provider, RepositoryOperation.SIZE)
     }
 
     override fun search(
@@ -249,7 +255,9 @@ class LocalFileRepository @Inject constructor(
                         if (Files.isDirectory(entry)) stack.addLast(entry)
                     }
                 }
-            } catch (_: AccessDeniedException) { /* skip inaccessible dirs */ }
+            } catch (e: Exception) {
+                throw e.asRepositoryException(capabilities.provider, RepositoryOperation.SEARCH)
+            }
         }
     }.flowOn(Dispatchers.IO)
 
@@ -260,16 +268,20 @@ class LocalFileRepository @Inject constructor(
         includeHidden: Boolean = false,
     ): Flow<FileItem> = search(rootPath, query, regex, includeHidden)
 
-    override suspend fun getChecksum(path: String, algorithm: String): String = withContext(Dispatchers.IO) {
-        val digest = MessageDigest.getInstance(algorithm)
-        val buffer = ByteArray(8192)
-        Files.newInputStream(Paths.get(path)).use { stream ->
-            var read: Int
-            while (stream.read(buffer).also { read = it } != -1) {
-                digest.update(buffer, 0, read)
+    override suspend fun getChecksum(path: String, algorithm: String): String = try {
+        withContext(Dispatchers.IO) {
+            val digest = MessageDigest.getInstance(algorithm)
+            val buffer = ByteArray(8192)
+            Files.newInputStream(Paths.get(path)).use { stream ->
+                var read: Int
+                while (stream.read(buffer).also { read = it } != -1) {
+                    digest.update(buffer, 0, read)
+                }
             }
+            digest.digest().joinToString("") { "%02x".format(it) }
         }
-        digest.digest().joinToString("") { "%02x".format(it) }
+    } catch (e: Exception) {
+        throw e.asRepositoryException(capabilities.provider, RepositoryOperation.CHECKSUM)
     }
 
     // -- Internal helpers --

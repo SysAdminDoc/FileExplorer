@@ -5,10 +5,14 @@ import android.webkit.MimeTypeMap
 import androidx.documentfile.provider.DocumentFile
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.model.RepositoryCapabilities
+import com.explorer.fileexplorer.core.model.RepositoryErrorKind
+import com.explorer.fileexplorer.core.model.RepositoryOperation
+import com.explorer.fileexplorer.core.model.asRepositoryException
+import com.explorer.fileexplorer.core.model.repositoryException
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
@@ -29,17 +33,21 @@ class UsbFileRepository @Inject constructor(
     private val usbStorageManager: UsbStorageManager,
 ) : FileRepository {
 
+    override val capabilities: RepositoryCapabilities = RepositoryCapabilities.local("usb")
+
     override fun listFiles(path: String): Flow<List<FileItem>> = flow {
         val directory = usbStorageManager.documentForPath(path)
         if (directory == null || !directory.isDirectory) {
             emit(emptyList())
             return@flow
         }
-        val items = runCatching {
+        val items = try {
             directory.listFiles().map { document ->
                 toFileItem(document, UsbPathCodec.childPath(path, document.name ?: "USB item"))
             }
-        }.getOrDefault(emptyList())
+        } catch (error: Exception) {
+            throw error.asRepositoryException(capabilities.provider, RepositoryOperation.LIST)
+        }
         emit(items)
     }.flowOn(Dispatchers.IO)
 
@@ -65,15 +73,15 @@ class UsbFileRepository @Inject constructor(
     ): Result<Int> = withContext(Dispatchers.IO) {
         val targetDirectory: Any = if (UsbPathCodec.isUsbPath(destination)) {
             val document = usbStorageManager.documentForPath(destination)
-                ?: return@withContext Result.failure(IllegalArgumentException("USB destination is unavailable"))
+                ?: return@withContext failure(RepositoryOperation.COPY, "USB destination is unavailable", RepositoryErrorKind.NOT_FOUND, false)
             if (!document.isDirectory || !document.canWrite()) {
-                return@withContext Result.failure(IllegalArgumentException("USB destination is not writable"))
+                return@withContext failure(RepositoryOperation.COPY, "USB destination is not writable", RepositoryErrorKind.PERMISSION, false)
             }
             document
         } else {
             val directory = File(destination)
             if (!directory.isDirectory || !directory.canWrite()) {
-                return@withContext Result.failure(IllegalArgumentException("Local destination is not writable"))
+                return@withContext failure(RepositoryOperation.COPY, "local destination is not writable", RepositoryErrorKind.PERMISSION, false)
             }
             directory
         }
@@ -107,7 +115,7 @@ class UsbFileRepository @Inject constructor(
             }
             Result.success(count)
         } catch (error: Exception) {
-            Result.failure(error)
+            Result.failure(error.asRepositoryException(capabilities.provider, RepositoryOperation.COPY))
         }
     }
 
@@ -132,7 +140,7 @@ class UsbFileRepository @Inject constructor(
             }
             copyResult
         } catch (error: Exception) {
-            Result.failure(error)
+            Result.failure(error.asRepositoryException(capabilities.provider, RepositoryOperation.MOVE))
         }
     }
 
@@ -151,7 +159,7 @@ class UsbFileRepository @Inject constructor(
             }
             Result.success(count)
         } catch (error: Exception) {
-            Result.failure(error)
+            Result.failure(error.asRepositoryException(capabilities.provider, RepositoryOperation.DELETE))
         }
     }
 
@@ -165,31 +173,45 @@ class UsbFileRepository @Inject constructor(
 
     override suspend fun rename(path: String, newName: String): Result<FileItem> = withContext(Dispatchers.IO) {
         if (!UsbNamePolicy.isSafe(newName)) {
-            return@withContext Result.failure(IllegalArgumentException("Invalid USB item name"))
+            return@withContext failure(RepositoryOperation.RENAME, "invalid USB item name", RepositoryErrorKind.INVALID, false)
         }
         val parentPath = UsbPathCodec.parentPath(path)
-            ?: return@withContext Result.failure(IllegalArgumentException("USB root cannot be renamed"))
+            ?: return@withContext failure(RepositoryOperation.RENAME, "USB root cannot be renamed", RepositoryErrorKind.INVALID, false)
         val source = usbStorageManager.documentForPath(path)
-            ?: return@withContext Result.failure(IOException("USB item is unavailable"))
+            ?: return@withContext failure(RepositoryOperation.RENAME, "USB item is unavailable", RepositoryErrorKind.NOT_FOUND, false)
         val parent = usbStorageManager.documentForPath(parentPath)
-            ?: return@withContext Result.failure(IOException("USB parent is unavailable"))
+            ?: return@withContext failure(RepositoryOperation.RENAME, "USB parent is unavailable", RepositoryErrorKind.NOT_FOUND, false)
         if (parent.findFile(newName) != null) {
-            return@withContext Result.failure(IOException("An item with that name already exists"))
+            return@withContext failure(RepositoryOperation.RENAME, "an item with that name already exists", RepositoryErrorKind.CONFLICT, false)
         }
         if (!source.renameTo(newName)) {
-            return@withContext Result.failure(IOException("Unable to rename USB item"))
+            return@withContext failure(RepositoryOperation.RENAME, "unable to rename USB item", RepositoryErrorKind.TRANSPORT, true)
         }
         val newPath = UsbPathCodec.childPath(parentPath, newName)
         getFileInfo(newPath)?.let { Result.success(it) }
-            ?: Result.failure(IOException("USB item was renamed but cannot be read"))
+            ?: failure(RepositoryOperation.RENAME, "USB item was renamed but cannot be read", RepositoryErrorKind.TRANSPORT, true)
     }
 
     override suspend fun calculateSize(paths: List<String>): Long = withContext(Dispatchers.IO) {
         paths.sumOf { path ->
             if (UsbPathCodec.isUsbPath(path)) {
-                usbStorageManager.documentForPath(path)?.let(::documentSize) ?: 0L
+                usbStorageManager.documentForPath(path)?.let(::documentSize)
+                    ?: throw repositoryException(
+                        capabilities.provider,
+                        RepositoryOperation.SIZE,
+                        RepositoryErrorKind.NOT_FOUND,
+                        "USB item is unavailable",
+                        retryable = false,
+                    )
             } else {
-                localSize(File(path))
+                File(path).takeIf { it.exists() }?.let(::localSize)
+                    ?: throw repositoryException(
+                        capabilities.provider,
+                        RepositoryOperation.SIZE,
+                        RepositoryErrorKind.NOT_FOUND,
+                        "local item is unavailable",
+                        retryable = false,
+                    )
             }
         }
     }
@@ -200,17 +222,40 @@ class UsbFileRepository @Inject constructor(
         regex: Boolean,
         includeHidden: Boolean,
     ): Flow<FileItem> {
-        val root = usbStorageManager.documentForPath(rootPath) ?: return emptyFlow()
-        val matcher = runCatching {
+        val root = usbStorageManager.documentForPath(rootPath) ?: return flow {
+            throw repositoryException(
+                capabilities.provider,
+                RepositoryOperation.SEARCH,
+                RepositoryErrorKind.NOT_FOUND,
+                "USB search root is unavailable",
+                retryable = false,
+            )
+        }
+        val matcher = try {
             if (regex) Regex(query, RegexOption.IGNORE_CASE) else null
-        }.getOrNull()
-        if (regex && matcher == null) return emptyFlow()
+        } catch (error: Exception) {
+            return flow { throw error.asRepositoryException(capabilities.provider, RepositoryOperation.SEARCH, RepositoryErrorKind.CORRUPT) }
+        }
+        if (regex && matcher == null) return flow {
+            throw repositoryException(
+                capabilities.provider,
+                RepositoryOperation.SEARCH,
+                RepositoryErrorKind.CORRUPT,
+                "invalid search expression",
+                retryable = false,
+            )
+        }
         return flow {
             val pending = ArrayDeque<Pair<DocumentFile, String>>()
             pending.add(root to rootPath)
             while (pending.isNotEmpty()) {
                 val (directory, directoryPath) = pending.removeLast()
-                for (document in runCatching { directory.listFiles().toList() }.getOrDefault(emptyList())) {
+                val documents = try {
+                    directory.listFiles().toList()
+                } catch (error: Exception) {
+                    throw error.asRepositoryException(capabilities.provider, RepositoryOperation.SEARCH)
+                }
+                for (document in documents) {
                     val name = document.name ?: continue
                     if (!includeHidden && name.startsWith('.')) continue
                     val item = toFileItem(document, UsbPathCodec.childPath(directoryPath, name))
@@ -224,10 +269,29 @@ class UsbFileRepository @Inject constructor(
     }
 
     override suspend fun getChecksum(path: String, algorithm: String): String = withContext(Dispatchers.IO) {
-        val document = usbStorageManager.documentForPath(path) ?: return@withContext ""
-        val digest = runCatching { MessageDigest.getInstance(algorithm) }.getOrNull() ?: return@withContext ""
-        val input = runCatching { context.contentResolver.openInputStream(document.uri) }.getOrNull()
-            ?: return@withContext ""
+        val document = usbStorageManager.documentForPath(path) ?: throw repositoryException(
+            capabilities.provider,
+            RepositoryOperation.CHECKSUM,
+            RepositoryErrorKind.NOT_FOUND,
+            "USB item is unavailable",
+            retryable = false,
+        )
+        val digest = try {
+            MessageDigest.getInstance(algorithm)
+        } catch (error: Exception) {
+            throw error.asRepositoryException(capabilities.provider, RepositoryOperation.CHECKSUM, RepositoryErrorKind.INVALID)
+        }
+        val input = try {
+            context.contentResolver.openInputStream(document.uri)
+        } catch (error: Exception) {
+            throw error.asRepositoryException(capabilities.provider, RepositoryOperation.CHECKSUM)
+        } ?: throw repositoryException(
+            capabilities.provider,
+            RepositoryOperation.CHECKSUM,
+            RepositoryErrorKind.STORAGE,
+            "unable to open USB item",
+            retryable = true,
+        )
         input.use { stream ->
             val buffer = ByteArray(8192)
             var read: Int
@@ -240,17 +304,25 @@ class UsbFileRepository @Inject constructor(
 
     private fun createChild(path: String, directory: Boolean): Result<FileItem> {
         val parentPath = UsbPathCodec.parentPath(path)
-            ?: return Result.failure(IllegalArgumentException("USB root cannot be created"))
+            ?: return failure(RepositoryOperation.CREATE_DIRECTORY, "USB root cannot be created", RepositoryErrorKind.INVALID, false)
         val name = UsbPathCodec.name(path)
-            ?: return Result.failure(IllegalArgumentException("USB item name is missing"))
-        if (!UsbNamePolicy.isSafe(name)) return Result.failure(IllegalArgumentException("Invalid USB item name"))
+            ?: return failure(RepositoryOperation.CREATE_DIRECTORY, "USB item name is missing", RepositoryErrorKind.INVALID, false)
+        val operation = if (directory) RepositoryOperation.CREATE_DIRECTORY else RepositoryOperation.CREATE_FILE
+        if (!UsbNamePolicy.isSafe(name)) return failure(operation, "invalid USB item name", RepositoryErrorKind.INVALID, false)
         val parent = usbStorageManager.documentForPath(parentPath)
-            ?: return Result.failure(IOException("USB parent is unavailable"))
-        if (parent.findFile(name) != null) return Result.failure(IOException("An item with that name already exists"))
+            ?: return failure(operation, "USB parent is unavailable", RepositoryErrorKind.NOT_FOUND, false)
+        if (parent.findFile(name) != null) return failure(operation, "an item with that name already exists", RepositoryErrorKind.CONFLICT, false)
         val created = if (directory) parent.createDirectory(name) else parent.createFile(mimeType(name), name)
         return created?.let { Result.success(toFileItem(it, path)) }
-            ?: Result.failure(IOException("Unable to create USB item"))
+            ?: failure(operation, "unable to create USB item", RepositoryErrorKind.STORAGE, true)
     }
+
+    private fun <T> failure(
+        operation: RepositoryOperation,
+        message: String,
+        kind: RepositoryErrorKind,
+        retryable: Boolean,
+    ): Result<T> = Result.failure(repositoryException(capabilities.provider, operation, kind, message, retryable))
 
     private fun copySourceToUsb(
         sourcePath: String,

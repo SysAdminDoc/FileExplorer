@@ -399,23 +399,29 @@ class BrowserViewModel @Inject constructor(
                 )
             }
             val repo = repoFactory.getRepository(path)
-            repo.listFiles(path).collect { files ->
-                val sorted = sortFiles(files, preferences.sortOrder, _state.value.showHidden)
-                val history = _state.value.pathHistory.toMutableList()
-                val idx = _state.value.historyIndex
-                if (idx < history.lastIndex) { while (history.size > idx + 1) history.removeAt(history.lastIndex) }
-                history.add(path)
-                val selinux = if (_state.value.rootEnabled && rootHelper.requiresRoot(path)) {
-                    rootRepo.getSelinuxContext(path)
-                } else null
-                _state.update {
-                    it.copy(currentPath = path, files = sorted, isLoading = false,
-                        pathHistory = history, historyIndex = history.lastIndex,
-                        insideArchive = false, archivePath = null, archiveInternalPath = "",
-                        selinuxContext = selinux)
+            try {
+                repo.listFiles(path).collect { files ->
+                    val sorted = sortFiles(files, preferences.sortOrder, _state.value.showHidden)
+                    val history = _state.value.pathHistory.toMutableList()
+                    val idx = _state.value.historyIndex
+                    if (idx < history.lastIndex) { while (history.size > idx + 1) history.removeAt(history.lastIndex) }
+                    history.add(path)
+                    val selinux = if (_state.value.rootEnabled && rootHelper.requiresRoot(path)) {
+                        rootRepo.getSelinuxContext(path)
+                    } else null
+                    _state.update {
+                        it.copy(currentPath = path, files = sorted, isLoading = false,
+                            pathHistory = history, historyIndex = history.lastIndex,
+                            insideArchive = false, archivePath = null, archiveInternalPath = "",
+                            selinuxContext = selinux)
+                    }
+                    recordRecentLocation(path)
+                    scheduleDirectorySizes(path, sorted, repo, secondary = false)
                 }
-                recordRecentLocation(path)
-                scheduleDirectorySizes(path, sorted, repo, secondary = false)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _state.update { it.copy(isLoading = false, error = "Unable to open folder: ${error.message}") }
             }
         }
     }
@@ -716,21 +722,27 @@ class BrowserViewModel @Inject constructor(
             val preferences = DirectoryViewPreferenceCodec.decode(directoryViewPreferenceDao.getByPath(path))
             _state.update { it.copy(isLoading = true, selectedItems = emptySet()) }
             val repository = repoFactory.getRepository(path)
-            repository.listFiles(path).collect { files ->
-                val sorted = sortFiles(files, preferences.sortOrder, _state.value.showHidden)
-                _state.update {
-                    it.copy(
-                        currentPath = path,
-                        files = sorted,
-                        sortOrder = preferences.sortOrder,
-                        viewMode = preferences.viewMode,
-                        visibleColumns = preferences.visibleColumns,
-                        isLoading = false,
-                        historyIndex = historyIndex,
-                    )
+            try {
+                repository.listFiles(path).collect { files ->
+                    val sorted = sortFiles(files, preferences.sortOrder, _state.value.showHidden)
+                    _state.update {
+                        it.copy(
+                            currentPath = path,
+                            files = sorted,
+                            sortOrder = preferences.sortOrder,
+                            viewMode = preferences.viewMode,
+                            visibleColumns = preferences.visibleColumns,
+                            isLoading = false,
+                            historyIndex = historyIndex,
+                        )
+                    }
+                    recordRecentLocation(path)
+                    scheduleDirectorySizes(path, sorted, repository, secondary = false)
                 }
-                recordRecentLocation(path)
-                scheduleDirectorySizes(path, sorted, repository, secondary = false)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _state.update { it.copy(isLoading = false, error = "Unable to open folder: ${error.message}") }
             }
         }
     }

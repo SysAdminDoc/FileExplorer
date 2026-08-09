@@ -2,6 +2,7 @@ package com.explorer.fileexplorer.core.data
 
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.model.RepositoryCapabilities
 import kotlinx.coroutines.flow.Flow
 
 enum class SecureDeleteCapability {
@@ -29,6 +30,10 @@ data class DeleteCapabilities(
  * Each implementation handles a different backend: local, root, SAF, SMB, SFTP, cloud, archive.
  */
 interface FileRepository {
+
+    /** Operations supported by this provider. Unsupported operations fail explicitly. */
+    val capabilities: RepositoryCapabilities
+        get() = RepositoryCapabilities.unsupported("unknown")
 
     /** Capabilities for irreversible deletion at this provider/location. */
     fun deleteCapabilities(paths: List<String>): DeleteCapabilities = DeleteCapabilities.PROVIDER_DELETE_ONLY

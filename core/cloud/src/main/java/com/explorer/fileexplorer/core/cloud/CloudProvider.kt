@@ -3,6 +3,7 @@ package com.explorer.fileexplorer.core.cloud
 import android.content.Context
 import android.util.Log
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.model.RepositoryCapabilities
 import com.explorer.fileexplorer.core.storage.CredentialCipher
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -52,6 +53,10 @@ interface CloudProvider {
     val service: CloudService
     val isAuthenticated: Boolean
 
+    /** Supported cloud operations and their stable provider identity. */
+    val capabilities: RepositoryCapabilities
+        get() = RepositoryCapabilities.cloud(service.name.lowercase())
+
     /** Readiness of the provider implementation before an account is signed in. */
     val readiness: CloudAuthState
         get() = if (isAuthenticated) CloudAuthState.SIGNED_IN else CloudAuthState.REQUIRES_CONFIGURATION
@@ -93,7 +98,7 @@ interface CloudProvider {
     suspend fun rename(account: CloudAccount, fileId: String, newName: String): Result<FileItem>
 
     /** Get storage quota. */
-    suspend fun getQuota(account: CloudAccount): Pair<Long, Long>
+    suspend fun getQuota(account: CloudAccount): Result<Pair<Long, Long>>
 }
 
 fun resolveCloudServiceStatus(

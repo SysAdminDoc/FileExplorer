@@ -7,6 +7,11 @@ import com.explorer.fileexplorer.core.cloud.CloudProvider
 import com.explorer.fileexplorer.core.cloud.CloudService
 import com.explorer.fileexplorer.core.cloud.StreamingFileBody
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.model.RepositoryCapabilities
+import com.explorer.fileexplorer.core.model.RepositoryOperation
+import com.explorer.fileexplorer.core.model.asRepositoryException
+import com.explorer.fileexplorer.core.model.httpRepositoryException
+import com.explorer.fileexplorer.core.model.unsupportedRepositoryOperation
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -37,11 +42,12 @@ class OneDriveProvider @Inject constructor(
     private val graphBase = "https://graph.microsoft.com/v1.0"
 
     override val service = CloudService.ONEDRIVE
+    override val capabilities: RepositoryCapabilities = RepositoryCapabilities.cloud("onedrive")
     override val isAuthenticated: Boolean = false
 
     override suspend fun getAuthIntent(): Intent? = null // Placeholder for MSAL
     override suspend fun handleAuthResult(data: Intent): Result<CloudAccount> =
-        Result.failure(NotImplementedError("Configure Azure AD app registration"))
+        Result.failure(unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.AUTHENTICATE))
 
     override suspend fun refreshToken(account: CloudAccount): Result<CloudAccount> = withContext(Dispatchers.IO) {
         try {
@@ -53,14 +59,16 @@ class OneDriveProvider @Inject constructor(
             val request = Request.Builder()
                 .url("https://login.microsoftonline.com/common/oauth2/v2.0/token")
                 .post(body).build()
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.REFRESH_TOKEN)
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
             Result.success(account.copy(
                 accessToken = json.get("access_token")?.asString ?: account.accessToken,
                 refreshToken = json.get("refresh_token")?.asString ?: account.refreshToken,
                 tokenExpiry = System.currentTimeMillis() + (json.get("expires_in")?.asLong ?: 3600) * 1000,
             ))
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.REFRESH_TOKEN))
+        }
     }
 
     override suspend fun signOut(account: CloudAccount): Result<Unit> = Result.success(Unit)
@@ -71,7 +79,7 @@ class OneDriveProvider @Inject constructor(
         val request = Request.Builder().url(url)
             .header("Authorization", "Bearer ${account.accessToken}").build()
         try {
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.LIST)
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
             val items = json.getAsJsonArray("value")?.map { el ->
                 val obj = el.asJsonObject
@@ -89,7 +97,9 @@ class OneDriveProvider @Inject constructor(
                 )
             } ?: emptyList()
             emit(items)
-        } catch (_: Exception) { emit(emptyList()) }
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.LIST)
+        }
     }.flowOn(Dispatchers.IO)
 
     override suspend fun download(
@@ -100,7 +110,7 @@ class OneDriveProvider @Inject constructor(
             val request = Request.Builder()
                 .url("$graphBase/me/drive/items/$fileId/content")
                 .header("Authorization", "Bearer ${account.accessToken}").build()
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.DOWNLOAD)
             val total = response.body?.contentLength() ?: 0L
             FileOutputStream(localPath).use { out ->
                 response.body?.byteStream()?.use { input ->
@@ -109,7 +119,9 @@ class OneDriveProvider @Inject constructor(
                 }
             }
             Result.success(Unit)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.DOWNLOAD))
+        }
     }
 
     override suspend fun upload(
@@ -123,22 +135,26 @@ class OneDriveProvider @Inject constructor(
             val request = Request.Builder().url(url)
                 .header("Authorization", "Bearer ${account.accessToken}")
                 .put(StreamingFileBody(file, "application/octet-stream".toMediaType(), onProgress)).build()
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.UPLOAD)
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
             Result.success(FileItem(
                 name = json.get("name")?.asString ?: file.name,
                 path = json.get("id")?.asString ?: "", size = file.length(),
             ))
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.UPLOAD))
+        }
     }
 
     override suspend fun delete(account: CloudAccount, fileId: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder().url("$graphBase/me/drive/items/$fileId")
                 .header("Authorization", "Bearer ${account.accessToken}").delete().build()
-            client.newCall(request).execute()
+            client.newCall(request).execute().requireSuccess(RepositoryOperation.DELETE)
             Result.success(Unit)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.DELETE))
+        }
     }
 
     override suspend fun createFolder(account: CloudAccount, name: String, parentId: String): Result<FileItem> = withContext(Dispatchers.IO) {
@@ -152,10 +168,12 @@ class OneDriveProvider @Inject constructor(
             val request = Request.Builder().url("$graphBase/me/drive/items/$parent/children")
                 .header("Authorization", "Bearer ${account.accessToken}")
                 .post(body.toString().toRequestBody("application/json".toMediaType())).build()
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.CREATE_FOLDER)
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
             Result.success(FileItem(name = name, path = json.get("id")?.asString ?: "", isDirectory = true, mimeType = "inode/directory"))
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.CREATE_FOLDER))
+        }
     }
 
     override suspend fun rename(account: CloudAccount, fileId: String, newName: String): Result<FileItem> = withContext(Dispatchers.IO) {
@@ -164,21 +182,30 @@ class OneDriveProvider @Inject constructor(
             val request = Request.Builder().url("$graphBase/me/drive/items/$fileId")
                 .header("Authorization", "Bearer ${account.accessToken}")
                 .patch(body.toString().toRequestBody("application/json".toMediaType())).build()
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.RENAME)
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
             Result.success(FileItem(name = newName, path = json.get("id")?.asString ?: fileId))
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.RENAME))
+        }
     }
 
-    override suspend fun getQuota(account: CloudAccount): Pair<Long, Long> = withContext(Dispatchers.IO) {
+    override suspend fun getQuota(account: CloudAccount): Result<Pair<Long, Long>> = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder().url("$graphBase/me/drive?select=quota")
                 .header("Authorization", "Bearer ${account.accessToken}").build()
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.QUOTA)
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
             val quota = json.getAsJsonObject("quota")
-            Pair(quota?.get("total")?.asLong ?: 0L, quota?.get("used")?.asLong ?: 0L)
-        } catch (_: Exception) { Pair(0L, 0L) }
+            Result.success((quota?.get("total")?.asLong ?: 0L) to (quota?.get("used")?.asLong ?: 0L))
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.QUOTA))
+        }
+    }
+
+    private fun Response.requireSuccess(operation: RepositoryOperation): Response {
+        if (!isSuccessful) throw httpRepositoryException(capabilities.provider, operation, code)
+        return this
     }
 
     private fun parseDate(date: String?): Long {

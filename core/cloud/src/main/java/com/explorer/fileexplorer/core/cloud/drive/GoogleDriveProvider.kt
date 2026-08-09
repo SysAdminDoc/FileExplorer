@@ -7,6 +7,13 @@ import com.explorer.fileexplorer.core.cloud.CloudAccount
 import com.explorer.fileexplorer.core.cloud.CloudProvider
 import com.explorer.fileexplorer.core.cloud.CloudService
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.model.RepositoryCapabilities
+import com.explorer.fileexplorer.core.model.RepositoryErrorKind
+import com.explorer.fileexplorer.core.model.RepositoryOperation
+import com.explorer.fileexplorer.core.model.asRepositoryException
+import com.explorer.fileexplorer.core.model.httpRepositoryException
+import com.explorer.fileexplorer.core.model.repositoryException
+import com.explorer.fileexplorer.core.model.unsupportedRepositoryOperation
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -39,6 +46,7 @@ class GoogleDriveProvider @Inject constructor(
     private val apiBase = "https://www.googleapis.com/drive/v3"
 
     override val service = CloudService.GOOGLE_DRIVE
+    override val capabilities: RepositoryCapabilities = RepositoryCapabilities.cloud("google-drive")
     override val isAuthenticated: Boolean = false // Check token validity
 
     override suspend fun getAuthIntent(): Intent? {
@@ -51,7 +59,7 @@ class GoogleDriveProvider @Inject constructor(
     override suspend fun handleAuthResult(data: Intent): Result<CloudAccount> {
         // Exchange authorization code for tokens
         // POST to https://oauth2.googleapis.com/token
-        return Result.failure(NotImplementedError("Configure Google Cloud Console credentials"))
+        return Result.failure(unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.AUTHENTICATE))
     }
 
     override suspend fun refreshToken(account: CloudAccount): Result<CloudAccount> = withContext(Dispatchers.IO) {
@@ -65,15 +73,25 @@ class GoogleDriveProvider @Inject constructor(
                 .url("https://oauth2.googleapis.com/token")
                 .post(body)
                 .build()
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.REFRESH_TOKEN)
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
-            val newToken = json.get("access_token")?.asString ?: return@withContext Result.failure(Exception("No token"))
+            val newToken = json.get("access_token")?.asString ?: return@withContext Result.failure(
+                repositoryException(
+                    capabilities.provider,
+                    RepositoryOperation.REFRESH_TOKEN,
+                    RepositoryErrorKind.CORRUPT,
+                    "response did not contain an access token",
+                    retryable = false,
+                ),
+            )
             val expiresIn = json.get("expires_in")?.asLong ?: 3600
             Result.success(account.copy(
                 accessToken = newToken,
                 tokenExpiry = System.currentTimeMillis() + expiresIn * 1000,
             ))
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.REFRESH_TOKEN))
+        }
     }
 
     override suspend fun signOut(account: CloudAccount): Result<Unit> = withContext(Dispatchers.IO) {
@@ -82,9 +100,11 @@ class GoogleDriveProvider @Inject constructor(
                 .url("https://oauth2.googleapis.com/revoke?token=${account.accessToken}")
                 .post("".toRequestBody())
                 .build()
-            client.newCall(request).execute()
+            client.newCall(request).execute().requireSuccess(RepositoryOperation.SIGN_OUT)
             Result.success(Unit)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.SIGN_OUT))
+        }
     }
 
     override fun listFiles(account: CloudAccount, folderId: String): Flow<List<FileItem>> = flow {
@@ -98,7 +118,7 @@ class GoogleDriveProvider @Inject constructor(
             .build()
 
         try {
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.LIST)
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
             val files = json.getAsJsonArray("files")?.map { el ->
                 val obj = el.asJsonObject
@@ -119,7 +139,9 @@ class GoogleDriveProvider @Inject constructor(
                 )
             } ?: emptyList()
             emit(files)
-        } catch (_: Exception) { emit(emptyList()) }
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.LIST)
+        }
     }.flowOn(Dispatchers.IO)
 
     override suspend fun download(
@@ -131,7 +153,7 @@ class GoogleDriveProvider @Inject constructor(
                 .url("$apiBase/files/$fileId?alt=media")
                 .header("Authorization", "Bearer ${account.accessToken}")
                 .build()
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.DOWNLOAD)
             val totalSize = response.body?.contentLength() ?: 0L
             FileOutputStream(localPath).use { output ->
                 response.body?.byteStream()?.use { input ->
@@ -146,7 +168,9 @@ class GoogleDriveProvider @Inject constructor(
                 }
             }
             Result.success(Unit)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.DOWNLOAD))
+        }
     }
 
     override suspend fun upload(
@@ -178,7 +202,7 @@ class GoogleDriveProvider @Inject constructor(
                 .post(body)
                 .build()
 
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.UPLOAD)
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
             onProgress(file.length(), file.length())
             Result.success(FileItem(
@@ -187,7 +211,9 @@ class GoogleDriveProvider @Inject constructor(
                 size = json.get("size")?.asLong ?: file.length(),
                 mimeType = json.get("mimeType")?.asString ?: mimeType,
             ))
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.UPLOAD))
+        }
     }
 
     override suspend fun delete(account: CloudAccount, fileId: String): Result<Unit> = withContext(Dispatchers.IO) {
@@ -197,9 +223,11 @@ class GoogleDriveProvider @Inject constructor(
                 .header("Authorization", "Bearer ${account.accessToken}")
                 .delete()
                 .build()
-            client.newCall(request).execute()
+            client.newCall(request).execute().requireSuccess(RepositoryOperation.DELETE)
             Result.success(Unit)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.DELETE))
+        }
     }
 
     override suspend fun createFolder(account: CloudAccount, name: String, parentId: String): Result<FileItem> = withContext(Dispatchers.IO) {
@@ -214,14 +242,16 @@ class GoogleDriveProvider @Inject constructor(
                 .header("Authorization", "Bearer ${account.accessToken}")
                 .post(metadata.toString().toRequestBody("application/json".toMediaType()))
                 .build()
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.CREATE_FOLDER)
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
             Result.success(FileItem(
                 name = json.get("name")?.asString ?: name,
                 path = json.get("id")?.asString ?: "",
                 isDirectory = true, mimeType = "inode/directory",
             ))
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.CREATE_FOLDER))
+        }
     }
 
     override suspend fun rename(account: CloudAccount, fileId: String, newName: String): Result<FileItem> = withContext(Dispatchers.IO) {
@@ -232,28 +262,37 @@ class GoogleDriveProvider @Inject constructor(
                 .header("Authorization", "Bearer ${account.accessToken}")
                 .patch(body.toString().toRequestBody("application/json".toMediaType()))
                 .build()
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.RENAME)
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
             Result.success(FileItem(
                 name = json.get("name")?.asString ?: newName,
                 path = json.get("id")?.asString ?: fileId,
             ))
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.RENAME))
+        }
     }
 
-    override suspend fun getQuota(account: CloudAccount): Pair<Long, Long> = withContext(Dispatchers.IO) {
+    override suspend fun getQuota(account: CloudAccount): Result<Pair<Long, Long>> = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder()
                 .url("$apiBase/about?fields=storageQuota")
                 .header("Authorization", "Bearer ${account.accessToken}")
                 .build()
-            val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute().requireSuccess(RepositoryOperation.QUOTA)
             val json = gson.fromJson(response.body?.string(), JsonObject::class.java)
             val quota = json.getAsJsonObject("storageQuota")
             val total = quota?.get("limit")?.asLong ?: 0L
             val used = quota?.get("usage")?.asLong ?: 0L
-            Pair(total, used)
-        } catch (_: Exception) { Pair(0L, 0L) }
+            Result.success(total to used)
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.QUOTA))
+        }
+    }
+
+    private fun Response.requireSuccess(operation: RepositoryOperation): Response {
+        if (!isSuccessful) throw httpRepositoryException(capabilities.provider, operation, code)
+        return this
     }
 
     private fun parseGoogleDate(date: String?): Long {

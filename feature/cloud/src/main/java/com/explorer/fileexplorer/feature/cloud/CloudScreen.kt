@@ -34,6 +34,7 @@ import com.explorer.fileexplorer.core.ui.FileListItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 import javax.inject.Inject
 
 data class CloudUiState(
@@ -80,9 +81,16 @@ class CloudViewModel @Inject constructor(
         val provider = accountManager.getProvider(account.service) ?: return
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, browsingAccount = account, currentFolderId = folderId) }
-            provider.listFiles(account, folderId).collect { files ->
-                val sorted = files.sortedWith(compareBy<FileItem> { if (it.isDirectory) 0 else 1 }.thenBy { it.name.lowercase() })
-                _state.update { it.copy(files = sorted, isLoading = false) }
+            try {
+                provider.listFiles(account, folderId).collect { files ->
+                    val sorted = files.sortedWith(compareBy<FileItem> { if (it.isDirectory) 0 else 1 }.thenBy { it.name.lowercase() })
+                    _state.update { it.copy(files = sorted, isLoading = false) }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _state.update { it.copy(isLoading = false) }
+                _toasts.emit("Browse failed: ${error.message ?: "cloud operation failed"}")
             }
         }
     }

@@ -3,6 +3,13 @@ package com.explorer.fileexplorer.core.network.webdav
 import android.webkit.MimeTypeMap
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.model.RepositoryCapabilities
+import com.explorer.fileexplorer.core.model.RepositoryErrorKind
+import com.explorer.fileexplorer.core.model.RepositoryOperation
+import com.explorer.fileexplorer.core.model.asRepositoryException
+import com.explorer.fileexplorer.core.model.isMissingRepositoryResource
+import com.explorer.fileexplorer.core.model.notConnectedRepositoryException
+import com.explorer.fileexplorer.core.model.repositoryException
 import com.explorer.fileexplorer.core.network.NetworkConnection
 import com.explorer.fileexplorer.core.network.NetworkFileRepository
 import com.thegrizzlylabs.sardineandroid.DavResource
@@ -17,6 +24,9 @@ import java.io.FileOutputStream
 import javax.inject.Inject
 
 class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
+
+    override val capabilities: RepositoryCapabilities
+        get() = RepositoryCapabilities.network(if (currentConnection?.useTls == true) "webdavs" else "webdav")
 
     private var sardine: OkHttpSardine? = null
     private var baseUrl: String = ""
@@ -41,7 +51,7 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
             Result.success(Unit)
         } catch (e: Exception) {
             disconnect()
-            Result.failure(e)
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.CONNECT))
         }
     }
 
@@ -56,7 +66,7 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
     }
 
     override fun listFiles(path: String): Flow<List<FileItem>> = flow {
-        val s = sardine ?: run { emit(emptyList()); return@flow }
+        val s = sardine ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.LIST)
         val items = mutableListOf<FileItem>()
         try {
             val url = resolveUrl(path)
@@ -65,21 +75,32 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
             for (res in resources.drop(1)) {
                 items.add(davResourceToFileItem(res, path))
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.LIST)
+        }
         emit(items)
     }.flowOn(Dispatchers.IO)
 
     override suspend fun getFileInfo(path: String): FileItem? = withContext(Dispatchers.IO) {
-        val s = sardine ?: return@withContext null
+        val s = sardine ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.INFO)
         try {
             val url = resolveUrl(path)
             val resources = s.list(url)
             resources.firstOrNull()?.let { davResourceToFileItem(it, path.substringBeforeLast('/')) }
-        } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            if (e.isMissingRepositoryResource()) null
+            else throw e.asRepositoryException(capabilities.provider, RepositoryOperation.INFO)
+        }
     }
 
     override suspend fun exists(path: String): Boolean = withContext(Dispatchers.IO) {
-        try { sardine?.exists(resolveUrl(path)) ?: false } catch (_: Exception) { false }
+        val s = sardine ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.EXISTS)
+        try {
+            s.exists(resolveUrl(path))
+        } catch (e: Exception) {
+            if (e.isMissingRepositoryResource()) false
+            else throw e.asRepositoryException(capabilities.provider, RepositoryOperation.EXISTS)
+        }
     }
 
     override suspend fun copyFiles(
@@ -87,7 +108,9 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
         conflictResolution: ConflictResolution,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
-        val s = sardine ?: return@withContext Result.failure(Exception("Not connected"))
+        val s = sardine ?: return@withContext Result.failure(
+            notConnectedRepositoryException(capabilities.provider, RepositoryOperation.COPY),
+        )
         var count = 0
         try {
             for (src in sources) {
@@ -98,7 +121,9 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
                 count++
             }
             Result.success(count)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.COPY))
+        }
     }
 
     override suspend fun moveFiles(
@@ -106,7 +131,9 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
         conflictResolution: ConflictResolution,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
-        val s = sardine ?: return@withContext Result.failure(Exception("Not connected"))
+        val s = sardine ?: return@withContext Result.failure(
+            notConnectedRepositoryException(capabilities.provider, RepositoryOperation.MOVE),
+        )
         var count = 0
         try {
             for (src in sources) {
@@ -117,11 +144,15 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
                 count++
             }
             Result.success(count)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.MOVE))
+        }
     }
 
     override suspend fun deleteFiles(paths: List<String>, onProgress: (String) -> Unit): Result<Int> = withContext(Dispatchers.IO) {
-        val s = sardine ?: return@withContext Result.failure(Exception("Not connected"))
+        val s = sardine ?: return@withContext Result.failure(
+            notConnectedRepositoryException(capabilities.provider, RepositoryOperation.DELETE),
+        )
         var count = 0
         try {
             for (path in paths) {
@@ -130,25 +161,49 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
                 count++
             }
             Result.success(count)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.DELETE))
+        }
     }
 
     override suspend fun createDirectory(path: String): Result<FileItem> = withContext(Dispatchers.IO) {
         try {
-            sardine?.createDirectory(resolveUrl(path))
+            val s = sardine ?: return@withContext Result.failure(
+                notConnectedRepositoryException(capabilities.provider, RepositoryOperation.CREATE_DIRECTORY),
+            )
+            s.createDirectory(resolveUrl(path))
             getFileInfo(path)?.let { Result.success(it) }
-                ?: Result.failure(Exception("Created but stat failed"))
-        } catch (e: Exception) { Result.failure(e) }
+                ?: Result.failure(repositoryException(
+                    capabilities.provider,
+                    RepositoryOperation.CREATE_DIRECTORY,
+                    RepositoryErrorKind.TRANSPORT,
+                    "created but metadata could not be read",
+                    retryable = true,
+                ))
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.CREATE_DIRECTORY))
+        }
     }
 
     override suspend fun rename(path: String, newName: String): Result<FileItem> = withContext(Dispatchers.IO) {
         try {
+            val s = sardine ?: return@withContext Result.failure(
+                notConnectedRepositoryException(capabilities.provider, RepositoryOperation.RENAME),
+            )
             val parent = path.trimEnd('/').substringBeforeLast('/')
             val target = "$parent/$newName"
-            sardine?.move(resolveUrl(path), resolveUrl(target))
+            s.move(resolveUrl(path), resolveUrl(target))
             getFileInfo(target)?.let { Result.success(it) }
-                ?: Result.failure(Exception("Renamed but stat failed"))
-        } catch (e: Exception) { Result.failure(e) }
+                ?: Result.failure(repositoryException(
+                    capabilities.provider,
+                    RepositoryOperation.RENAME,
+                    RepositoryErrorKind.TRANSPORT,
+                    "renamed but metadata could not be read",
+                    retryable = true,
+                ))
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.RENAME))
+        }
     }
 
     override suspend fun download(
@@ -156,7 +211,9 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
         onProgress: (Long, Long) -> Unit,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val s = sardine ?: return@withContext Result.failure(Exception("Not connected"))
+            val s = sardine ?: return@withContext Result.failure(
+                notConnectedRepositoryException(capabilities.provider, RepositoryOperation.DOWNLOAD),
+            )
             val input = s.get(resolveUrl(remotePath))
             FileOutputStream(localPath).use { output ->
                 val buf = ByteArray(65536)
@@ -170,7 +227,9 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
             }
             input.close()
             Result.success(Unit)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.DOWNLOAD))
+        }
     }
 
     override suspend fun upload(
@@ -178,12 +237,16 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
         onProgress: (Long, Long) -> Unit,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val s = sardine ?: return@withContext Result.failure(Exception("Not connected"))
+            val s = sardine ?: return@withContext Result.failure(
+                notConnectedRepositoryException(capabilities.provider, RepositoryOperation.UPLOAD),
+            )
             val localFile = File(localPath)
             s.put(resolveUrl(remotePath), localFile, null)
             onProgress(localFile.length(), localFile.length())
             Result.success(Unit)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.UPLOAD))
+        }
     }
 
     private fun davResourceToFileItem(res: DavResource, parentPath: String): FileItem {

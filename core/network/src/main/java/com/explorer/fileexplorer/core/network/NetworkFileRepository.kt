@@ -3,6 +3,7 @@ package com.explorer.fileexplorer.core.network
 import com.explorer.fileexplorer.core.data.DeleteCapabilities
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.model.RepositoryCapabilities
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
@@ -37,6 +38,10 @@ enum class Protocol(val displayName: String, val defaultPort: Int, val uriScheme
  */
 interface NetworkFileRepository {
     val isConnected: Boolean
+
+    /** Operations exposed by the connected protocol implementation. */
+    val capabilities: RepositoryCapabilities
+        get() = RepositoryCapabilities.unsupported("network")
 
     fun deleteCapabilities(paths: List<String>): DeleteCapabilities = DeleteCapabilities.PROVIDER_DELETE_ONLY
 

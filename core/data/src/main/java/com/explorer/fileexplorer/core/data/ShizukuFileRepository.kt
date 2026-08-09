@@ -3,6 +3,11 @@ package com.explorer.fileexplorer.core.data
 import android.webkit.MimeTypeMap
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.model.RepositoryCapabilities
+import com.explorer.fileexplorer.core.model.RepositoryErrorKind
+import com.explorer.fileexplorer.core.model.RepositoryOperation
+import com.explorer.fileexplorer.core.model.repositoryException
+import com.explorer.fileexplorer.core.model.unsupportedRepositoryOperation
 import com.explorer.fileexplorer.core.storage.ShizukuManager
 import com.explorer.fileexplorer.core.storage.ShizukuPaths
 import kotlinx.coroutines.Dispatchers
@@ -20,15 +25,15 @@ class ShizukuFileRepository @Inject constructor(
     private val shizukuManager: ShizukuManager,
 ) : FileRepository {
 
+    override val capabilities: RepositoryCapabilities = RepositoryCapabilities.local("shizuku")
+
     override fun listFiles(path: String): Flow<List<FileItem>> = flow {
         if (!ShizukuPaths.isAllowed(path)) {
-            emit(emptyList())
-            return@flow
+            throw unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.LIST)
         }
         val result = shizukuManager.execute("ls -lAp -- ${ShizukuPaths.shellQuote(path)}")
         if (!result.isSuccess) {
-            emit(emptyList())
-            return@flow
+            throw commandFailure(RepositoryOperation.LIST, result.output)
         }
         emit(
             result.output.lineSequence()
@@ -39,16 +44,23 @@ class ShizukuFileRepository @Inject constructor(
     }.flowOn(Dispatchers.IO)
 
     override suspend fun getFileInfo(path: String): FileItem? = withContext(Dispatchers.IO) {
-        if (!ShizukuPaths.isAllowed(path)) return@withContext null
+        if (!ShizukuPaths.isAllowed(path)) {
+            throw unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.INFO)
+        }
         val result = shizukuManager.execute("ls -ldA -- ${ShizukuPaths.shellQuote(path)}")
+        if (!result.isSuccess && result.output.isNotBlank()) {
+            throw commandFailure(RepositoryOperation.INFO, result.output)
+        }
         result.output.lineSequence().mapNotNull { line ->
             parseLsLine(line, path.substringBeforeLast('/', ""))
         }.firstOrNull()
     }
 
     override suspend fun exists(path: String): Boolean = withContext(Dispatchers.IO) {
-        ShizukuPaths.isAllowed(path) &&
-            shizukuManager.execute("test -e ${ShizukuPaths.shellQuote(path)}").isSuccess
+        if (!ShizukuPaths.isAllowed(path)) {
+            throw unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.EXISTS)
+        }
+        shizukuManager.execute("test -e ${ShizukuPaths.shellQuote(path)}").isSuccess
     }
 
     override suspend fun copyFiles(
@@ -58,16 +70,17 @@ class ShizukuFileRepository @Inject constructor(
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
         if (!ShizukuPaths.isAllowed(destination) || sources.any { !ShizukuPaths.isAllowed(it) }) {
-            return@withContext Result.failure(IllegalArgumentException("Shizuku only supports Android/data paths"))
+            return@withContext unsupported(RepositoryOperation.COPY)
         }
         var count = 0
         for (source in sources) {
             onProgress(0, 0, source.substringAfterLast('/'))
             val flags = if (conflictResolution == ConflictResolution.OVERWRITE) "-rf" else "-rn"
-            if (shizukuManager.execute(
+            val result = shizukuManager.execute(
                     "cp $flags -- ${ShizukuPaths.shellQuote(source)} ${ShizukuPaths.shellQuote(destination)}/",
-                ).isSuccess
-            ) count++
+                )
+            if (!result.isSuccess) return@withContext Result.failure(commandFailure(RepositoryOperation.COPY, result.output))
+            count++
         }
         Result.success(count)
     }
@@ -79,16 +92,17 @@ class ShizukuFileRepository @Inject constructor(
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
         if (!ShizukuPaths.isAllowed(destination) || sources.any { !ShizukuPaths.isAllowed(it) }) {
-            return@withContext Result.failure(IllegalArgumentException("Shizuku only supports Android/data paths"))
+            return@withContext unsupported(RepositoryOperation.MOVE)
         }
         var count = 0
         for (source in sources) {
             onProgress(0, 0, source.substringAfterLast('/'))
             val flags = if (conflictResolution == ConflictResolution.OVERWRITE) "-f" else "-n"
-            if (shizukuManager.execute(
+            val result = shizukuManager.execute(
                     "mv $flags -- ${ShizukuPaths.shellQuote(source)} ${ShizukuPaths.shellQuote(destination)}/",
-                ).isSuccess
-            ) count++
+                )
+            if (!result.isSuccess) return@withContext Result.failure(commandFailure(RepositoryOperation.MOVE, result.output))
+            count++
         }
         Result.success(count)
     }
@@ -98,48 +112,69 @@ class ShizukuFileRepository @Inject constructor(
         onProgress: (String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
         if (paths.any { !ShizukuPaths.isAllowed(it) || ShizukuPaths.isProtectedRoot(it) }) {
-            return@withContext Result.failure(IllegalArgumentException("Cannot delete a protected Android root"))
+            return@withContext unsupported(RepositoryOperation.DELETE)
         }
         var count = 0
         for (path in paths) {
             onProgress(path.substringAfterLast('/'))
-            if (shizukuManager.execute("rm -rf -- ${ShizukuPaths.shellQuote(path)}").isSuccess) count++
+            val result = shizukuManager.execute("rm -rf -- ${ShizukuPaths.shellQuote(path)}")
+            if (!result.isSuccess) return@withContext Result.failure(commandFailure(RepositoryOperation.DELETE, result.output))
+            count++
         }
         Result.success(count)
     }
 
     override suspend fun createDirectory(path: String): Result<FileItem> = withContext(Dispatchers.IO) {
-        if (!ShizukuPaths.isAllowed(path)) return@withContext unsupported()
+        if (!ShizukuPaths.isAllowed(path)) return@withContext unsupported(RepositoryOperation.CREATE_DIRECTORY)
         val result = shizukuManager.execute("mkdir -p -- ${ShizukuPaths.shellQuote(path)}")
-        if (!result.isSuccess) Result.failure(Exception(result.output.ifBlank { "Unable to create directory" }))
+        if (!result.isSuccess) Result.failure(commandFailure(RepositoryOperation.CREATE_DIRECTORY, result.output))
         else getFileInfo(path)?.let(Result.Companion::success)
-            ?: Result.failure(Exception("Created but cannot stat"))
+            ?: Result.failure(commandFailure(RepositoryOperation.CREATE_DIRECTORY, "created but metadata could not be read"))
     }
 
     override suspend fun createFile(path: String): Result<FileItem> = withContext(Dispatchers.IO) {
-        if (!ShizukuPaths.isAllowed(path)) return@withContext unsupported()
+        if (!ShizukuPaths.isAllowed(path)) return@withContext unsupported(RepositoryOperation.CREATE_FILE)
         val result = shizukuManager.execute("touch -- ${ShizukuPaths.shellQuote(path)}")
-        if (!result.isSuccess) Result.failure(Exception(result.output.ifBlank { "Unable to create file" }))
+        if (!result.isSuccess) Result.failure(commandFailure(RepositoryOperation.CREATE_FILE, result.output))
         else getFileInfo(path)?.let(Result.Companion::success)
-            ?: Result.failure(Exception("Created but cannot stat"))
+            ?: Result.failure(commandFailure(RepositoryOperation.CREATE_FILE, "created but metadata could not be read"))
     }
 
     override suspend fun rename(path: String, newName: String): Result<FileItem> = withContext(Dispatchers.IO) {
         val parent = path.substringBeforeLast('/', "")
         val target = ShizukuPaths.child(parent, newName)
-            ?: return@withContext Result.failure(IllegalArgumentException("Invalid Android/data filename"))
+            ?: return@withContext Result.failure(
+                repositoryException(
+                    capabilities.provider,
+                    RepositoryOperation.RENAME,
+                    RepositoryErrorKind.INVALID,
+                    "invalid Android/data filename",
+                    retryable = false,
+                ),
+            )
         val result = shizukuManager.execute(
             "mv -- ${ShizukuPaths.shellQuote(path)} ${ShizukuPaths.shellQuote(target)}",
         )
-        if (!result.isSuccess) Result.failure(Exception(result.output.ifBlank { "Unable to rename" }))
+        if (!result.isSuccess) Result.failure(commandFailure(RepositoryOperation.RENAME, result.output))
         else getFileInfo(target)?.let(Result.Companion::success)
-            ?: Result.failure(Exception("Renamed but cannot stat"))
+            ?: Result.failure(commandFailure(RepositoryOperation.RENAME, "renamed but metadata could not be read"))
     }
 
     override suspend fun calculateSize(paths: List<String>): Long = withContext(Dispatchers.IO) {
-        paths.filter(ShizukuPaths::isAllowed).sumOf { path ->
+        if (paths.any { !ShizukuPaths.isAllowed(it) }) {
+            throw unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.SIZE)
+        }
+        paths.sumOf { path ->
             val result = shizukuManager.execute("du -sk -- ${ShizukuPaths.shellQuote(path)}")
-            result.output.lineSequence().firstOrNull()?.trim()?.substringBefore(' ')?.toLongOrNull()?.times(1024) ?: 0L
+            if (!result.isSuccess) throw commandFailure(RepositoryOperation.SIZE, result.output)
+            result.output.lineSequence().firstOrNull()?.trim()?.substringBefore(' ')?.toLongOrNull()?.times(1024)
+                ?: throw repositoryException(
+                    capabilities.provider,
+                    RepositoryOperation.SIZE,
+                    RepositoryErrorKind.CORRUPT,
+                    "size command returned invalid data",
+                    retryable = false,
+                )
         }
     }
 
@@ -149,21 +184,24 @@ class ShizukuFileRepository @Inject constructor(
         regex: Boolean,
         includeHidden: Boolean,
     ): Flow<FileItem> = flow {
-        if (!ShizukuPaths.isAllowed(rootPath)) return@flow
+        if (!ShizukuPaths.isAllowed(rootPath)) {
+            throw unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.SEARCH)
+        }
         val pattern = if (regex) ".*$query.*" else "*$query*"
         val hiddenFilter = if (!includeHidden) "! -name ${ShizukuPaths.shellQuote(".*")}" else ""
         val command = "find ${ShizukuPaths.shellQuote(rootPath)} -maxdepth 5 " +
             "${if (regex) "-regex" else "-iname"} ${ShizukuPaths.shellQuote(pattern)} $hiddenFilter -print"
         val result = shizukuManager.execute(command)
-        if (result.isSuccess) {
-            result.output.lineSequence().filter { it.isNotBlank() }.forEach { path ->
-                getFileInfo(path.trim())?.let { emit(it) }
-            }
+        if (!result.isSuccess) throw commandFailure(RepositoryOperation.SEARCH, result.output)
+        result.output.lineSequence().filter { it.isNotBlank() }.forEach { path ->
+            getFileInfo(path.trim())?.let { emit(it) }
         }
     }.flowOn(Dispatchers.IO)
 
     override suspend fun getChecksum(path: String, algorithm: String): String = withContext(Dispatchers.IO) {
-        if (!ShizukuPaths.isAllowed(path)) return@withContext ""
+        if (!ShizukuPaths.isAllowed(path)) {
+            throw unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.CHECKSUM)
+        }
         val command = when (algorithm.uppercase()) {
             "MD5" -> "md5sum"
             "SHA-1", "SHA1" -> "sha1sum"
@@ -171,8 +209,17 @@ class ShizukuFileRepository @Inject constructor(
             "SHA-512", "SHA512" -> "sha512sum"
             else -> "sha256sum"
         }
-        shizukuManager.execute("$command ${ShizukuPaths.shellQuote(path)}").output
-            .lineSequence().firstOrNull()?.substringBefore(' ') ?: ""
+        val result = shizukuManager.execute("$command ${ShizukuPaths.shellQuote(path)}")
+        if (!result.isSuccess) throw commandFailure(RepositoryOperation.CHECKSUM, result.output)
+        result.output.lineSequence().firstOrNull()?.substringBefore(' ')
+            ?.takeIf { it.isNotBlank() }
+            ?: throw repositoryException(
+                capabilities.provider,
+                RepositoryOperation.CHECKSUM,
+                RepositoryErrorKind.CORRUPT,
+                "checksum command returned invalid data",
+                retryable = false,
+            )
     }
 
     private fun parseLsLine(line: String, parentPath: String): FileItem? {
@@ -223,6 +270,14 @@ class ShizukuFileRepository @Inject constructor(
         if (value[9] == 'x' || value[9] == 't') add(PosixFilePermission.OTHERS_EXECUTE)
     }
 
-    private fun <T> unsupported(): Result<T> =
-        Result.failure(IllegalArgumentException("Shizuku only supports Android/data paths"))
+    private fun <T> unsupported(operation: RepositoryOperation): Result<T> =
+        Result.failure(unsupportedRepositoryOperation(capabilities.provider, operation))
+
+    private fun commandFailure(operation: RepositoryOperation, message: String) = repositoryException(
+        provider = capabilities.provider,
+        operation = operation,
+        kind = RepositoryErrorKind.TRANSPORT,
+        message = message.ifBlank { "Shizuku command failed" },
+        retryable = true,
+    )
 }

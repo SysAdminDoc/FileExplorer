@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import com.explorer.fileexplorer.core.model.RepositoryError
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -44,6 +45,21 @@ class DiagnosticLog @Inject constructor() {
             provider = provider,
             operation = operation,
             error = redactSecrets(message),
+        )
+        _entries.value = (_entries.value + entry).takeLast(maxEntries)
+    }
+
+    /** Records structured provider context without allowing raw credentials into exports. */
+    fun log(error: RepositoryError, detail: String = "") {
+        val status = error.statusCode?.let { " status=$it" }.orEmpty()
+        val entry = DiagnosticEntry(
+            timestamp = System.currentTimeMillis(),
+            provider = error.provider,
+            operation = error.operation.name,
+            error = redactSecrets(
+                "kind=${error.kind.name} retryable=${error.retryable}$status; ${error.message}",
+            ),
+            detail = redactSecrets(detail),
         )
         _entries.value = (_entries.value + entry).takeLast(maxEntries)
     }

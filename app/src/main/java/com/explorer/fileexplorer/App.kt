@@ -11,6 +11,7 @@ import com.explorer.fileexplorer.core.data.PluginFileRepository
 import com.explorer.fileexplorer.core.data.SchemeResolver
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.model.RepositoryCapabilities
 import com.explorer.fileexplorer.core.cloud.CloudAccountManager
 import com.explorer.fileexplorer.core.cloud.dropbox.DropboxProvider
 import com.explorer.fileexplorer.core.cloud.drive.GoogleDriveProvider
@@ -66,6 +67,7 @@ class App : Application(), SingletonImageLoader.Factory {
     override fun newImageLoader(context: Context): ImageLoader = ThumbnailCacheController.newImageLoader(context)
 
     private fun wrap(repo: NetworkFileRepository) = object : NetworkRepoProvider {
+        override val capabilities: RepositoryCapabilities = repo.capabilities
         override fun deleteCapabilities(paths: List<String>): DeleteCapabilities = repo.deleteCapabilities(paths)
         override fun listFiles(path: String): Flow<List<FileItem>> = repo.listFiles(path)
         override suspend fun getFileInfo(path: String): FileItem? = repo.getFileInfo(path)

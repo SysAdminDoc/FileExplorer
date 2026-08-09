@@ -1,0 +1,38 @@
+package com.explorer.fileexplorer.core.network
+
+import com.explorer.fileexplorer.core.data.DiagnosticLog
+import com.explorer.fileexplorer.core.model.RepositoryOperation
+import com.explorer.fileexplorer.core.network.ftp.FtpFileRepository
+import com.explorer.fileexplorer.core.network.sftp.SftpFileRepository
+import com.explorer.fileexplorer.core.network.sftp.SftpKnownHostsStore
+import com.explorer.fileexplorer.core.network.smb.SmbFileRepository
+import com.explorer.fileexplorer.core.network.webdav.WebDavFileRepository
+import java.nio.file.Files
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+class RepositoryCapabilitiesTest {
+    @Test
+    fun builtInProtocolsDeclareTheirSupportedOperations() {
+        val knownHosts = Files.createTempDirectory("fileexplorer-capabilities").resolve("known_hosts").toFile()
+        val repositories = listOf(
+            SmbFileRepository(),
+            SftpFileRepository(SftpKnownHostsStore(knownHosts, testOnly = true), DiagnosticLog()),
+            FtpFileRepository(),
+            WebDavFileRepository(),
+        )
+
+        assertEquals(setOf("smb", "sftp", "ftp", "webdav"), repositories.map { it.capabilities.provider }.toSet())
+        repositories.forEach { repository ->
+            assertTrue(repository.capabilities.supports(RepositoryOperation.LIST))
+            assertTrue(repository.capabilities.supports(RepositoryOperation.DOWNLOAD))
+            assertTrue(repository.capabilities.supports(RepositoryOperation.UPLOAD))
+            assertFalse(repository.capabilities.supports(RepositoryOperation.CREATE_FILE))
+            assertFalse(repository.capabilities.supports(RepositoryOperation.SIZE))
+            assertFalse(repository.capabilities.supports(RepositoryOperation.SEARCH))
+            assertFalse(repository.capabilities.supports(RepositoryOperation.CHECKSUM))
+        }
+    }
+}

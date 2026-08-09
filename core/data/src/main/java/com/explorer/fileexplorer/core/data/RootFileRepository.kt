@@ -4,6 +4,11 @@ import android.content.Context
 import android.webkit.MimeTypeMap
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.model.RepositoryCapabilities
+import com.explorer.fileexplorer.core.model.RepositoryErrorKind
+import com.explorer.fileexplorer.core.model.RepositoryOperation
+import com.explorer.fileexplorer.core.model.asRepositoryException
+import com.explorer.fileexplorer.core.model.repositoryException
 import com.explorer.fileexplorer.core.storage.RootHelper
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +26,8 @@ class RootFileRepository @Inject constructor(
     private val rootHelper: RootHelper,
 ) : FileRepository {
 
+    override val capabilities: RepositoryCapabilities = RepositoryCapabilities.local("root")
+
     private fun esc(s: String): String = "'" + s.replace("'", "'\\''") + "'"
 
     override fun listFiles(path: String): Flow<List<FileItem>> = flow {
@@ -29,8 +36,7 @@ class RootFileRepository @Inject constructor(
             "ls -lAp --color=never $p 2>/dev/null || ls -la $p 2>/dev/null"
         )
         if (!result.isSuccess) {
-            emit(emptyList())
-            return@flow
+            throw commandFailure(RepositoryOperation.LIST, result.err.joinToString())
         }
         val items = result.out
             .drop(1)
@@ -41,12 +47,20 @@ class RootFileRepository @Inject constructor(
 
     override suspend fun getFileInfo(path: String): FileItem? = withContext(Dispatchers.IO) {
         val result = rootHelper.exec("ls -ldA ${esc(path)} 2>/dev/null")
-        if (!result.isSuccess || result.out.isEmpty()) return@withContext null
+        if (!result.isSuccess) {
+            if (result.err.joinToString().isMissingPathMessage()) return@withContext null
+            throw commandFailure(RepositoryOperation.INFO, result.err.joinToString())
+        }
+        if (result.out.isEmpty()) return@withContext null
         parseLsLine(result.out.first(), path.substringBeforeLast('/'))
     }
 
     override suspend fun exists(path: String): Boolean = withContext(Dispatchers.IO) {
-        rootHelper.exec("test -e ${esc(path)}").isSuccess
+        val result = rootHelper.exec("test -e ${esc(path)}")
+        if (!result.isSuccess && !result.err.joinToString().isMissingPathMessage()) {
+            throw commandFailure(RepositoryOperation.EXISTS, result.err.joinToString())
+        }
+        result.isSuccess
     }
 
     override suspend fun copyFiles(
@@ -67,11 +81,14 @@ class RootFileRepository @Inject constructor(
                     else -> "-rf"
                 }
                 val result = rootHelper.exec("cp $flags ${esc(src)} $dest/")
-                if (result.isSuccess) count++
+                if (!result.isSuccess) {
+                    return@withContext Result.failure(commandFailure(RepositoryOperation.COPY, result.err.joinToString()))
+                }
+                count++
             }
             Result.success(count)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.COPY))
         }
     }
 
@@ -89,11 +106,14 @@ class RootFileRepository @Inject constructor(
                 onProgress(0, 0, name)
                 val flags = if (conflictResolution == ConflictResolution.OVERWRITE) "-f" else ""
                 val result = rootHelper.exec("mv $flags ${esc(src)} $dest/")
-                if (result.isSuccess) count++
+                if (!result.isSuccess) {
+                    return@withContext Result.failure(commandFailure(RepositoryOperation.MOVE, result.err.joinToString()))
+                }
+                count++
             }
             Result.success(count)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.MOVE))
         }
     }
 
@@ -106,11 +126,14 @@ class RootFileRepository @Inject constructor(
             for (path in paths) {
                 onProgress(path.substringAfterLast('/'))
                 val result = rootHelper.exec("rm -rf ${esc(path)}")
-                if (result.isSuccess) count++
+                if (!result.isSuccess) {
+                    return@withContext Result.failure(commandFailure(RepositoryOperation.DELETE, result.err.joinToString()))
+                }
+                count++
             }
             Result.success(count)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.DELETE))
         }
     }
 
@@ -118,9 +141,9 @@ class RootFileRepository @Inject constructor(
         val result = rootHelper.exec("mkdir -p ${esc(path)}")
         if (result.isSuccess) {
             getFileInfo(path)?.let { Result.success(it) }
-                ?: Result.failure(Exception("Created but cannot stat"))
+                ?: Result.failure(commandFailure(RepositoryOperation.CREATE_DIRECTORY, "created but metadata could not be read"))
         } else {
-            Result.failure(Exception(result.err.joinToString()))
+            Result.failure(commandFailure(RepositoryOperation.CREATE_DIRECTORY, result.err.joinToString()))
         }
     }
 
@@ -128,9 +151,9 @@ class RootFileRepository @Inject constructor(
         val result = rootHelper.exec("touch ${esc(path)}")
         if (result.isSuccess) {
             getFileInfo(path)?.let { Result.success(it) }
-                ?: Result.failure(Exception("Created but cannot stat"))
+                ?: Result.failure(commandFailure(RepositoryOperation.CREATE_FILE, "created but metadata could not be read"))
         } else {
-            Result.failure(Exception(result.err.joinToString()))
+            Result.failure(commandFailure(RepositoryOperation.CREATE_FILE, result.err.joinToString()))
         }
     }
 
@@ -140,9 +163,9 @@ class RootFileRepository @Inject constructor(
         val result = rootHelper.exec("mv ${esc(path)} ${esc(target)}")
         if (result.isSuccess) {
             getFileInfo(target)?.let { Result.success(it) }
-                ?: Result.failure(Exception("Renamed but cannot stat"))
+                ?: Result.failure(commandFailure(RepositoryOperation.RENAME, "renamed but metadata could not be read"))
         } else {
-            Result.failure(Exception(result.err.joinToString()))
+            Result.failure(commandFailure(RepositoryOperation.RENAME, result.err.joinToString()))
         }
     }
 
@@ -150,11 +173,17 @@ class RootFileRepository @Inject constructor(
         var total = 0L
         for (path in paths) {
             val result = rootHelper.exec("du -sb ${esc(path)} 2>/dev/null | tail -1")
-            if (result.isSuccess && result.out.isNotEmpty()) {
-                result.out.first().split("\\s+".toRegex()).firstOrNull()?.toLongOrNull()?.let {
-                    total += it
-                }
-            }
+            if (!result.isSuccess) throw commandFailure(RepositoryOperation.SIZE, result.err.joinToString())
+            if (result.out.isEmpty()) throw commandFailure(RepositoryOperation.SIZE, "size command returned no data")
+            val size = result.out.first().split("\\s+".toRegex()).firstOrNull()?.toLongOrNull()
+                ?: throw repositoryException(
+                    capabilities.provider,
+                    RepositoryOperation.SIZE,
+                    RepositoryErrorKind.CORRUPT,
+                    "size command returned invalid data",
+                    retryable = false,
+                )
+            total += size
         }
         total
     }
@@ -170,11 +199,10 @@ class RootFileRepository @Inject constructor(
         val result = rootHelper.exec(
             "find ${esc(rootPath)} -maxdepth 5 $namePattern $hiddenFilter 2>/dev/null | head -500"
         )
-        if (result.isSuccess) {
-            for (line in result.out) {
-                if (line.isBlank()) continue
-                getFileInfo(line.trim())?.let { emit(it) }
-            }
+        if (!result.isSuccess) throw commandFailure(RepositoryOperation.SEARCH, result.err.joinToString())
+        for (line in result.out) {
+            if (line.isBlank()) continue
+            getFileInfo(line.trim())?.let { emit(it) }
         }
     }.flowOn(Dispatchers.IO)
 
@@ -187,9 +215,10 @@ class RootFileRepository @Inject constructor(
             else -> "sha256sum"
         }
         val result = rootHelper.exec("$cmd ${esc(path)} 2>/dev/null")
-        if (result.isSuccess && result.out.isNotEmpty()) {
-            result.out.first().split("\\s+".toRegex()).firstOrNull() ?: ""
-        } else ""
+        if (!result.isSuccess) throw commandFailure(RepositoryOperation.CHECKSUM, result.err.joinToString())
+        if (result.out.isEmpty()) throw commandFailure(RepositoryOperation.CHECKSUM, "checksum command returned no data")
+        result.out.first().split("\\s+".toRegex()).firstOrNull()
+            ?: throw commandFailure(RepositoryOperation.CHECKSUM, "checksum command returned invalid data")
     }
 
     suspend fun getSelinuxContext(path: String): String? = withContext(Dispatchers.IO) {
@@ -221,6 +250,19 @@ class RootFileRepository @Inject constructor(
 
     suspend fun remountRo(mountPoint: String): Boolean = withContext(Dispatchers.IO) {
         rootHelper.exec("mount -o remount,ro ${esc(mountPoint)}").isSuccess
+    }
+
+    private fun commandFailure(operation: RepositoryOperation, message: String) = repositoryException(
+        provider = capabilities.provider,
+        operation = operation,
+        kind = RepositoryErrorKind.TRANSPORT,
+        message = message.ifBlank { "root command failed" },
+        retryable = true,
+    )
+
+    private fun String.isMissingPathMessage(): Boolean {
+        val normalized = lowercase()
+        return "no such file" in normalized || "not found" in normalized || "cannot access" in normalized
     }
 
     suspend fun chmod(path: String, mode: String, recursive: Boolean = false): Boolean = withContext(Dispatchers.IO) {
