@@ -215,3 +215,15 @@ interface IntegrityDao {
     @Query("DELETE FROM integrity_entries WHERE path = :path")
     suspend fun deleteByPath(path: String)
 }
+
+@Dao
+interface TransferTaskDao {
+    @Query("SELECT * FROM transfer_tasks ORDER BY queue_order ASC, id ASC")
+    suspend fun getAll(): List<TransferTaskEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(task: TransferTaskEntity)
+
+    @Query("DELETE FROM transfer_tasks WHERE id = :id")
+    suspend fun deleteById(id: Long)
+}

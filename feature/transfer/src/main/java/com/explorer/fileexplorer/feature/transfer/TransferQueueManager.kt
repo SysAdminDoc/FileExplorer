@@ -1,7 +1,11 @@
 package com.explorer.fileexplorer.feature.transfer
 
+import android.content.Context
+import android.content.Intent
+import androidx.core.content.ContextCompat
 import com.explorer.fileexplorer.core.data.FileRepositoryFactory
 import com.explorer.fileexplorer.core.data.UsbPathCodec
+import com.explorer.fileexplorer.core.database.TransferTaskDao
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileOperation
 import kotlinx.coroutines.CancellationException
@@ -15,6 +19,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -26,7 +33,9 @@ import javax.inject.Singleton
 
 @Singleton
 class TransferQueueManager @Inject constructor(
+    @param:ApplicationContext private val appContext: Context,
     private val repositoryFactory: FileRepositoryFactory,
+    private val transferTaskDao: TransferTaskDao,
 ) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -37,8 +46,16 @@ class TransferQueueManager @Inject constructor(
     private val pauseSignals = mutableMapOf<Long, CompletableDeferred<Unit>>()
     private val conflictWaiters = mutableMapOf<Long, CompletableDeferred<TransferConflictAction>>()
     private val cancelledIds = mutableSetOf<Long>()
+    private val persistenceMutex = Mutex()
+    private val ready = CompletableDeferred<Unit>()
+    private val lastPersistedAt = mutableMapOf<Long, Long>()
     private var runner: Job? = null
     private var activeId: Long? = null
+    private var foregroundOwnershipRequested = false
+
+    init {
+        restorePersistedTasks()
+    }
 
     fun enqueue(
         operation: FileOperation,
@@ -48,15 +65,18 @@ class TransferQueueManager @Inject constructor(
     ): Long {
         require(sourcePaths.isNotEmpty()) { "At least one source is required" }
         val id = nextId.incrementAndGet()
+        val task = TransferQueueTask(
+            id = id,
+            idempotencyKey = "transfer-$id",
+            operation = operation,
+            sourcePaths = sourcePaths.distinct(),
+            destination = destination,
+            bandwidthLimitBytesPerSecond = bandwidthLimitBytesPerSecond.coerceAtLeast(0L),
+        )
         _tasks.update {
-            it + TransferQueueTask(
-                id = id,
-                operation = operation,
-                sourcePaths = sourcePaths,
-                destination = destination,
-                bandwidthLimitBytesPerSecond = bandwidthLimitBytesPerSecond.coerceAtLeast(0L),
-            )
+            it + task
         }
+        persistTask(task, force = true)
         startRunner()
         return id
     }
@@ -64,19 +84,29 @@ class TransferQueueManager @Inject constructor(
     fun pause(id: Long) {
         val task = tasks.value.firstOrNull { it.id == id } ?: return
         if (task.state !in setOf(TransferQueueState.QUEUED, TransferQueueState.RUNNING)) return
-        _tasks.update { list -> list.map { if (it.id == id) it.copy(state = TransferQueueState.PAUSED) else it } }
+        updateTask(id) { it.copy(state = TransferQueueState.PAUSED) }
     }
 
     fun resume(id: Long) {
         val task = tasks.value.firstOrNull { it.id == id } ?: return
         if (task.state != TransferQueueState.PAUSED) return
-        _tasks.update { list ->
-            list.map {
-                if (it.id == id) it.copy(state = if (activeId == id) TransferQueueState.RUNNING else TransferQueueState.QUEUED)
-                else it
-            }
+        updateTask(id) {
+            it.copy(state = if (activeId == id) TransferQueueState.RUNNING else TransferQueueState.QUEUED)
         }
         synchronized(lock) { pauseSignals.remove(id)?.complete(Unit) }
+        startRunner()
+    }
+
+    fun retry(id: Long) {
+        val task = tasks.value.firstOrNull { it.id == id } ?: return
+        if (task.state != TransferQueueState.FAILED) return
+        updateTask(id) {
+            it.copy(
+                state = TransferQueueState.QUEUED,
+                error = null,
+                conflict = null,
+            )
+        }
         startRunner()
     }
 
@@ -89,7 +119,7 @@ class TransferQueueManager @Inject constructor(
             pauseSignals.remove(id)?.complete(Unit)
             activeId == id
         }
-        _tasks.update { list -> list.map { if (it.id == id) it.copy(state = TransferQueueState.CANCELLED, conflict = null) else it } }
+        updateTask(id) { it.copy(state = TransferQueueState.CANCELLED, conflict = null) }
         if (!wasActive) synchronized(lock) { cancelledIds.remove(id) }
         startRunner()
     }
@@ -104,13 +134,12 @@ class TransferQueueManager @Inject constructor(
             mutable.add(target, item)
             mutable
         }
+        persistAllTasks(force = true)
     }
 
     fun setBandwidthLimit(id: Long, bytesPerSecond: Long) {
-        _tasks.update { list ->
-            list.map {
-                if (it.id == id) it.copy(bandwidthLimitBytesPerSecond = bytesPerSecond.coerceAtLeast(0L)) else it
-            }
+        updateTask(id) {
+            it.copy(bandwidthLimitBytesPerSecond = bytesPerSecond.coerceAtLeast(0L))
         }
     }
 
@@ -118,38 +147,124 @@ class TransferQueueManager @Inject constructor(
         val task = tasks.value.firstOrNull { it.id == id } ?: return
         if (task.state != TransferQueueState.WAITING_CONFLICT || task.conflict == null) return
         val waiter = synchronized(lock) { conflictWaiters[id] } ?: return
-        _tasks.update { list ->
-            list.map {
-                if (it.id == id) {
-                    it.copy(
-                        state = TransferQueueState.RUNNING,
-                        conflict = null,
-                        conflictAction = if (applyToAll) action else it.conflictAction,
-                        applyConflictToAll = applyToAll,
-                    )
-                } else it
-            }
+        updateTask(id) {
+            it.copy(
+                state = TransferQueueState.RUNNING,
+                conflict = null,
+                conflictAction = if (applyToAll) action else it.conflictAction,
+                applyConflictToAll = applyToAll,
+            )
         }
         waiter?.complete(action)
     }
 
     fun clearFinished() {
+        val removedIds = tasks.value.filter { it.isTerminal }.map { it.id }
         _tasks.update { list -> list.filterNot { it.isTerminal } }
+        deletePersisted(removedIds)
     }
 
     fun shutdown() {
+        persistAllTasks(force = true)
         scope.coroutineContext[Job]?.cancel()
     }
 
+    internal fun releaseForegroundOwnership() {
+        synchronized(lock) { foregroundOwnershipRequested = false }
+    }
+
     private fun startRunner() {
+        requestForegroundOwnership()
         synchronized(lock) {
             if (runner?.isActive == true) return
             runner = scope.launch {
                 try {
+                    ready.await()
                     runQueue()
                 } finally {
                     synchronized(lock) { runner = null }
                     if (tasks.value.any { it.state == TransferQueueState.QUEUED }) startRunner()
+                }
+            }
+        }
+    }
+
+    private fun requestForegroundOwnership() {
+        synchronized(lock) {
+            if (foregroundOwnershipRequested) return
+            foregroundOwnershipRequested = true
+        }
+        runCatching {
+            ContextCompat.startForegroundService(
+                appContext,
+                Intent(appContext, TransferService::class.java).setAction(TransferService.ACTION_MONITOR_QUEUE),
+            )
+        }.onFailure {
+            synchronized(lock) { foregroundOwnershipRequested = false }
+        }
+    }
+
+    private fun restorePersistedTasks() {
+        scope.launch {
+            try {
+                val persisted = transferTaskDao.getAll()
+                val restored = persisted.mapNotNull { entity ->
+                    runCatching { entity.toTask() }
+                        .onFailure { transferTaskDao.deleteById(entity.id) }
+                        .getOrNull()
+                }
+                val recovered = restored.map(TransferQueueTask::recoverAfterProcessDeath)
+                nextId.updateAndGet { current -> maxOf(current, recovered.maxOfOrNull { it.id } ?: current) }
+                _tasks.update { current ->
+                    val persistedIds = recovered.mapTo(hashSetOf()) { it.id }
+                    recovered + current.filterNot { it.id in persistedIds }
+                }
+                recovered.filter { it.state == TransferQueueState.QUEUED }.forEach {
+                    persistTask(it, force = true)
+                }
+            } finally {
+                ready.complete(Unit)
+                if (tasks.value.any { it.state == TransferQueueState.QUEUED }) startRunner()
+            }
+        }
+    }
+
+    internal suspend fun awaitReady() {
+        ready.await()
+    }
+
+    private fun persistTask(task: TransferQueueTask, force: Boolean = false) {
+        val now = System.nanoTime()
+        val terminal = task.isTerminal || task.state == TransferQueueState.PAUSED ||
+            task.state == TransferQueueState.CANCELLED || task.state == TransferQueueState.WAITING_CONFLICT
+        synchronized(lock) {
+            val previous = lastPersistedAt[task.id] ?: 0L
+            if (!force && !terminal && now - previous < PERSIST_INTERVAL_NANOS) return
+            lastPersistedAt[task.id] = now
+        }
+        scope.launch {
+            runCatching {
+                ready.await()
+                persistenceMutex.withLock {
+                    val latest = tasks.value.firstOrNull { it.id == task.id } ?: return@withLock
+                    val order = tasks.value.indexOfFirst { it.id == latest.id }.coerceAtLeast(0)
+                    transferTaskDao.upsert(latest.toEntity(order))
+                }
+            }
+        }
+    }
+
+    private fun persistAllTasks(force: Boolean) {
+        tasks.value.forEach { persistTask(it, force) }
+    }
+
+    private fun deletePersisted(ids: List<Long>) {
+        if (ids.isEmpty()) return
+        scope.launch {
+            runCatching {
+                ready.await()
+                persistenceMutex.withLock {
+                    ids.forEach { transferTaskDao.deleteById(it) }
                 }
             }
         }
@@ -176,7 +291,7 @@ class TransferQueueManager @Inject constructor(
             }
         }
         if (!started) return
-        var transferredBefore = 0L
+        var transferredBefore = initial.transferredBytes.coerceAtLeast(0L)
         var sharedAction = initial.conflictAction
 
         try {
@@ -187,7 +302,9 @@ class TransferQueueManager @Inject constructor(
             }
             val totalBytes = if (initial.operation == FileOperation.DELETE) 0L else repository.calculateSize(initial.sourcePaths)
             updateTask(taskId) { it.copy(totalBytes = totalBytes) }
-            initial.sourcePaths.forEachIndexed { index, source ->
+            val completedBefore = initial.completedSources.coerceIn(0, initial.sourcePaths.size)
+            initial.sourcePaths.drop(completedBefore).forEachIndexed { offset, source ->
+                val index = completedBefore + offset
                 awaitRunnable(taskId)
                 ensureNotCancelled(taskId)
                 val task = tasks.value.first { it.id == taskId }
@@ -253,7 +370,14 @@ class TransferQueueManager @Inject constructor(
                 throw cancelled
             }
         } catch (error: Exception) {
-            updateTask(taskId) { it.copy(state = TransferQueueState.FAILED, error = error.message, conflict = null) }
+            updateTask(taskId) {
+                it.copy(
+                    state = TransferQueueState.FAILED,
+                    error = error.message ?: error::class.simpleName,
+                    retryCount = it.retryCount + 1,
+                    conflict = null,
+                )
+            }
         } finally {
             synchronized(lock) {
                 cancelledIds.remove(taskId)
@@ -285,7 +409,13 @@ class TransferQueueManager @Inject constructor(
     }
 
     private fun updateTask(id: Long, transform: (TransferQueueTask) -> TransferQueueTask) {
-        _tasks.update { list -> list.map { if (it.id == id) transform(it) else it } }
+        var updated: TransferQueueTask? = null
+        _tasks.update { list ->
+            list.map {
+                if (it.id == id) transform(it).also { task -> updated = task } else it
+            }
+        }
+        updated?.let { persistTask(it) }
     }
 
     private fun ensureNotCancelled(id: Long) {
@@ -378,6 +508,7 @@ class TransferQueueManager @Inject constructor(
     }
 
     private companion object {
+        const val PERSIST_INTERVAL_NANOS = 250_000_000L
         const val MAX_DIFF_BYTES = 64 * 1024
         const val MAX_DIFF_LINES = 80
         val TEXT_EXTENSIONS = setOf("txt", "md", "json", "xml", "yaml", "yml", "toml", "ini", "cfg", "conf", "log", "csv", "tsv", "kt", "java", "js", "ts", "html", "css", "py", "rs", "go", "sql")

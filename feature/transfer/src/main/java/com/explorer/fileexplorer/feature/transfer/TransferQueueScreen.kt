@@ -65,6 +65,7 @@ class TransferQueueViewModel @Inject constructor(
 
     fun pause(id: Long) = manager.pause(id)
     fun resume(id: Long) = manager.resume(id)
+    fun retry(id: Long) = manager.retry(id)
     fun cancel(id: Long) = manager.cancel(id)
     fun move(id: Long, offset: Int) = manager.move(id, offset)
     fun setBandwidthLimit(id: Long, bytesPerSecond: Long) = manager.setBandwidthLimit(id, bytesPerSecond)
@@ -123,6 +124,7 @@ fun TransferQueueScreen(
                         canMoveDown = tasks.indexOf(task) < tasks.lastIndex,
                         onPause = { viewModel.pause(task.id) },
                         onResume = { viewModel.resume(task.id) },
+                        onRetry = { viewModel.retry(task.id) },
                         onCancel = { viewModel.cancel(task.id) },
                         onMoveUp = { viewModel.move(task.id, -1) },
                         onMoveDown = { viewModel.move(task.id, 1) },
@@ -159,6 +161,7 @@ private fun TransferQueueTaskCard(
     canMoveDown: Boolean,
     onPause: () -> Unit,
     onResume: () -> Unit,
+    onRetry: () -> Unit,
     onCancel: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
@@ -196,6 +199,8 @@ private fun TransferQueueTaskCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (task.state == TransferQueueState.PAUSED) {
                     IconButton(onClick = onResume) { Icon(Icons.Filled.PlayArrow, stringResource(DesignSystemR.string.resume)) }
+                } else if (task.state == TransferQueueState.FAILED) {
+                    IconButton(onClick = onRetry) { Icon(Icons.Filled.PlayArrow, stringResource(DesignSystemR.string.retry)) }
                 } else if (task.state == TransferQueueState.QUEUED || task.state == TransferQueueState.RUNNING) {
                     IconButton(onClick = onPause) { Icon(Icons.Filled.Pause, stringResource(DesignSystemR.string.pause)) }
                 }

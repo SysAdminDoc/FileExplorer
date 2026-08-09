@@ -118,3 +118,29 @@ data class IntegrityEntryEntity(
     @ColumnInfo(name = "status") val status: String = "OK",
     @ColumnInfo(name = "last_error") val lastError: String? = null,
 )
+
+@Entity(tableName = "transfer_tasks")
+data class TransferTaskEntity(
+    @PrimaryKey
+    @ColumnInfo(name = "id") val id: Long,
+    @ColumnInfo(name = "idempotency_key") val idempotencyKey: String,
+    @ColumnInfo(name = "queue_order") val queueOrder: Int,
+    @ColumnInfo(name = "operation") val operation: String,
+    @ColumnInfo(name = "source_paths") val sourcePaths: String,
+    @ColumnInfo(name = "destination") val destination: String,
+    @ColumnInfo(name = "bandwidth_limit_bytes_per_second") val bandwidthLimitBytesPerSecond: Long,
+    @ColumnInfo(name = "conflict_action") val conflictAction: String?,
+    @ColumnInfo(name = "apply_conflict_to_all") val applyConflictToAll: Boolean,
+    @ColumnInfo(name = "state") val state: String,
+    @ColumnInfo(name = "total_bytes") val totalBytes: Long,
+    @ColumnInfo(name = "transferred_bytes") val transferredBytes: Long,
+    @ColumnInfo(name = "completed_sources") val completedSources: Int,
+    @ColumnInfo(name = "retry_count") val retryCount: Int,
+    @ColumnInfo(name = "current_file") val currentFile: String,
+    @ColumnInfo(name = "error") val error: String?,
+    @ColumnInfo(name = "conflict_source_path") val conflictSourcePath: String?,
+    @ColumnInfo(name = "conflict_destination_path") val conflictDestinationPath: String?,
+    @ColumnInfo(name = "conflict_is_text") val conflictIsText: Boolean,
+    @ColumnInfo(name = "conflict_diff_preview") val conflictDiffPreview: String,
+    @ColumnInfo(name = "updated_at") val updatedAt: Long,
+)

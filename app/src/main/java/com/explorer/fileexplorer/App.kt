@@ -22,6 +22,7 @@ import com.explorer.fileexplorer.core.network.ftp.FtpFileRepository
 import com.explorer.fileexplorer.core.network.webdav.WebDavFileRepository
 import com.explorer.fileexplorer.plugin.PluginManager
 import com.explorer.fileexplorer.feature.settings.ThumbnailCacheController
+import com.explorer.fileexplorer.feature.transfer.TransferQueueManager
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -39,6 +40,7 @@ class App : Application(), SingletonImageLoader.Factory {
     @Inject lateinit var googleDriveProvider: GoogleDriveProvider
     @Inject lateinit var dropboxProvider: DropboxProvider
     @Inject lateinit var oneDriveProvider: OneDriveProvider
+    @Inject lateinit var transferQueueManager: TransferQueueManager
 
     override fun onCreate() {
         super.onCreate()

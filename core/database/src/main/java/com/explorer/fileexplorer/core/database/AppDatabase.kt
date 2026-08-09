@@ -25,8 +25,9 @@ import javax.inject.Singleton
         IntegrityEntryEntity::class,
         TagEntity::class,
         FileTagEntity::class,
+        TransferTaskEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -39,6 +40,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun directoryViewPreferenceDao(): DirectoryViewPreferenceDao
     abstract fun integrityDao(): IntegrityDao
     abstract fun tagDao(): TagDao
+    abstract fun transferTaskDao(): TransferTaskDao
 }
 
 @Module
@@ -58,6 +60,7 @@ object DatabaseModule {
             MIGRATION_4_5,
             MIGRATION_5_6,
             MIGRATION_6_7,
+            MIGRATION_7_8,
         ).build()
     }
 
@@ -72,6 +75,7 @@ object DatabaseModule {
         db.directoryViewPreferenceDao()
     @Provides fun provideIntegrityDao(db: AppDatabase): IntegrityDao = db.integrityDao()
     @Provides fun provideTagDao(db: AppDatabase): TagDao = db.tagDao()
+    @Provides fun provideTransferTaskDao(db: AppDatabase): TransferTaskDao = db.transferTaskDao()
 }
 
 val MIGRATION_2_3 = object : Migration(2, 3) {
@@ -167,6 +171,39 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
                 `name` TEXT NOT NULL,
                 `visited_at` INTEGER NOT NULL,
                 PRIMARY KEY(`path`)
+            )
+            """.trimIndent(),
+        )
+    }
+}
+
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `transfer_tasks` (
+                `id` INTEGER NOT NULL,
+                `idempotency_key` TEXT NOT NULL,
+                `queue_order` INTEGER NOT NULL,
+                `operation` TEXT NOT NULL,
+                `source_paths` TEXT NOT NULL,
+                `destination` TEXT NOT NULL,
+                `bandwidth_limit_bytes_per_second` INTEGER NOT NULL,
+                `conflict_action` TEXT,
+                `apply_conflict_to_all` INTEGER NOT NULL,
+                `state` TEXT NOT NULL,
+                `total_bytes` INTEGER NOT NULL,
+                `transferred_bytes` INTEGER NOT NULL,
+                `completed_sources` INTEGER NOT NULL,
+                `retry_count` INTEGER NOT NULL,
+                `current_file` TEXT NOT NULL,
+                `error` TEXT,
+                `conflict_source_path` TEXT,
+                `conflict_destination_path` TEXT,
+                `conflict_is_text` INTEGER NOT NULL,
+                `conflict_diff_preview` TEXT NOT NULL,
+                `updated_at` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
             )
             """.trimIndent(),
         )

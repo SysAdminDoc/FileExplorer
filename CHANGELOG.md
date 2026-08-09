@@ -18,6 +18,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added a Storage Analyzer screen with recursive treemap drill-down, duplicate-content groups, progress/cancel scanning, and largest-file list.
 - Added batch rename with counter, date, parent, and regex capture-group tokens, collision validation, and live preview before a two-phase rename.
 - Added a queued transfer manager with pause/resume, reordering, bandwidth limits, conflict resolution, and text diff previews; browser paste and dual-pane transfers now enqueue work.
+- Added Room-backed transfer recovery with idempotency keys, URI/path checkpoints, durable cancellation and retry causes, startup rehydration, retry controls, and an explicit foreground queue monitor.
 - Added a system-gated DocumentsProvider for SAF browsing, search, recent files, open/create, rename, delete, copy, and move access to local storage.
 - Added an authenticated HTTP/FTP LAN share server with directory listings, file transfers, safe mutations, a foreground notification, and a Quick Settings toggle.
 - Added per-file AES-256-GCM encryption with an Android Keystore key and biometric-gated decryption from the browser.

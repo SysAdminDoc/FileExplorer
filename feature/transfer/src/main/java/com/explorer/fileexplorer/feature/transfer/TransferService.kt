@@ -28,14 +28,18 @@ class TransferService : Service() {
     @Inject lateinit var repositoryFactory: FileRepositoryFactory
     @Inject lateinit var archiveHelper: ArchiveHelper
     @Inject lateinit var connectionManager: ConnectionManager
+    @Inject lateinit var transferQueueManager: TransferQueueManager
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var currentJob: Job? = null
+    private var monitoringQueue = false
 
     companion object {
         const val CHANNEL_ID = "file_transfer"
         const val NOTIFICATION_ID = 1001
         const val ACTION_CANCEL = "com.explorer.fileexplorer.CANCEL_TRANSFER"
+        const val ACTION_CANCEL_QUEUE = "com.explorer.fileexplorer.CANCEL_QUEUE_TRANSFER"
+        const val ACTION_MONITOR_QUEUE = "com.explorer.fileexplorer.MONITOR_QUEUE"
         const val EXTRA_OPERATION = "operation"
         const val EXTRA_SOURCES = "sources"
         const val EXTRA_DESTINATION = "destination"
@@ -43,6 +47,7 @@ class TransferService : Service() {
         const val EXTRA_CONNECTION_ID = "connection_id"
         const val EXTRA_CONFLICT = "conflict"
         const val EXTRA_REQUEST_ID = "request_id"
+        const val EXTRA_QUEUE_TASK_ID = "queue_task_id"
 
         private val _currentTask = MutableStateFlow<TransferTask?>(null)
         val currentTask: StateFlow<TransferTask?> = _currentTask.asStateFlow()
@@ -106,6 +111,32 @@ class TransferService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_MONITOR_QUEUE) {
+            monitoringQueue = true
+            startForeground(NOTIFICATION_ID, buildNotification("Preparing transfer queue...", -1f, ACTION_CANCEL_QUEUE))
+            currentJob?.cancel()
+            currentJob = scope.launch {
+                transferQueueManager.awaitReady()
+                transferQueueManager.tasks.collect { tasks ->
+                    val task = tasks.firstOrNull { it.state == TransferQueueState.RUNNING }
+                        ?: tasks.firstOrNull { it.state == TransferQueueState.QUEUED }
+                    if (task == null) {
+                        transferQueueManager.releaseForegroundOwnership()
+                        stopSelf()
+                    } else {
+                        val label = task.currentFile.takeIf { it.isNotBlank() }
+                            ?: "${task.operation.name.lowercase().replaceFirstChar { it.uppercase() }} in progress"
+                        updateNotification(label, task.progress, ACTION_CANCEL_QUEUE, task.id)
+                    }
+                }
+            }
+            return START_STICKY
+        }
+        if (intent?.action == ACTION_CANCEL_QUEUE) {
+            intent.getLongExtra(EXTRA_QUEUE_TASK_ID, 0L).takeIf { it > 0L }?.let(transferQueueManager::cancel)
+            return START_STICKY
+        }
+        monitoringQueue = false
         if (intent?.action == ACTION_CANCEL) {
             currentJob?.cancel()
             _currentTask.value = _currentTask.value?.copy(state = TransferState.CANCELLED)
@@ -234,6 +265,7 @@ class TransferService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onTimeout(startId: Int, fgsType: Int) {
+        if (monitoringQueue) transferQueueManager.releaseForegroundOwnership()
         _currentTask.value = _currentTask.value?.copy(state = TransferState.FAILED)
         updateNotification("Operation timed out by system", -1f)
         currentJob?.cancel()
@@ -241,6 +273,7 @@ class TransferService : Service() {
     }
 
     override fun onDestroy() {
+        if (monitoringQueue) transferQueueManager.releaseForegroundOwnership()
         currentJob?.cancel()
         scope.cancel()
         super.onDestroy()
@@ -254,9 +287,22 @@ class TransferService : Service() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
-    private fun buildNotification(text: String, progress: Float): android.app.Notification {
-        val cancelIntent = Intent(this, TransferService::class.java).apply { action = ACTION_CANCEL }
-        val cancelPending = PendingIntent.getService(this, 0, cancelIntent, PendingIntent.FLAG_IMMUTABLE)
+    private fun buildNotification(
+        text: String,
+        progress: Float,
+        cancelAction: String = ACTION_CANCEL,
+        queueTaskId: Long? = null,
+    ): android.app.Notification {
+        val cancelIntent = Intent(this, TransferService::class.java).apply {
+            action = cancelAction
+            queueTaskId?.let { putExtra(EXTRA_QUEUE_TASK_ID, it) }
+        }
+        val cancelPending = PendingIntent.getService(
+            this,
+            queueTaskId?.toInt() ?: 0,
+            cancelIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
@@ -274,9 +320,14 @@ class TransferService : Service() {
             .build()
     }
 
-    private fun updateNotification(text: String, progress: Float) {
+    private fun updateNotification(
+        text: String,
+        progress: Float,
+        cancelAction: String = ACTION_CANCEL,
+        queueTaskId: Long? = null,
+    ) {
         val nm = getSystemService(NotificationManager::class.java)
-        nm.notify(NOTIFICATION_ID, buildNotification(text, progress))
+        nm.notify(NOTIFICATION_ID, buildNotification(text, progress, cancelAction, queueTaskId))
     }
 
     private suspend fun uploadFiles(

@@ -41,6 +41,8 @@ data class TransferQueueTask(
     val currentFile: String = "",
     val error: String? = null,
     val conflict: TransferConflict? = null,
+    val idempotencyKey: String = "transfer-$id",
+    val retryCount: Int = 0,
 ) {
     val progress: Float
         get() = if (totalBytes > 0) (transferredBytes.toFloat() / totalBytes).coerceIn(0f, 1f) else 0f
