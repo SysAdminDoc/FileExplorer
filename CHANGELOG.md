@@ -11,6 +11,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Made cloud readiness truthful: all built-in providers register with explicit status states, OAuth launch/callback results are represented, signed-out accounts are retained on revoke failure, and unconfigured connect actions stay disabled.
 - Replaced the vault scaffold with opaque encrypted payloads, an authenticated encrypted index, Keystore-backed sessions, biometric/device-credential gating, atomic add/restore/delete operations, and backup-excluded app-private storage.
 - Added shared repository capabilities and typed provider errors so unsupported operations and failed reads remain distinguishable from empty results, with bounded and redacted diagnostic context.
+- Hardened the share server with Keystore-encrypted passwords, loopback-by-default binding, explicit plaintext LAN acknowledgement, bound passive sockets, connection/rate/upload/temp-storage limits, and stale-upload cleanup.
 
 ### Added
 - Added an independent dual-pane browser layout with per-pane navigation, refresh, sorting, hidden-file filtering, and selection.

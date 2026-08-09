@@ -24,15 +24,24 @@ internal class ShareServerHttpServer(
     private val config: ShareServerConfig,
     private val resolver: ShareServerPathResolver,
     private val serverSocket: ServerSocket,
+    private val resources: ShareServerRuntimeResources = ShareServerRuntimeResources(),
 ) {
 
     fun acceptLoop(scope: CoroutineScope): Job = scope.launch {
         while (isActive) {
             try {
                 val socket = serverSocket.accept()
+                if (!resources.tryAcquireConnection()) {
+                    socket.close()
+                    continue
+                }
                 launch {
-                    socket.use { client ->
-                        runCatching { handle(client) }
+                    try {
+                        socket.use { client ->
+                            runCatching { handle(client) }
+                        }
+                    } finally {
+                        resources.releaseConnection()
                     }
                 }
             } catch (_: IOException) {
@@ -42,73 +51,99 @@ internal class ShareServerHttpServer(
     }
 
     private fun handle(socket: Socket) {
-        socket.soTimeout = REQUEST_TIMEOUT_MS
+        socket.soTimeout = ShareServerLimits.REQUEST_TIMEOUT_MS
         val input = socket.getInputStream()
         val output = socket.getOutputStream()
-        val requestLine = readLine(input, MAX_LINE_LENGTH) ?: return
-        val requestParts = requestLine.split(' ', limit = 3)
-        if (requestParts.size != 3 || !requestParts[2].startsWith("HTTP/")) {
-            sendText(output, "400 Bad Request", "Malformed HTTP request")
+        if (!resources.allowRequest(socket.inetAddress.hostAddress.orEmpty())) {
+            sendText(output, "429 Too Many Requests", "Request rate limit exceeded")
             return
         }
 
-        val headers = linkedMapOf<String, String>()
-        while (true) {
-            val line = readLine(input, MAX_LINE_LENGTH) ?: run {
-                sendText(output, "400 Bad Request", "Incomplete HTTP headers")
+        try {
+            val requestLine = readLine(input, MAX_LINE_LENGTH) ?: return
+            val requestParts = requestLine.split(' ', limit = 3)
+            if (requestParts.size != 3 || !requestParts[2].startsWith("HTTP/")) {
+                sendText(output, "400 Bad Request", "Malformed HTTP request")
                 return
             }
-            if (line.isEmpty()) break
-            val separator = line.indexOf(':')
-            if (separator <= 0) {
-                sendText(output, "400 Bad Request", "Malformed HTTP header")
+
+            val headers = linkedMapOf<String, String>()
+            var headerCount = 0
+            var headerBytes = 0
+            while (true) {
+                val line = readLine(input, MAX_LINE_LENGTH) ?: run {
+                    sendText(output, "400 Bad Request", "Incomplete HTTP headers")
+                    return
+                }
+                if (line.isEmpty()) break
+                headerCount++
+                headerBytes += line.toByteArray(StandardCharsets.ISO_8859_1).size
+                if (headerCount > ShareServerLimits.MAX_HTTP_HEADER_COUNT ||
+                    headerBytes > ShareServerLimits.MAX_HTTP_HEADER_BYTES
+                ) {
+                    sendText(output, "431 Request Header Fields Too Large", "HTTP headers are too large")
+                    return
+                }
+                val separator = line.indexOf(':')
+                if (separator <= 0) {
+                    sendText(output, "400 Bad Request", "Malformed HTTP header")
+                    return
+                }
+                val name = line.substring(0, separator).trim().lowercase()
+                val value = line.substring(separator + 1).trim()
+                headers[name] = value
+            }
+
+            if (!isAuthorized(headers["authorization"])) {
+                sendResponse(
+                    output = output,
+                    status = "401 Unauthorized",
+                    body = "Authentication required".toByteArray(StandardCharsets.UTF_8),
+                    contentType = "text/plain; charset=utf-8",
+                    extraHeaders = listOf("WWW-Authenticate: Basic realm=\"File Explorer\""),
+                )
                 return
             }
-            val name = line.substring(0, separator).trim().lowercase()
-            val value = line.substring(separator + 1).trim()
-            headers[name] = value
-        }
 
-        if (!isAuthorized(headers["authorization"])) {
-            sendResponse(
-                output = output,
-                status = "401 Unauthorized",
-                body = "Authentication required".toByteArray(StandardCharsets.UTF_8),
-                contentType = "text/plain; charset=utf-8",
-                extraHeaders = listOf("WWW-Authenticate: Basic realm=\"File Explorer\""),
-            )
-            return
-        }
+            val decodedPath = decodePath(requestParts[1].substringBefore('?'))
+            if (decodedPath == null) {
+                sendText(output, "400 Bad Request", "Invalid URL encoding")
+                return
+            }
+            val path = resolver.resolveFromRoot(decodedPath)
+            if (path == null) {
+                sendText(output, "403 Forbidden", "Path is outside the shared folder")
+                return
+            }
 
-        val decodedPath = decodePath(requestParts[1].substringBefore('?'))
-        if (decodedPath == null) {
-            sendText(output, "400 Bad Request", "Invalid URL encoding")
-            return
-        }
-        val path = resolver.resolveFromRoot(decodedPath)
-        if (path == null) {
-            sendText(output, "403 Forbidden", "Path is outside the shared folder")
-            return
-        }
-
-        when (requestParts[0].uppercase()) {
-            "GET", "HEAD" -> serveGet(output, path, resolver.displayPath(path), requestParts[0] == "HEAD")
-            "PUT" -> upload(input, output, path, headers["content-length"])
-            "DELETE" -> delete(output, path)
-            "MKCOL" -> makeDirectory(output, path)
-            "OPTIONS" -> sendResponse(
-                output = output,
-                status = "204 No Content",
-                body = ByteArray(0),
-                extraHeaders = listOf("Allow: GET, HEAD, PUT, DELETE, MKCOL, OPTIONS"),
-            )
-            else -> sendResponse(
-                output = output,
-                status = "405 Method Not Allowed",
-                body = "Method not supported".toByteArray(StandardCharsets.UTF_8),
-                contentType = "text/plain; charset=utf-8",
-                extraHeaders = listOf("Allow: GET, HEAD, PUT, DELETE, MKCOL, OPTIONS"),
-            )
+            when (requestParts[0].uppercase()) {
+                "GET", "HEAD" -> serveGet(
+                    output,
+                    path,
+                    resolver.displayPath(path),
+                    requestParts[0].equals("HEAD", ignoreCase = true),
+                )
+                "PUT" -> upload(input, output, path, headers["content-length"])
+                "DELETE" -> delete(output, path)
+                "MKCOL" -> makeDirectory(output, path)
+                "OPTIONS" -> sendResponse(
+                    output = output,
+                    status = "204 No Content",
+                    body = ByteArray(0),
+                    extraHeaders = listOf("Allow: GET, HEAD, PUT, DELETE, MKCOL, OPTIONS"),
+                )
+                else -> sendResponse(
+                    output = output,
+                    status = "405 Method Not Allowed",
+                    body = "Method not supported".toByteArray(StandardCharsets.UTF_8),
+                    contentType = "text/plain; charset=utf-8",
+                    extraHeaders = listOf("Allow: GET, HEAD, PUT, DELETE, MKCOL, OPTIONS"),
+                )
+            }
+        } catch (error: ShareServerLimitExceededException) {
+            sendText(output, "413 Content Too Large", error.message ?: "Request exceeds the server limit")
+        } catch (_: IOException) {
+            sendText(output, "500 Internal Server Error", "Share-server I/O failed")
         }
     }
 
@@ -160,14 +195,23 @@ internal class ShareServerHttpServer(
             sendText(output, "411 Length Required", "Content-Length is required")
             return
         }
+        if (length > ShareServerLimits.MAX_UPLOAD_BYTES) {
+            sendText(output, "413 Content Too Large", "Upload exceeds the server limit")
+            return
+        }
+        if (!resources.tryReserveTemporary(length)) {
+            sendText(output, "507 Insufficient Storage", "Temporary upload capacity is exhausted")
+            return
+        }
         val parent = path.parent
         if (parent == null || !resolver.isWithinRoot(parent) || !Files.isDirectory(parent)) {
+            resources.releaseTemporary(length)
             sendText(output, "409 Conflict", "Parent folder does not exist")
             return
         }
 
         val existed = Files.exists(path)
-        val temporary = parent.resolve(".fileexplorer-upload-\${UUID.randomUUID()}.tmp")
+        val temporary = parent.resolve(ShareServerLimits.TEMPORARY_FILE_PREFIX + UUID.randomUUID() + ".tmp")
         try {
             var copied = 0L
             Files.newOutputStream(
@@ -189,6 +233,8 @@ internal class ShareServerHttpServer(
         } catch (_: Exception) {
             runCatching { Files.deleteIfExists(temporary) }
             sendText(output, "500 Internal Server Error", "Upload failed")
+        } finally {
+            resources.releaseTemporary(length)
         }
     }
 
@@ -227,13 +273,22 @@ internal class ShareServerHttpServer(
 
     private fun directoryListing(path: Path, requestPath: String): String {
         val children = mutableListOf<Path>()
-        runCatching {
+        try {
             Files.newDirectoryStream(path).use { stream: DirectoryStream<Path> ->
                 for (child in stream) {
                     val canonical = child.toFile().canonicalFile.toPath()
-                    if (resolver.isWithinRoot(canonical)) children.add(canonical)
+                    if (resolver.isWithinRoot(canonical) && !resolver.isTemporaryUpload(canonical)) {
+                        children.add(canonical)
+                    }
+                    if (children.size > ShareServerLimits.MAX_DIRECTORY_ENTRIES) {
+                        throw ShareServerLimitExceededException("Directory listing exceeds the server limit")
+                    }
                 }
             }
+        } catch (error: ShareServerLimitExceededException) {
+            throw error
+        } catch (error: Exception) {
+            throw IOException("Unable to list directory", error)
         }
         children.sortWith(compareBy<Path> { if (Files.isDirectory(it)) 0 else 1 }.thenBy {
             it.fileName.toString().lowercase()
@@ -257,6 +312,9 @@ internal class ShareServerHttpServer(
                 .append("</a>")
         }
         html.append("</body></html>")
+        if (html.length > ShareServerLimits.MAX_DIRECTORY_LISTING_BYTES) {
+            throw ShareServerLimitExceededException("Directory listing exceeds the server limit")
+        }
         return html.toString()
     }
 
@@ -393,6 +451,5 @@ internal class ShareServerHttpServer(
     private companion object {
         const val BUFFER_SIZE = 64 * 1024
         const val MAX_LINE_LENGTH = 16 * 1024
-        const val REQUEST_TIMEOUT_MS = 30_000
     }
 }

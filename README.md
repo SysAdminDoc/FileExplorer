@@ -41,7 +41,7 @@ cd FileExplorer
 | Thumbnail cache | Configurable 32–1024 MB Coil disk-cache cap, internal or external app-cache location, and one-tap purge controls in Settings | Complete |
 | Directory sizes | Optional coroutine-backed recursive folder sizes in list view with a bounded per-directory LRU cache | Complete |
 | Saved searches | Named regex and path filters persisted in Room and pinned to the navigation drawer | Complete |
-| Share Server | Authenticated HTTP web access and passive FTP sharing with foreground service and Quick Settings start/stop | Complete |
+| Share Server | Authenticated HTTP web access and passive FTP sharing with Keystore-encrypted credentials, loopback default, explicit plaintext-LAN opt-in, and bounded client/upload/request resources | Complete |
 | File Encryption | AES-256-GCM encryption with an Android Keystore key and biometric-gated decryption from the browser | Complete |
 | Shizuku Android/data and obb | Optional UserService backend for scoped browsing and file operations under Android/data and Android/obb | Optional |
 | Large-screen layout | Adaptive places, file list, and preview panes with keyboard shortcuts and mouse context menus | Complete |

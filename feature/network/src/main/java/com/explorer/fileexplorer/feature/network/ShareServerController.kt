@@ -1,7 +1,6 @@
 package com.explorer.fileexplorer.feature.network
 
-import android.content.Context
-import dagger.hilt.android.qualifiers.ApplicationContext
+import com.explorer.fileexplorer.core.data.DiagnosticLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,10 +20,10 @@ import javax.inject.Singleton
 
 @Singleton
 class ShareServerController @Inject constructor(
-    @ApplicationContext context: Context,
+    private val settingsStore: ShareServerSettingsStore,
+    private val diagnosticLog: DiagnosticLog,
 ) {
 
-    private val settingsStore = ShareServerSettingsStore(context)
     private val _status = MutableStateFlow(ShareServerStatus(config = settingsStore.load()))
     val status: StateFlow<ShareServerStatus> = _status.asStateFlow()
 
@@ -34,7 +33,7 @@ class ShareServerController @Inject constructor(
     fun start(config: ShareServerConfig): Result<Unit> {
         val normalized = runCatching {
             validate(config)
-            config.normalized()
+            config.normalized().also(::validate)
         }.getOrElse { error ->
             _status.value = ShareServerStatus(
                 state = ShareServerState.FAILED,
@@ -51,20 +50,30 @@ class ShareServerController @Inject constructor(
         if (!Files.isDirectory(root)) {
             return failStart(normalized, IllegalArgumentException("Shared folder does not exist"))
         }
+        cleanupTemporaryUploads(root)
 
         val runtimeScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val resources = ShareServerRuntimeResources()
         var httpSocket: ServerSocket? = null
         var ftpSocket: ServerSocket? = null
         try {
             _status.value = ShareServerStatus(ShareServerState.STARTING, normalized)
-            if (normalized.httpEnabled) httpSocket = openServerSocket(normalized.httpPort)
-            if (normalized.ftpEnabled) ftpSocket = openServerSocket(normalized.ftpPort)
+            if (normalized.httpEnabled) {
+                httpSocket = openServerSocket(normalized.httpPort, normalized.bindAddress)
+            }
+            if (normalized.ftpEnabled) {
+                ftpSocket = openServerSocket(normalized.ftpPort, normalized.bindAddress)
+            }
 
             val resolver = ShareServerPathResolver(root.toString())
-            val advertisedAddress = localIpv4Addresses().firstOrNull() ?: InetAddress.getLoopbackAddress()
-            val httpServer = httpSocket?.let { ShareServerHttpServer(normalized, resolver, it) }
+            val advertisedAddress = if (normalized.bindAddress == ShareServerConfig.LOOPBACK_BIND_ADDRESS) {
+                InetAddress.getLoopbackAddress()
+            } else {
+                localIpv4Addresses().firstOrNull() ?: InetAddress.getLoopbackAddress()
+            }
+            val httpServer = httpSocket?.let { ShareServerHttpServer(normalized, resolver, it, resources) }
             val ftpServer = ftpSocket?.let {
-                ShareServerFtpServer(normalized, resolver, it, advertisedAddress)
+                ShareServerFtpServer(normalized, resolver, it, advertisedAddress, resources)
             }
             val newRuntime = Runtime(
                 scope = runtimeScope,
@@ -107,11 +116,29 @@ class ShareServerController @Inject constructor(
             "HTTP and FTP ports must be different"
         }
         require(config.username.isNotBlank()) { "Username is required" }
+        require(config.username.length <= 64) { "Username is too long" }
         require(!config.username.contains(':')) { "Username cannot contain ':'" }
         require(config.password.isNotBlank()) { "Password is required" }
+        require(config.password.length >= ShareServerConfig.MIN_PASSWORD_LENGTH) {
+            "Password must be at least ${ShareServerConfig.MIN_PASSWORD_LENGTH} characters"
+        }
+        require(config.bindAddress == ShareServerConfig.LOOPBACK_BIND_ADDRESS ||
+            config.bindAddress == ShareServerConfig.LAN_BIND_ADDRESS
+        ) { "Choose loopback or LAN sharing" }
+        if (config.bindAddress == ShareServerConfig.LAN_BIND_ADDRESS) {
+            require(config.allowInsecureLan) {
+                "LAN sharing requires explicit insecure transport acknowledgement"
+            }
+        }
     }
 
     private fun failStart(config: ShareServerConfig, error: Throwable): Result<Unit> {
+        diagnosticLog.log(
+            provider = "share-server",
+            operation = "start",
+            error = error,
+            detail = "bind=${config.bindAddress}; http=${config.httpEnabled}; ftp=${config.ftpEnabled}",
+        )
         _status.value = ShareServerStatus(
             state = ShareServerState.FAILED,
             config = config,
@@ -120,13 +147,29 @@ class ShareServerController @Inject constructor(
         return Result.failure(error)
     }
 
-    private fun openServerSocket(port: Int): ServerSocket = ServerSocket().apply {
+    private fun cleanupTemporaryUploads(root: java.nio.file.Path) {
+        runCatching {
+            Files.walk(root, 32).use { paths ->
+                paths.filter { path ->
+                    !Files.isSymbolicLink(path) &&
+                        path.fileName?.toString()?.startsWith(ShareServerLimits.TEMPORARY_FILE_PREFIX) == true &&
+                        Files.isRegularFile(path)
+                }.forEach { path -> Files.deleteIfExists(path) }
+            }
+        }
+    }
+
+    private fun openServerSocket(port: Int, bindAddress: String): ServerSocket = ServerSocket().apply {
         reuseAddress = true
-        bind(InetSocketAddress(InetAddress.getByName("0.0.0.0"), port), 32)
+        bind(InetSocketAddress(InetAddress.getByName(bindAddress), port), ShareServerLimits.MAX_CONNECTIONS)
     }
 
     private fun shareAddresses(config: ShareServerConfig, addresses: List<InetAddress>): List<String> {
-        val visibleAddresses = addresses.ifEmpty { listOf(InetAddress.getLoopbackAddress()) }
+        val visibleAddresses = if (config.bindAddress == ShareServerConfig.LOOPBACK_BIND_ADDRESS) {
+            listOf(InetAddress.getLoopbackAddress())
+        } else {
+            addresses.ifEmpty { listOf(InetAddress.getLoopbackAddress()) }
+        }
         return buildList {
             for (address in visibleAddresses) {
                 val host = address.hostAddress ?: continue

@@ -414,6 +414,14 @@
     <string name="ftp_access_description">Connect with a desktop file manager or FTP client</string>
     <string name="show_password">Show password</string>
     <string name="authentication_required_connections">Authentication is required for every HTTP and FTP connection.</string>
+    <string name="share_access_scope">Access scope</string>
+    <string name="share_lan_access">Allow LAN access</string>
+    <string name="share_lan_access_description">Bind to all local IPv4 interfaces instead of loopback only.</string>
+    <string name="share_allow_insecure_lan">Allow plaintext LAN sharing</string>
+    <string name="share_allow_insecure_lan_description">Required because HTTP and FTP do not encrypt credentials or file data.</string>
+    <string name="share_insecure_lan_warning">Warning: LAN sharing exposes the selected folder over plaintext HTTP and FTP. Use only on a trusted network.</string>
+    <string name="share_loopback_note">Loopback-only sharing keeps plaintext HTTP and FTP on this device.</string>
+    <string name="share_resource_limits">Limits: 8 clients, 120 requests per minute per client, 256 MiB per upload, 512 MiB of temporary upload storage, and bounded listings.</string>
     <string name="trust_sftp_host_key">Trust SFTP Host Key?</string>
     <string name="sftp_host_key_changed">SFTP Host Key Changed</string>
     <string name="host_key_mismatch">The saved key for this host no longer matches.</string>

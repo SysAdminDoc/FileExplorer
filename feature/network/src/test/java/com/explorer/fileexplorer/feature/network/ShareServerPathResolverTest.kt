@@ -31,8 +31,10 @@ class ShareServerPathResolverTest {
     @Test
     fun rejectsTraversalOutsideTheShare() {
         val escaped = resolver.resolve(resolver.root, "../../data")
+        val temporaryUpload = resolver.resolveFromRoot("/.fileexplorer-upload-stale.tmp")
 
         assertNull(escaped)
+        assertNull(temporaryUpload)
         assertTrue(resolver.isWithinRoot(resolver.root))
     }
 }

@@ -2,9 +2,13 @@ package com.explorer.fileexplorer.feature.network
 
 import android.content.Context
 import android.os.Environment
+import com.explorer.fileexplorer.core.storage.CredentialCipher
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.security.SecureRandom
 import java.util.Base64
+import javax.inject.Inject
+import javax.inject.Singleton
 
 data class ShareServerConfig(
     val rootPath: String,
@@ -14,20 +18,30 @@ data class ShareServerConfig(
     val ftpPort: Int = DEFAULT_FTP_PORT,
     val username: String = DEFAULT_USERNAME,
     val password: String,
+    val bindAddress: String = LOOPBACK_BIND_ADDRESS,
+    val allowInsecureLan: Boolean = false,
 ) {
 
-    fun normalized(): ShareServerConfig = copy(
-        rootPath = File(rootPath).canonicalPath,
-        httpPort = httpPort.coerceIn(MIN_PORT, MAX_PORT),
-        ftpPort = ftpPort.coerceIn(MIN_PORT, MAX_PORT),
-        username = username.trim(),
-        password = password.trim(),
-    )
+    fun normalized(): ShareServerConfig {
+        val normalizedBindAddress = bindAddress.trim().ifBlank { LOOPBACK_BIND_ADDRESS }
+        return copy(
+            rootPath = File(rootPath).canonicalPath,
+            httpPort = httpPort.coerceIn(MIN_PORT, MAX_PORT),
+            ftpPort = ftpPort.coerceIn(MIN_PORT, MAX_PORT),
+            username = username.trim(),
+            password = password.trim(),
+            bindAddress = normalizedBindAddress,
+            allowInsecureLan = allowInsecureLan && normalizedBindAddress == LAN_BIND_ADDRESS,
+        )
+    }
 
     companion object {
         const val DEFAULT_HTTP_PORT = 8080
         const val DEFAULT_FTP_PORT = 2121
         const val DEFAULT_USERNAME = "fileexplorer"
+        const val LOOPBACK_BIND_ADDRESS = "127.0.0.1"
+        const val LAN_BIND_ADDRESS = "0.0.0.0"
+        const val MIN_PASSWORD_LENGTH = 12
         const val MIN_PORT = 1024
         const val MAX_PORT = 65535
     }
@@ -50,14 +64,16 @@ data class ShareServerStatus(
         get() = state == ShareServerState.RUNNING || state == ShareServerState.STARTING
 }
 
-class ShareServerSettingsStore(context: Context) {
+@Singleton
+class ShareServerSettingsStore @Inject constructor(
+    @ApplicationContext context: Context,
+    private val credentialCipher: CredentialCipher,
+) {
 
     private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     fun load(): ShareServerConfig {
-        val password = preferences.getString(KEY_PASSWORD, null) ?: generatePassword().also {
-            preferences.edit().putString(KEY_PASSWORD, it).apply()
-        }
+        val password = readPassword()
         return ShareServerConfig(
             rootPath = preferences.getString(KEY_ROOT_PATH, defaultRootPath()) ?: defaultRootPath(),
             httpEnabled = preferences.getBoolean(KEY_HTTP_ENABLED, true),
@@ -67,6 +83,11 @@ class ShareServerSettingsStore(context: Context) {
             username = preferences.getString(KEY_USERNAME, ShareServerConfig.DEFAULT_USERNAME)
                 ?: ShareServerConfig.DEFAULT_USERNAME,
             password = password,
+            bindAddress = preferences.getString(
+                KEY_BIND_ADDRESS,
+                ShareServerConfig.LOOPBACK_BIND_ADDRESS,
+            ) ?: ShareServerConfig.LOOPBACK_BIND_ADDRESS,
+            allowInsecureLan = preferences.getBoolean(KEY_ALLOW_INSECURE_LAN, false),
         )
     }
 
@@ -78,8 +99,24 @@ class ShareServerSettingsStore(context: Context) {
             .putInt(KEY_HTTP_PORT, config.httpPort)
             .putInt(KEY_FTP_PORT, config.ftpPort)
             .putString(KEY_USERNAME, config.username)
-            .putString(KEY_PASSWORD, config.password)
-            .apply()
+            .putString(KEY_PASSWORD, credentialCipher.encrypt(config.password))
+            .putString(KEY_BIND_ADDRESS, config.bindAddress)
+            .putBoolean(KEY_ALLOW_INSECURE_LAN, config.allowInsecureLan)
+            .commit()
+    }
+
+    private fun readPassword(): String {
+        val stored = preferences.getString(KEY_PASSWORD, null)
+        if (stored == null) return generatePassword().also(::storePassword)
+        if (!credentialCipher.isEncrypted(stored)) return stored.also(::storePassword)
+        return runCatching { credentialCipher.decrypt(stored) }
+            .getOrElse { generatePassword().also(::storePassword) }
+    }
+
+    private fun storePassword(password: String) {
+        preferences.edit()
+            .putString(KEY_PASSWORD, credentialCipher.encrypt(password))
+            .commit()
     }
 
     companion object {
@@ -91,6 +128,8 @@ class ShareServerSettingsStore(context: Context) {
         private const val KEY_FTP_PORT = "ftp_port"
         private const val KEY_USERNAME = "username"
         private const val KEY_PASSWORD = "password"
+        private const val KEY_BIND_ADDRESS = "bind_address"
+        private const val KEY_ALLOW_INSECURE_LAN = "allow_insecure_lan"
 
         @Suppress("DEPRECATION")
         private fun defaultRootPath(): String = Environment.getExternalStorageDirectory().canonicalPath

@@ -78,9 +78,9 @@ data class ShareServerUiState(
 class ShareServerViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val controller: ShareServerController,
+    private val settingsStore: ShareServerSettingsStore,
 ) : ViewModel() {
 
-    private val settingsStore = ShareServerSettingsStore(context)
     private val initialConfig = settingsStore.load()
     private val _state = MutableStateFlow(ShareServerUiState(config = initialConfig))
     val state: StateFlow<ShareServerUiState> = _state.asStateFlow()
@@ -101,6 +101,21 @@ class ShareServerViewModel @Inject constructor(
 
     fun setFtpEnabled(value: Boolean) = _state.update {
         it.copy(config = it.config.copy(ftpEnabled = value), validationError = null)
+    }
+
+    fun setLanAccess(value: Boolean) = _state.update {
+        it.copy(
+            config = it.config.copy(
+                bindAddress = if (value) ShareServerConfig.LAN_BIND_ADDRESS
+                else ShareServerConfig.LOOPBACK_BIND_ADDRESS,
+                allowInsecureLan = if (value) it.config.allowInsecureLan else false,
+            ),
+            validationError = null,
+        )
+    }
+
+    fun setAllowInsecureLan(value: Boolean) = _state.update {
+        it.copy(config = it.config.copy(allowInsecureLan = value), validationError = null)
     }
 
     fun setHttpPort(value: String) = _state.update { it.copy(httpPortText = value, validationError = null) }
@@ -127,6 +142,11 @@ class ShareServerViewModel @Inject constructor(
             current.username.isBlank() -> "Username is required"
             current.username.contains(':') -> "Username cannot contain ':'"
             current.password.isBlank() -> "Password is required"
+            current.password.length < ShareServerConfig.MIN_PASSWORD_LENGTH ->
+                "Password must be at least ${ShareServerConfig.MIN_PASSWORD_LENGTH} characters"
+            current.config.bindAddress == ShareServerConfig.LAN_BIND_ADDRESS &&
+                !current.config.allowInsecureLan ->
+                "LAN sharing requires explicit insecure transport acknowledgement"
             else -> null
         }
         if (error != null || httpPort == null || ftpPort == null) {
@@ -141,9 +161,9 @@ class ShareServerViewModel @Inject constructor(
             username = current.username,
             password = current.password,
         )
-        settingsStore.save(config)
+        settingsStore.save(config.normalized())
         _state.update { it.copy(config = config, validationError = null) }
-        ShareServerService.start(context, config)
+        ShareServerService.start(context)
     }
 
     fun stop() {
@@ -229,6 +249,41 @@ fun ShareServerScreen(
                     enabled = !running,
                 )
             }
+
+            HorizontalDivider()
+            Text(stringResource(DesignSystemR.string.share_access_scope), style = MaterialTheme.typography.titleMedium)
+            ProtocolToggle(
+                title = stringResource(DesignSystemR.string.share_lan_access),
+                subtitle = stringResource(DesignSystemR.string.share_lan_access_description),
+                checked = state.config.bindAddress == ShareServerConfig.LAN_BIND_ADDRESS,
+                enabled = !running,
+                onCheckedChange = viewModel::setLanAccess,
+            )
+            if (state.config.bindAddress == ShareServerConfig.LAN_BIND_ADDRESS) {
+                ProtocolToggle(
+                    title = stringResource(DesignSystemR.string.share_allow_insecure_lan),
+                    subtitle = stringResource(DesignSystemR.string.share_allow_insecure_lan_description),
+                    checked = state.config.allowInsecureLan,
+                    enabled = !running,
+                    onCheckedChange = viewModel::setAllowInsecureLan,
+                )
+                Text(
+                    stringResource(DesignSystemR.string.share_insecure_lan_warning),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else {
+                Text(
+                    stringResource(DesignSystemR.string.share_loopback_note),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Text(
+                stringResource(DesignSystemR.string.share_resource_limits),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
 
             HorizontalDivider()
             Text(stringResource(DesignSystemR.string.authentication), style = MaterialTheme.typography.titleMedium)

@@ -25,15 +25,24 @@ internal class ShareServerFtpServer(
     private val resolver: ShareServerPathResolver,
     private val serverSocket: ServerSocket,
     private val advertisedAddress: InetAddress,
+    private val resources: ShareServerRuntimeResources = ShareServerRuntimeResources(),
 ) {
 
     fun acceptLoop(scope: CoroutineScope): Job = scope.launch {
         while (isActive) {
             try {
                 val socket = serverSocket.accept()
+                if (!resources.tryAcquireConnection()) {
+                    socket.close()
+                    continue
+                }
                 launch {
-                    socket.use { client ->
-                        runCatching { handle(client) }
+                    try {
+                        socket.use { client ->
+                            runCatching { handle(client) }
+                        }
+                    } finally {
+                        resources.releaseConnection()
                     }
                 }
             } catch (_: IOException) {
@@ -43,7 +52,7 @@ internal class ShareServerFtpServer(
     }
 
     private fun handle(socket: Socket) {
-        socket.soTimeout = CONTROL_TIMEOUT_MS
+        socket.soTimeout = ShareServerLimits.REQUEST_TIMEOUT_MS
         val input = socket.getInputStream()
         val output = socket.getOutputStream()
         var username: String? = null
@@ -68,6 +77,10 @@ internal class ShareServerFtpServer(
             while (true) {
                 val line = readLine(input, MAX_LINE_LENGTH) ?: break
                 if (line.isBlank()) continue
+                if (!resources.allowRequest(socket.inetAddress.hostAddress.orEmpty())) {
+                    respond(421, "Request rate limit exceeded")
+                    break
+                }
                 val parts = line.trim().split(' ', limit = 2)
                 val command = parts[0].uppercase(Locale.US)
                 val argument = parts.getOrNull(1)?.trim().orEmpty()
@@ -166,8 +179,12 @@ internal class ShareServerFtpServer(
                             parent == null || !resolver.isWithinRoot(parent) || !Files.isDirectory(parent)
                         ) {
                             respond(550, "Upload path unavailable")
+                        } else if (!resources.tryReserveTemporary(ShareServerLimits.MAX_UPLOAD_BYTES)) {
+                            respond(452, "Temporary upload capacity is exhausted")
                         } else {
-                            val temporary = parent.resolve(".fileexplorer-upload-" + UUID.randomUUID() + ".tmp")
+                            val temporary = parent.resolve(
+                                ShareServerLimits.TEMPORARY_FILE_PREFIX + UUID.randomUUID() + ".tmp",
+                            )
                             try {
                                 transfer(output, passiveServer, "Ready to receive data") { data ->
                                     Files.newOutputStream(
@@ -175,12 +192,13 @@ internal class ShareServerFtpServer(
                                         StandardOpenOption.CREATE_NEW,
                                         StandardOpenOption.WRITE,
                                     ).use { fileOutput ->
-                                        data.getInputStream().copyTo(fileOutput)
+                                        copyUpload(data.getInputStream(), fileOutput)
                                     }
                                     Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING)
                                 }
                             } finally {
                                 runCatching { Files.deleteIfExists(temporary) }
+                                resources.releaseTemporary(ShareServerLimits.MAX_UPLOAD_BYTES)
                                 passiveServer = null
                             }
                         }
@@ -273,14 +291,18 @@ internal class ShareServerFtpServer(
         output.write("150 $message\r\n".toByteArray(StandardCharsets.UTF_8))
         output.flush()
         return try {
-            passiveServer.soTimeout = DATA_TIMEOUT_MS
+            passiveServer.soTimeout = ShareServerLimits.DATA_TIMEOUT_MS
             passiveServer.accept().use { data ->
-                data.soTimeout = DATA_TIMEOUT_MS
+                data.soTimeout = ShareServerLimits.DATA_TIMEOUT_MS
                 block(data)
             }
             output.write("226 Transfer complete\r\n".toByteArray(StandardCharsets.UTF_8))
             output.flush()
             true
+        } catch (error: ShareServerLimitExceededException) {
+            output.write("552 ${error.message ?: "Transfer exceeds the server limit"}\r\n".toByteArray(StandardCharsets.UTF_8))
+            output.flush()
+            false
         } catch (_: Exception) {
             output.write("426 Transfer aborted\r\n".toByteArray(StandardCharsets.UTF_8))
             output.flush()
@@ -291,19 +313,43 @@ internal class ShareServerFtpServer(
     }
 
     private fun createPassiveServer(): ServerSocket? = runCatching {
-        ServerSocket(0, 1, InetAddress.getByName("0.0.0.0"))
+        ServerSocket(0, 1, InetAddress.getByName(config.bindAddress))
     }.getOrNull()
+
+    private fun copyUpload(input: InputStream, output: java.io.OutputStream): Long {
+        val buffer = ByteArray(64 * 1024)
+        var copied = 0L
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) return copied
+            if (read == 0) continue
+            if (copied > ShareServerLimits.MAX_UPLOAD_BYTES - read) {
+                throw ShareServerLimitExceededException("Upload exceeds the server limit")
+            }
+            output.write(buffer, 0, read)
+            copied += read
+        }
+    }
 
     private fun ftpListing(path: Path, namesOnly: Boolean): String {
         val entries = if (Files.isDirectory(path)) {
             val result = mutableListOf<Path>()
-            runCatching {
+            try {
                 Files.newDirectoryStream(path).use { stream ->
                     for (child in stream) {
                         val canonical = child.toFile().canonicalFile.toPath()
-                        if (resolver.isWithinRoot(canonical)) result.add(canonical)
+                        if (resolver.isWithinRoot(canonical) && !resolver.isTemporaryUpload(canonical)) {
+                            result.add(canonical)
+                        }
+                        if (result.size > ShareServerLimits.MAX_DIRECTORY_ENTRIES) {
+                            throw ShareServerLimitExceededException("Directory listing exceeds the server limit")
+                        }
                     }
                 }
+            } catch (error: ShareServerLimitExceededException) {
+                throw error
+            } catch (error: Exception) {
+                throw IOException("Unable to list directory", error)
             }
             result.sortedWith(compareBy<Path> { if (Files.isDirectory(it)) 0 else 1 }.thenBy {
                 it.fileName.toString().lowercase()
@@ -328,6 +374,9 @@ internal class ShareServerFtpServer(
                         .append(' ')
                         .append(entry.fileName)
                         .append("\r\n")
+                }
+                if (length > ShareServerLimits.MAX_DIRECTORY_LISTING_BYTES) {
+                    throw ShareServerLimitExceededException("Directory listing exceeds the server limit")
                 }
             }
         }
@@ -359,8 +408,6 @@ internal class ShareServerFtpServer(
     }
 
     private companion object {
-        const val CONTROL_TIMEOUT_MS = 30_000
-        const val DATA_TIMEOUT_MS = 60_000
         const val MAX_LINE_LENGTH = 8 * 1024
     }
 }

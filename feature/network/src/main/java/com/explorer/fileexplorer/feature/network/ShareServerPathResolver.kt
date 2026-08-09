@@ -19,13 +19,17 @@ internal class ShareServerPathResolver(rootPath: String) {
         } catch (_: Exception) {
             return null
         }
-        return candidate.takeIf { isWithinRoot(it) }
+        return candidate.takeIf { isWithinRoot(it) && !isTemporaryUpload(it) }
     }
 
     fun resolveFromRoot(requested: String): Path? = resolve(root, requested)
 
     fun isWithinRoot(candidate: Path): Boolean =
         candidate == root || candidate.startsWith(root)
+
+    fun isTemporaryUpload(candidate: Path): Boolean =
+        candidate != root &&
+            candidate.fileName?.toString()?.startsWith(ShareServerLimits.TEMPORARY_FILE_PREFIX) == true
 
     fun displayPath(path: Path): String {
         if (!isWithinRoot(path)) return "/"

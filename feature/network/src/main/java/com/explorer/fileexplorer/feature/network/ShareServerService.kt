@@ -20,11 +20,11 @@ class ShareServerService : Service() {
     @Inject
     lateinit var controller: ShareServerController
 
-    private lateinit var settingsStore: ShareServerSettingsStore
+    @Inject
+    lateinit var settingsStore: ShareServerSettingsStore
 
     override fun onCreate() {
         super.onCreate()
-        settingsStore = ShareServerSettingsStore(this)
         createNotificationChannel()
     }
 
@@ -41,6 +41,9 @@ class ShareServerService : Service() {
         result.onFailure { error ->
             updateNotification("Share server failed: " + (error.message ?: "unable to start"), ongoing = false)
             stopSelf(startId)
+        }
+        result.onSuccess {
+            updateNotification("Share server running; HTTP and FTP are plaintext", ongoing = true)
         }
         return START_NOT_STICKY
     }
@@ -113,16 +116,11 @@ class ShareServerService : Service() {
         private const val REQUEST_STOP = 1002
         private const val REQUEST_OPEN = 1003
 
-        fun start(context: Context, config: ShareServerConfig) {
-            ShareServerSettingsStore(context).save(config.normalized())
+        fun start(context: Context) {
             val intent = Intent(context, ShareServerService::class.java).apply {
                 action = ACTION_START
             }
             ContextCompat.startForegroundService(context, intent)
-        }
-
-        fun start(context: Context) {
-            start(context, ShareServerSettingsStore(context).load())
         }
 
         fun stop(context: Context) {
