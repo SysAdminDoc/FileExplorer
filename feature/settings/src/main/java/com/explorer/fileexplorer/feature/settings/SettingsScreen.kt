@@ -227,15 +227,25 @@ class SettingsViewModel @Inject constructor(
     fun exportBackup(out: java.io.OutputStream) {
         viewModelScope.launch {
             backupManager.exportToStream(out)
-            _toasts.emit("Backup exported")
+            _toasts.emit(context.getString(DesignSystemR.string.backup_exported))
         }
     }
 
     fun importBackup(input: java.io.InputStream) {
         viewModelScope.launch {
             backupManager.importFromStream(input)
-                .onSuccess { s -> _toasts.emit("Imported ${s.bookmarks} bookmarks, ${s.connections} connections") }
-                .onFailure { e -> _toasts.emit("Import failed: ${e.message}") }
+                .onSuccess { s ->
+                    _toasts.emit(
+                        context.getString(
+                            DesignSystemR.string.backup_import_summary,
+                            s.bookmarks,
+                            s.connections,
+                            s.skippedBookmarks,
+                            s.skippedConnections,
+                        ),
+                    )
+                }
+                .onFailure { _toasts.emit(context.getString(DesignSystemR.string.backup_import_failed)) }
         }
     }
 

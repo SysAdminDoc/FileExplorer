@@ -23,6 +23,7 @@ dependencies {
     implementation(libs.core.ktx)
     implementation(libs.coroutines.core)
     implementation(libs.coroutines.android)
+    implementation(libs.room.ktx)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.documentfile)

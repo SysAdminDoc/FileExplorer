@@ -1,9 +1,12 @@
 package com.explorer.fileexplorer.core.data
 
+import androidx.room.withTransaction
+import com.explorer.fileexplorer.core.database.AppDatabase
 import com.explorer.fileexplorer.core.database.BookmarkDao
 import com.explorer.fileexplorer.core.database.BookmarkEntity
 import com.explorer.fileexplorer.core.database.ConnectionDao
 import com.explorer.fileexplorer.core.database.ConnectionEntity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -17,9 +20,10 @@ import javax.inject.Singleton
 class BackupManager @Inject constructor(
     private val bookmarkDao: BookmarkDao,
     private val connectionDao: ConnectionDao,
+    private val database: AppDatabase,
 ) {
     companion object {
-        const val VERSION = 1
+        const val VERSION = BackupSchema.VERSION
     }
 
     suspend fun exportToStream(out: OutputStream, includeConnections: Boolean = false) = withContext(Dispatchers.IO) {
@@ -41,6 +45,7 @@ class BackupManager @Inject constructor(
             val connections = JSONArray()
             for (c in connectionDao.getAll()) {
                 connections.put(JSONObject().apply {
+                    // Only non-secret connection metadata is portable.
                     put("name", c.name)
                     put("protocol", c.protocol)
                     put("host", c.host)
@@ -59,52 +64,39 @@ class BackupManager @Inject constructor(
 
     suspend fun importFromStream(input: InputStream): Result<BackupSummary> = withContext(Dispatchers.IO) {
         try {
-            val json = JSONObject(input.bufferedReader().readText())
-            val version = json.optInt("version", 0)
-            if (version < 1) return@withContext Result.failure(Exception("Invalid backup format"))
-
-            var bookmarksImported = 0
-            var connectionsImported = 0
-
-            val bookmarks = json.optJSONArray("bookmarks")
-            if (bookmarks != null) {
-                for (i in 0 until bookmarks.length()) {
-                    val b = bookmarks.getJSONObject(i)
-                    val path = b.getString("path")
-                    if (!bookmarkDao.exists(path)) {
-                        bookmarkDao.insert(BookmarkEntity(
-                            name = b.getString("name"),
-                            path = path,
-                            sortOrder = b.optInt("sortOrder", 0),
-                        ))
-                        bookmarksImported++
-                    }
-                }
+            // Parsing and validation are complete before this transaction is opened.
+            val payload = BackupImportPolicy.parse(input)
+            val summary = database.withTransaction {
+                val plan = buildBackupImportPlan(
+                    payload = payload,
+                    existingBookmarks = bookmarkDao.getAll(),
+                    existingConnections = connectionDao.getAll(),
+                )
+                plan.bookmarksToInsert.forEach { bookmarkDao.insert(it.toEntity()) }
+                plan.connectionsToInsert.forEach { connectionDao.insert(it.toEntity()) }
+                BackupSummary(
+                    bookmarks = plan.bookmarksToInsert.size,
+                    connections = plan.connectionsToInsert.size,
+                    skippedBookmarks = plan.skippedBookmarks,
+                    skippedConnections = plan.skippedConnections,
+                )
             }
-
-            val connections = json.optJSONArray("connections")
-            if (connections != null) {
-                for (i in 0 until connections.length()) {
-                    val c = connections.getJSONObject(i)
-                    connectionDao.insert(ConnectionEntity(
-                        name = c.getString("name"),
-                        protocol = c.getString("protocol"),
-                        host = c.getString("host"),
-                        port = c.getInt("port"),
-                        username = c.optString("username", ""),
-                        shareName = c.optString("shareName", ""),
-                        remotePath = c.optString("remotePath", "/"),
-                        useTls = c.optBoolean("useTls", false),
-                    ))
-                    connectionsImported++
-                }
-            }
-
-            Result.success(BackupSummary(bookmarksImported, connectionsImported))
+            Result.success(summary)
+        } catch (error: CancellationException) {
+            throw error
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 }
 
-data class BackupSummary(val bookmarks: Int, val connections: Int)
+internal object BackupSchema {
+    const val VERSION = 1
+}
+
+data class BackupSummary(
+    val bookmarks: Int,
+    val connections: Int,
+    val skippedBookmarks: Int = 0,
+    val skippedConnections: Int = 0,
+)
