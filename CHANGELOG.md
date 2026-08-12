@@ -5,6 +5,8 @@ All notable changes to FileExplorer will be documented in this file.
 ## [v1.5.0] - 2026-08-03
 
 ### Security
+- Added explicit Google/Maven Central/JitPack dependency provenance policy, fixed-version checks, release-graph reporting, and an OSV advisory scan task.
+- Added Android 15/16 upgrade gates for compile/target SDK, exported components, predictive back, backup rules, storage fallbacks, package visibility, and foreground-service timeouts.
 - Hardened ZIP, 7z, TAR, and RAR extraction with shared path containment, depth and resource limits, symlink/hard-link rejection, cancellation checks, and staged commits.
 - Replaced SFTP shell-based copy with SSHJ-native staged transfers and verified rename/move operations, including remote-path safety, timeout, cancellation, and partial-output handling.
 - Made permanent deletion capability-aware: local overwrite is explicitly best effort, unsupported providers cannot claim secure deletion, and the browser reports partial outcomes with an irreversible-action confirmation.

@@ -28,7 +28,7 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.documentfile)
     testImplementation(kotlin("test"))
-    testImplementation("org.json:json:20240303")
+    testImplementation(libs.json)
 
     // Root access
     implementation(libs.libsu.core)

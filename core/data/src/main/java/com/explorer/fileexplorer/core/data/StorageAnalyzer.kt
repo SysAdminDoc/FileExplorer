@@ -5,6 +5,7 @@ import kotlinx.coroutines.withContext
 import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.nio.file.SimpleFileVisitor
 import java.nio.file.attribute.BasicFileAttributes
 import java.security.MessageDigest
@@ -58,7 +59,7 @@ class StorageAnalyzer @Inject constructor() {
         onProgress: (StorageScanProgress) -> Unit = {},
     ): StorageScanResult = withContext(Dispatchers.IO) {
         val scanContext = currentCoroutineContext()
-        val root = Path.of(rootPath).toAbsolutePath().normalize()
+        val root = Paths.get(rootPath).toAbsolutePath().normalize()
         require(Files.isDirectory(root)) { "Not a directory: $rootPath" }
 
         val tree = MutableNode(name = root.fileName?.toString() ?: root.toString(), path = root.toString())
@@ -142,7 +143,7 @@ class StorageAnalyzer @Inject constructor() {
 
     private fun sha256(path: String, scanContext: kotlin.coroutines.CoroutineContext): String {
         val digest = MessageDigest.getInstance("SHA-256")
-        Files.newInputStream(Path.of(path)).use { input ->
+        Files.newInputStream(Paths.get(path)).use { input ->
             val buffer = ByteArray(HASH_BUFFER_SIZE)
             while (true) {
                 scanContext.ensureActive()
@@ -194,7 +195,7 @@ class StorageAnalyzer @Inject constructor() {
             fileCount += files
         }
 
-        fun pathAsPath(): Path = Path.of(path)
+        fun pathAsPath(): Path = Paths.get(path)
 
         fun toModel(): StorageTreeNode {
             val sorted = children.values.sortedWith(compareByDescending<MutableNode> { it.size }.thenBy { it.name })

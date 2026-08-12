@@ -29,6 +29,12 @@ commons-net = "3.13.0"
 sardine = "0.9"
 bouncycastle = "1.84"
 gson = "2.11.0"
+androidx-test-core = "1.6.1"
+androidx-test-junit = "1.2.1"
+androidx-test-runner = "1.6.2"
+espresso = "3.7.0"
+room-testing = "2.8.4"
+json = "20240303"
 
 [libraries]
 # Compose BOM
@@ -49,6 +55,10 @@ lifecycle-viewmodel = { group = "androidx.lifecycle", name = "lifecycle-viewmode
 navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
 documentfile = { group = "androidx.documentfile", name = "documentfile", version.ref = "documentfile" }
 appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidx-test-core" }
+androidx-test-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-test-junit" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidx-test-runner" }
+espresso = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso" }
 
 # Hilt
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
@@ -59,6 +69,7 @@ hilt-navigation = { group = "androidx.hilt", name = "hilt-navigation-compose", v
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room-testing" }
 
 # DataStore
 datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
@@ -97,6 +108,7 @@ sardine-android = { group = "com.github.thegrizzlylabs", name = "sardine-android
 bouncycastle-prov = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
 bouncycastle-pkix = { group = "org.bouncycastle", name = "bcpkix-jdk18on", version.ref = "bouncycastle" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
+json = { group = "org.json", name = "json", version.ref = "json" }
 
 # Cloud storage
 google-api-drive = { group = "com.google.apis", name = "google-api-services-drive", version = "v3-rev20241206-2.0.0" }

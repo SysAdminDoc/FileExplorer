@@ -255,6 +255,24 @@ OLED remains available as the high-contrast AMOLED option, while System follows 
 - Rooted device for root features (optional)
 - Shizuku or Sui for optional Android/data and Android/obb access (optional)
 
+## Release and upgrade gates
+
+The build uses Google Maven, Maven Central, and a JitPack allowlist for the two
+GitHub-hosted groups that still require it. Fixed versions live in
+`gradle/libs.versions.toml`.
+
+Run the local policy checks before a release:
+
+```powershell
+.\gradlew.bat verifyAndroidUpgradeReadiness verifyDependencyProvenance
+.\gradlew.bat scanDependencyAdvisories
+```
+
+The first command checks Android 15/16 SDK, manifest, backup, storage, predictive-back,
+and foreground-service timeout requirements. The advisory task resolves the release
+runtime graph and queries OSV; use `-PosvAllowlist=OSV-ID,...` only for an explicitly
+triaged release decision.
+
 ## Permissions
 
 | Permission | Why |
