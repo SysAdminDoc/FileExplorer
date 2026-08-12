@@ -5,6 +5,7 @@ import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.model.RepositoryCapabilities
 import com.explorer.fileexplorer.core.model.RepositoryErrorKind
+import com.explorer.fileexplorer.core.model.RepositoryOperationLimits
 import com.explorer.fileexplorer.core.model.RepositoryOperation
 import com.explorer.fileexplorer.core.model.asRepositoryException
 import com.explorer.fileexplorer.core.model.isMissingRepositoryResource
@@ -13,7 +14,14 @@ import com.explorer.fileexplorer.core.model.repositoryException
 import com.explorer.fileexplorer.core.model.unsupportedRepositoryOperation
 import com.explorer.fileexplorer.core.network.NetworkConnection
 import com.explorer.fileexplorer.core.network.NetworkFileRepository
+import com.explorer.fileexplorer.core.network.NetworkTraversalBudget
+import com.explorer.fileexplorer.core.network.checkedNetworkAdd
+import com.explorer.fileexplorer.core.network.checksumDigest
+import com.explorer.fileexplorer.core.network.checksumHex
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -25,12 +33,17 @@ import org.apache.commons.net.ftp.FTPSClient
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.IOException
 import javax.inject.Inject
 
 class FtpFileRepository @Inject constructor() : NetworkFileRepository {
 
     override val capabilities: RepositoryCapabilities
-        get() = RepositoryCapabilities.network(if (currentConnection?.useTls == true) "ftps" else "ftp", serverSideCopy = false)
+        get() = RepositoryCapabilities.network(
+            provider = if (currentConnection?.useTls == true) "ftps" else "ftp",
+            serverSideCopy = false,
+            advancedOperations = true,
+        )
 
     private var client: FTPClient? = null
     private var currentConnection: NetworkConnection? = null
@@ -127,8 +140,11 @@ class FtpFileRepository @Inject constructor() : NetworkFileRepository {
             for (src in sources) {
                 val name = src.trimEnd('/').substringAfterLast('/')
                 val dest = "$destination/$name"
-                onProgress(0, 0, name)
-                if (ftp.rename(src, dest)) count++
+                val size = ftpSize(ftp, src, NetworkTraversalBudget())
+                onProgress(0, size, name)
+                if (!ftp.rename(src, dest)) throw IOException("FTP rename failed: $src -> $dest")
+                onProgress(size, size, name)
+                count++
             }
             Result.success(count)
         } catch (e: Exception) {
@@ -147,8 +163,8 @@ class FtpFileRepository @Inject constructor() : NetworkFileRepository {
                 val files = ftp.listFiles(path)
                 if (files.isNotEmpty() && files.first().isDirectory) {
                     deleteFtpRecursive(ftp, path)
-                } else {
-                    ftp.deleteFile(path)
+                } else if (!ftp.deleteFile(path)) {
+                    throw IOException("FTP delete failed: $path")
                 }
                 count++
             }
@@ -163,9 +179,10 @@ class FtpFileRepository @Inject constructor() : NetworkFileRepository {
         for (entry in entries) {
             if (entry.name == "." || entry.name == "..") continue
             val fullPath = "$path/${entry.name}"
-            if (entry.isDirectory) deleteFtpRecursive(ftp, fullPath) else ftp.deleteFile(fullPath)
+            if (entry.isDirectory) deleteFtpRecursive(ftp, fullPath)
+            else if (!ftp.deleteFile(fullPath)) throw IOException("FTP delete failed: $fullPath")
         }
-        ftp.removeDirectory(path)
+        if (!ftp.removeDirectory(path)) throw IOException("FTP directory delete failed: $path")
     }
 
     override suspend fun createDirectory(path: String): Result<FileItem> = withContext(Dispatchers.IO) {
@@ -230,11 +247,24 @@ class FtpFileRepository @Inject constructor() : NetworkFileRepository {
             val ftp = client ?: return@withContext Result.failure(
                 notConnectedRepositoryException(capabilities.provider, RepositoryOperation.DOWNLOAD),
             )
+            val expectedSize = ftpFileSize(ftp, remotePath)
+            onProgress(0, expectedSize)
+            val input = ftp.retrieveFileStream(remotePath)
+                ?: throw IOException("FTP server did not open the download source")
             FileOutputStream(localPath).use { output ->
-                ftp.retrieveFile(remotePath, output)
+                input.use { stream ->
+                    val buffer = ByteArray(64 * 1024)
+                    var total = 0L
+                    var read: Int
+                    while (stream.read(buffer).also { read = it } != -1) {
+                        output.write(buffer, 0, read)
+                        total += read
+                        onProgress(total, expectedSize)
+                    }
+                }
             }
-            val localSize = File(localPath).length()
-            onProgress(localSize, localSize)
+            if (!ftp.completePendingCommand()) throw IOException("FTP download did not complete")
+            if (File(localPath).length() != expectedSize) throw IOException("FTP download size mismatch")
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.DOWNLOAD))
@@ -250,15 +280,155 @@ class FtpFileRepository @Inject constructor() : NetworkFileRepository {
                 notConnectedRepositoryException(capabilities.provider, RepositoryOperation.UPLOAD),
             )
             val localFile = File(localPath)
+            val totalSize = localFile.length()
+            onProgress(0, totalSize)
+            val output = ftp.storeFileStream(remotePath)
+                ?: throw IOException("FTP server did not open the upload destination")
             FileInputStream(localFile).use { input ->
-                ftp.storeFile(remotePath, input)
+                output.use { stream ->
+                    val buffer = ByteArray(64 * 1024)
+                    var written = 0L
+                    var read: Int
+                    while (input.read(buffer).also { read = it } != -1) {
+                        stream.write(buffer, 0, read)
+                        written += read
+                        onProgress(written, totalSize)
+                    }
+                }
             }
-            onProgress(localFile.length(), localFile.length())
+            if (!ftp.completePendingCommand()) throw IOException("FTP upload did not complete")
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.UPLOAD))
         }
     }
+
+    override suspend fun calculateSize(paths: List<String>): Long = withContext(Dispatchers.IO) {
+        val ftp = client ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.SIZE)
+        try {
+            val budget = NetworkTraversalBudget()
+            paths.fold(0L) { total, path ->
+                currentCoroutineContext().ensureActive()
+                checkedNetworkAdd(total, ftpSize(ftp, path, budget))
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.SIZE)
+        }
+    }
+
+    override fun search(
+        rootPath: String,
+        query: String,
+        regex: Boolean,
+        includeHidden: Boolean,
+    ): Flow<FileItem> = flow {
+        val ftp = client ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.SEARCH)
+        try {
+            val matcher = if (regex) Regex(query, RegexOption.IGNORE_CASE) else null
+            val pending = ArrayDeque<Pair<String, Int>>()
+            val budget = NetworkTraversalBudget()
+            var resultCount = 0
+            pending.addLast(rootPath to 0)
+            while (pending.isNotEmpty()) {
+                currentCoroutineContext().ensureActive()
+                val (path, depth) = pending.removeLast()
+                budget.visit(depth)
+                for (entry in ftp.listFiles(path)) {
+                    currentCoroutineContext().ensureActive()
+                    if (entry.name == "." || entry.name == ".." || entry.isSymbolicLink) continue
+                    val item = ftpFileToFileItem(entry, path)
+                    val matches = if (matcher != null) matcher.containsMatchIn(item.name)
+                    else item.name.contains(query, ignoreCase = true)
+                    if (matches && (includeHidden || !item.isHidden)) {
+                        resultCount++
+                        if (resultCount > RepositoryOperationLimits.MAX_NETWORK_SEARCH_RESULTS) {
+                            throw IOException("Remote search exceeded ${RepositoryOperationLimits.MAX_NETWORK_SEARCH_RESULTS} results")
+                        }
+                        emit(item)
+                    }
+                    if (entry.isDirectory) pending.addLast(ftpChildPath(path, entry.name) to (depth + 1))
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.SEARCH)
+        }
+    }.flowOn(Dispatchers.IO)
+
+    override suspend fun getChecksum(path: String, algorithm: String): String = withContext(Dispatchers.IO) {
+        val ftp = client ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.CHECKSUM)
+        try {
+            val expectedSize = ftpFileSize(ftp, path)
+            if (expectedSize > RepositoryOperationLimits.MAX_NETWORK_CHECKSUM_BYTES) {
+                throw IOException("Remote checksum exceeds ${RepositoryOperationLimits.MAX_NETWORK_CHECKSUM_BYTES} bytes")
+            }
+            val digest = checksumDigest(algorithm)
+            val input = ftp.retrieveFileStream(path) ?: throw IOException("FTP server did not open the checksum source")
+            var readBytes = 0L
+            input.use { stream ->
+                val buffer = ByteArray(64 * 1024)
+                var read: Int
+                while (stream.read(buffer).also { read = it } != -1) {
+                    currentCoroutineContext().ensureActive()
+                    readBytes += read
+                    if (readBytes > RepositoryOperationLimits.MAX_NETWORK_CHECKSUM_BYTES) {
+                        throw IOException("Remote checksum exceeds ${RepositoryOperationLimits.MAX_NETWORK_CHECKSUM_BYTES} bytes")
+                    }
+                    digest.update(buffer, 0, read)
+                }
+            }
+            if (!ftp.completePendingCommand()) throw IOException("FTP checksum transfer did not complete")
+            if (readBytes != expectedSize) throw IOException("FTP checksum source changed during download")
+            checksumHex(digest)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.CHECKSUM)
+        }
+    }
+
+    private fun ftpSize(
+        ftp: FTPClient,
+        path: String,
+        budget: NetworkTraversalBudget,
+        depth: Int = 0,
+        visitedDirectories: MutableSet<String> = mutableSetOf(),
+    ): Long {
+        budget.visit(depth)
+        val entries = ftp.listFiles(path)
+        val requestedName = path.trimEnd('/').substringAfterLast('/')
+        if (entries.size == 1 && entries[0].name == requestedName && !entries[0].isDirectory) {
+            return entries[0].size.coerceAtLeast(0L)
+        }
+        if (!visitedDirectories.add(path)) throw IOException("FTP directory cycle detected: $path")
+        try {
+            if (entries.isEmpty() && requestedName.isNotEmpty()) throw IOException("FTP path not found: $path")
+            return entries.asSequence()
+                .filterNot { it.name == "." || it.name == ".." || it.isSymbolicLink }
+                .fold(0L) { total, entry ->
+                    val childSize = if (entry.isDirectory) {
+                        ftpSize(ftp, ftpChildPath(path, entry.name), budget, depth + 1, visitedDirectories)
+                    } else entry.size.coerceAtLeast(0L)
+                    checkedNetworkAdd(total, childSize)
+                }
+        } finally {
+            visitedDirectories.remove(path)
+        }
+    }
+
+    private fun ftpFileSize(ftp: FTPClient, path: String): Long {
+        val entries = ftp.listFiles(path)
+        val requestedName = path.trimEnd('/').substringAfterLast('/')
+        val file = entries.firstOrNull { it.name == requestedName && !it.isDirectory }
+            ?: throw IOException("FTP path is not a regular file: $path")
+        return file.size.coerceAtLeast(0L)
+    }
+
+    private fun ftpChildPath(parent: String, name: String): String =
+        if (parent.endsWith("/")) "$parent$name" else "$parent/$name"
 
     private fun ftpFileToFileItem(file: FTPFile, parentPath: String): FileItem {
         val name = file.name

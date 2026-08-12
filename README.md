@@ -273,6 +273,23 @@ and foreground-service timeout requirements. The advisory task resolves the rele
 runtime graph and queries OSV; use `-PosvAllowlist=OSV-ID,...` only for an explicitly
 triaged release decision.
 
+## Remote capability semantics
+
+Remote repositories expose operation support and the expected consistency/cost to the
+browser. Recursive inspection is cancellable and bounded to 100,000 entries and depth
+64; search returns at most 10,000 matches, and streamed checksums inspect at most 2 GiB.
+
+| Provider | Copy/move | Recursive size | Search | Checksum | Consistency and cost |
+|---|---|---|---|---|---|
+| SMB | Server-side copy with streamed fallback | Bounded, cancellable | Bounded, cancellable | Streamed, bounded | Mutations are strong; inspection is point-in-time/high cost |
+| SFTP | Staged stream and verified rename | Bounded, cancellable | Bounded, cancellable | Streamed, bounded | Mutations are strong; inspection is point-in-time/high cost |
+| FTP/FTPS | Copy is explicit unsupported; move uses verified rename | Bounded, cancellable | Bounded, cancellable | Streamed, bounded | Mutations are strong; inspection is point-in-time/high cost |
+| WebDAV | Server-side copy/move when accepted | Bounded, cancellable | Bounded, cancellable | Streamed, bounded | Mutations are strong; inspection is point-in-time/high cost |
+
+Unsupported operations return typed provider errors. Network transfers and mutating
+operations report progress and verify completion rather than presenting an empty or
+zero-valued success as a completed operation.
+
 ## Permissions
 
 The following matrix is the release-readiness record for every privileged permission

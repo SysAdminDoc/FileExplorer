@@ -5,6 +5,7 @@ import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.model.RepositoryCapabilities
 import com.explorer.fileexplorer.core.model.RepositoryErrorKind
+import com.explorer.fileexplorer.core.model.RepositoryOperationLimits
 import com.explorer.fileexplorer.core.model.RepositoryOperation
 import com.explorer.fileexplorer.core.model.asRepositoryException
 import com.explorer.fileexplorer.core.model.isMissingRepositoryResource
@@ -12,6 +13,10 @@ import com.explorer.fileexplorer.core.model.notConnectedRepositoryException
 import com.explorer.fileexplorer.core.model.repositoryException
 import com.explorer.fileexplorer.core.network.NetworkConnection
 import com.explorer.fileexplorer.core.network.NetworkFileRepository
+import com.explorer.fileexplorer.core.network.NetworkTraversalBudget
+import com.explorer.fileexplorer.core.network.checkedNetworkAdd
+import com.explorer.fileexplorer.core.network.checksumDigest
+import com.explorer.fileexplorer.core.network.checksumHex
 import com.hierynomus.msdtyp.AccessMask
 import com.hierynomus.msfscc.FileAttributes
 import com.hierynomus.msfscc.fileinformation.FileIdBothDirectoryInformation
@@ -25,6 +30,9 @@ import com.hierynomus.smbj.connection.Connection
 import com.hierynomus.smbj.session.Session
 import com.hierynomus.smbj.share.DiskShare
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -32,13 +40,17 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.IOException
 import java.util.EnumSet
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 class SmbFileRepository @Inject constructor() : NetworkFileRepository {
 
-    override val capabilities: RepositoryCapabilities = RepositoryCapabilities.network("smb")
+    override val capabilities: RepositoryCapabilities = RepositoryCapabilities.network(
+        provider = "smb",
+        advancedOperations = true,
+    )
 
     private var client: SMBClient? = null
     private var connection: Connection? = null
@@ -211,13 +223,15 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
             for (src in sources) {
                 val name = src.trimEnd('/').substringAfterLast('/')
                 val destPath = "${normalizePath(destination)}\\$name"
-                onProgress(0, 0, name)
+                val sourceSize = smbSize(s, src, NetworkTraversalBudget())
+                onProgress(0, sourceSize, name)
                 s.openFile(normalizePath(src),
                     EnumSet.of(AccessMask.DELETE, AccessMask.GENERIC_WRITE), null,
                     EnumSet.of(SMB2ShareAccess.FILE_SHARE_DELETE),
                     SMB2CreateDisposition.FILE_OPEN, null).use { f ->
                     f.rename(destPath)
                 }
+                onProgress(sourceSize, sourceSize, name)
                 count++
             }
             Result.success(count)
@@ -353,6 +367,132 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
             Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.UPLOAD))
         }
     }
+
+    override suspend fun calculateSize(paths: List<String>): Long = withContext(Dispatchers.IO) {
+        val s = share ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.SIZE)
+        try {
+            val budget = NetworkTraversalBudget()
+            paths.fold(0L) { total, path ->
+                currentCoroutineContext().ensureActive()
+                checkedNetworkAdd(total, smbSize(s, path, budget))
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.SIZE)
+        }
+    }
+
+    override fun search(
+        rootPath: String,
+        query: String,
+        regex: Boolean,
+        includeHidden: Boolean,
+    ): Flow<FileItem> = flow {
+        val s = share ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.SEARCH)
+        try {
+            val matcher = if (regex) Regex(query, RegexOption.IGNORE_CASE) else null
+            val pending = ArrayDeque<Pair<String, Int>>()
+            val budget = NetworkTraversalBudget()
+            var resultCount = 0
+            pending.addLast(rootPath to 0)
+            while (pending.isNotEmpty()) {
+                currentCoroutineContext().ensureActive()
+                val (path, depth) = pending.removeLast()
+                budget.visit(depth)
+                for (entry in s.list(normalizePath(path))) {
+                    currentCoroutineContext().ensureActive()
+                    val name = entry.fileName
+                    if (name == "." || name == "..") continue
+                    val item = smbEntryToFileItem(entry, path)
+                    val matches = if (matcher != null) matcher.containsMatchIn(item.name)
+                    else item.name.contains(query, ignoreCase = true)
+                    if (matches && (includeHidden || !item.isHidden)) {
+                        resultCount++
+                        if (resultCount > RepositoryOperationLimits.MAX_NETWORK_SEARCH_RESULTS) {
+                            throw IOException("Remote search exceeded ${RepositoryOperationLimits.MAX_NETWORK_SEARCH_RESULTS} results")
+                        }
+                        emit(item)
+                    }
+                    if (item.isDirectory) pending.addLast(smbChildPath(path, name) to (depth + 1))
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.SEARCH)
+        }
+    }.flowOn(Dispatchers.IO)
+
+    override suspend fun getChecksum(path: String, algorithm: String): String = withContext(Dispatchers.IO) {
+        val s = share ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.CHECKSUM)
+        try {
+            val normalized = normalizePath(path)
+            val expectedSize = s.getFileInformation(normalized).standardInformation.endOfFile
+            if (expectedSize > RepositoryOperationLimits.MAX_NETWORK_CHECKSUM_BYTES) {
+                throw IOException("Remote checksum exceeds ${RepositoryOperationLimits.MAX_NETWORK_CHECKSUM_BYTES} bytes")
+            }
+            val digest = checksumDigest(algorithm)
+            s.openFile(
+                normalized,
+                EnumSet.of(AccessMask.GENERIC_READ),
+                null,
+                EnumSet.of(SMB2ShareAccess.FILE_SHARE_READ),
+                SMB2CreateDisposition.FILE_OPEN,
+                null,
+            ).use { file ->
+                file.inputStream.use { input ->
+                    val buffer = ByteArray(64 * 1024)
+                    var readBytes = 0L
+                    var read: Int
+                    while (input.read(buffer).also { read = it } != -1) {
+                        currentCoroutineContext().ensureActive()
+                        readBytes += read
+                        if (readBytes > RepositoryOperationLimits.MAX_NETWORK_CHECKSUM_BYTES) {
+                            throw IOException("Remote checksum exceeds ${RepositoryOperationLimits.MAX_NETWORK_CHECKSUM_BYTES} bytes")
+                        }
+                        digest.update(buffer, 0, read)
+                    }
+                    if (readBytes != expectedSize) throw IOException("SMB checksum source changed during read")
+                }
+            }
+            checksumHex(digest)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.CHECKSUM)
+        }
+    }
+
+    private fun smbSize(
+        share: DiskShare,
+        path: String,
+        budget: NetworkTraversalBudget,
+        depth: Int = 0,
+        visitedDirectories: MutableSet<String> = mutableSetOf(),
+    ): Long {
+        budget.visit(depth)
+        val normalized = normalizePath(path)
+        val info = share.getFileInformation(normalized)
+        if (!info.standardInformation.isDirectory) return info.standardInformation.endOfFile.coerceAtLeast(0L)
+        if (!visitedDirectories.add(normalized)) throw IOException("SMB directory cycle detected: $path")
+        try {
+            return share.list(normalized)
+                .asSequence()
+                .filterNot { it.fileName == "." || it.fileName == ".." }
+                .fold(0L) { total, entry ->
+                    checkedNetworkAdd(
+                        total,
+                        smbSize(share, smbChildPath(path, entry.fileName), budget, depth + 1, visitedDirectories),
+                    )
+                }
+        } finally {
+            visitedDirectories.remove(normalized)
+        }
+    }
+
+    private fun smbChildPath(parent: String, name: String): String =
+        if (parent.endsWith("/")) "$parent$name" else "$parent/$name"
 
     private fun smbEntryToFileItem(entry: FileIdBothDirectoryInformation, parentPath: String): FileItem {
         val name = entry.fileName

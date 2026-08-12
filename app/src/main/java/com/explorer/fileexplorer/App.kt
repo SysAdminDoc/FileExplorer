@@ -80,5 +80,9 @@ class App : Application(), SingletonImageLoader.Factory {
             repo.deleteFiles(paths, onProgress)
         override suspend fun createDirectory(path: String): Result<FileItem> = repo.createDirectory(path)
         override suspend fun rename(path: String, newName: String): Result<FileItem> = repo.rename(path, newName)
+        override suspend fun calculateSize(paths: List<String>): Long = repo.calculateSize(paths)
+        override fun search(rootPath: String, query: String, regex: Boolean, includeHidden: Boolean): Flow<FileItem> =
+            repo.search(rootPath, query, regex, includeHidden)
+        override suspend fun getChecksum(path: String, algorithm: String): String = repo.getChecksum(path, algorithm)
     }
 }

@@ -5,6 +5,7 @@ import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.model.RepositoryCapabilities
 import com.explorer.fileexplorer.core.model.RepositoryErrorKind
+import com.explorer.fileexplorer.core.model.RepositoryOperationLimits
 import com.explorer.fileexplorer.core.model.RepositoryOperation
 import com.explorer.fileexplorer.core.model.asRepositoryException
 import com.explorer.fileexplorer.core.model.isMissingRepositoryResource
@@ -12,21 +13,32 @@ import com.explorer.fileexplorer.core.model.notConnectedRepositoryException
 import com.explorer.fileexplorer.core.model.repositoryException
 import com.explorer.fileexplorer.core.network.NetworkConnection
 import com.explorer.fileexplorer.core.network.NetworkFileRepository
+import com.explorer.fileexplorer.core.network.NetworkTraversalBudget
+import com.explorer.fileexplorer.core.network.checkedNetworkAdd
+import com.explorer.fileexplorer.core.network.checksumDigest
+import com.explorer.fileexplorer.core.network.checksumHex
 import com.thegrizzlylabs.sardineandroid.DavResource
 import com.thegrizzlylabs.sardineandroid.impl.OkHttpSardine
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import javax.inject.Inject
 
 class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
 
     override val capabilities: RepositoryCapabilities
-        get() = RepositoryCapabilities.network(if (currentConnection?.useTls == true) "webdavs" else "webdav")
+        get() = RepositoryCapabilities.network(
+            provider = if (currentConnection?.useTls == true) "webdavs" else "webdav",
+            advancedOperations = true,
+        )
 
     private var sardine: OkHttpSardine? = null
     private var baseUrl: String = ""
@@ -116,8 +128,10 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
             for (src in sources) {
                 val name = src.trimEnd('/').substringAfterLast('/')
                 val destUrl = "${resolveUrl(destination)}/$name"
-                onProgress(0, 0, name)
+                val size = calculateSize(listOf(src))
+                onProgress(0, size, name)
                 s.copy(resolveUrl(src), destUrl)
+                onProgress(size, size, name)
                 count++
             }
             Result.success(count)
@@ -139,8 +153,10 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
             for (src in sources) {
                 val name = src.trimEnd('/').substringAfterLast('/')
                 val destUrl = "${resolveUrl(destination)}/$name"
-                onProgress(0, 0, name)
+                val size = calculateSize(listOf(src))
+                onProgress(0, size, name)
                 s.move(resolveUrl(src), destUrl)
+                onProgress(size, size, name)
                 count++
             }
             Result.success(count)
@@ -214,6 +230,9 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
             val s = sardine ?: return@withContext Result.failure(
                 notConnectedRepositoryException(capabilities.provider, RepositoryOperation.DOWNLOAD),
             )
+            val expectedSize = getFileInfo(remotePath)?.size?.coerceAtLeast(0L)
+                ?: throw IOException("WebDAV download source was not found: $remotePath")
+            onProgress(0, expectedSize)
             val input = s.get(resolveUrl(remotePath))
             FileOutputStream(localPath).use { output ->
                 val buf = ByteArray(65536)
@@ -222,10 +241,11 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
                 while (input.read(buf).also { len = it } != -1) {
                     output.write(buf, 0, len)
                     total += len
-                    onProgress(total, 0)
+                    onProgress(total, expectedSize)
                 }
             }
             input.close()
+            if (File(localPath).length() != expectedSize) throw IOException("WebDAV download size mismatch")
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.DOWNLOAD))
@@ -248,6 +268,120 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
             Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.UPLOAD))
         }
     }
+
+    override suspend fun calculateSize(paths: List<String>): Long = withContext(Dispatchers.IO) {
+        val s = sardine ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.SIZE)
+        try {
+            val budget = NetworkTraversalBudget()
+            paths.fold(0L) { total, path ->
+                currentCoroutineContext().ensureActive()
+                checkedNetworkAdd(total, webDavSize(s, path, budget))
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.SIZE)
+        }
+    }
+
+    override fun search(
+        rootPath: String,
+        query: String,
+        regex: Boolean,
+        includeHidden: Boolean,
+    ): Flow<FileItem> = flow {
+        val s = sardine ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.SEARCH)
+        try {
+            val matcher = if (regex) Regex(query, RegexOption.IGNORE_CASE) else null
+            val pending = ArrayDeque<Pair<String, Int>>()
+            val budget = NetworkTraversalBudget()
+            var resultCount = 0
+            pending.addLast(rootPath to 0)
+            while (pending.isNotEmpty()) {
+                currentCoroutineContext().ensureActive()
+                val (path, depth) = pending.removeLast()
+                budget.visit(depth)
+                val resources = s.list(resolveUrl(path))
+                for (resource in resources.drop(1)) {
+                    currentCoroutineContext().ensureActive()
+                    val item = davResourceToFileItem(resource, path)
+                    val matches = if (matcher != null) matcher.containsMatchIn(item.name)
+                    else item.name.contains(query, ignoreCase = true)
+                    if (matches && (includeHidden || !item.isHidden)) {
+                        resultCount++
+                        if (resultCount > RepositoryOperationLimits.MAX_NETWORK_SEARCH_RESULTS) {
+                            throw IOException("Remote search exceeded ${RepositoryOperationLimits.MAX_NETWORK_SEARCH_RESULTS} results")
+                        }
+                        emit(item)
+                    }
+                    if (item.isDirectory) pending.addLast(item.path to (depth + 1))
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.SEARCH)
+        }
+    }.flowOn(Dispatchers.IO)
+
+    override suspend fun getChecksum(path: String, algorithm: String): String = withContext(Dispatchers.IO) {
+        val s = sardine ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.CHECKSUM)
+        try {
+            val expectedSize = getFileInfo(path)?.size?.coerceAtLeast(0L)
+                ?: throw IOException("WebDAV checksum source was not found: $path")
+            if (expectedSize > RepositoryOperationLimits.MAX_NETWORK_CHECKSUM_BYTES) {
+                throw IOException("Remote checksum exceeds ${RepositoryOperationLimits.MAX_NETWORK_CHECKSUM_BYTES} bytes")
+            }
+            val digest = checksumDigest(algorithm)
+            s.get(resolveUrl(path)).use { input ->
+                val buffer = ByteArray(64 * 1024)
+                var readBytes = 0L
+                var read: Int
+                while (input.read(buffer).also { read = it } != -1) {
+                    currentCoroutineContext().ensureActive()
+                    readBytes += read
+                    if (readBytes > RepositoryOperationLimits.MAX_NETWORK_CHECKSUM_BYTES) {
+                        throw IOException("Remote checksum exceeds ${RepositoryOperationLimits.MAX_NETWORK_CHECKSUM_BYTES} bytes")
+                    }
+                    digest.update(buffer, 0, read)
+                }
+                if (readBytes != expectedSize) throw IOException("WebDAV checksum source changed during read")
+            }
+            checksumHex(digest)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.CHECKSUM)
+        }
+    }
+
+    private fun webDavSize(
+        sardine: OkHttpSardine,
+        path: String,
+        budget: NetworkTraversalBudget,
+        depth: Int = 0,
+        visitedDirectories: MutableSet<String> = mutableSetOf(),
+    ): Long {
+        budget.visit(depth)
+        val resources = sardine.list(resolveUrl(path))
+        val self = resources.firstOrNull()
+        if (self != null && !self.isDirectory) return self.contentLength.coerceAtLeast(0L)
+        if (!visitedDirectories.add(path)) throw IOException("WebDAV directory cycle detected: $path")
+        try {
+            return resources.drop(1)
+                .fold(0L) { total, resource ->
+                    checkedNetworkAdd(
+                        total,
+                        webDavSize(sardine, davResourcePath(path, resource), budget, depth + 1, visitedDirectories),
+                    )
+                }
+        } finally {
+            visitedDirectories.remove(path)
+        }
+    }
+
+    private fun davResourcePath(parent: String, resource: DavResource): String =
+        davResourceToFileItem(resource, parent).path
 
     private fun davResourceToFileItem(res: DavResource, parentPath: String): FileItem {
         val name = res.name ?: res.href.path.trimEnd('/').substringAfterLast('/')

@@ -4,6 +4,8 @@ import com.explorer.fileexplorer.core.data.DeleteCapabilities
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.model.RepositoryCapabilities
+import com.explorer.fileexplorer.core.model.RepositoryOperation
+import com.explorer.fileexplorer.core.model.unsupportedRepositoryOperation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
@@ -79,4 +81,19 @@ interface NetworkFileRepository {
         localPath: String, remotePath: String,
         onProgress: (Long, Long) -> Unit = { _, _ -> },
     ): Result<Unit>
+
+    suspend fun calculateSize(paths: List<String>): Long =
+        throw unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.SIZE)
+
+    fun search(
+        rootPath: String,
+        query: String,
+        regex: Boolean = false,
+        includeHidden: Boolean = false,
+    ): Flow<FileItem> = flow {
+        throw unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.SEARCH)
+    }
+
+    suspend fun getChecksum(path: String, algorithm: String = "SHA-256"): String =
+        throw unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.CHECKSUM)
 }

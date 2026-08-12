@@ -13,7 +13,6 @@ import com.explorer.fileexplorer.core.data.FileRepository
 import com.explorer.fileexplorer.core.data.FileRepositoryFactory
 import com.explorer.fileexplorer.core.data.LocalFileRepository
 import com.explorer.fileexplorer.core.data.LocalTrashManager
-import com.explorer.fileexplorer.core.data.NetworkRepoAdapter
 import com.explorer.fileexplorer.core.data.RootFileRepository
 import com.explorer.fileexplorer.core.data.SecureDelete
 import com.explorer.fileexplorer.core.data.SecureDeleteCapability
@@ -280,8 +279,9 @@ class BrowserViewModel @Inject constructor(
         secondary: Boolean,
     ) {
         val directories = files.filter(FileItem::isDirectory).map(FileItem::path)
-        val unavailable = if (repository is NetworkRepoAdapter) directories.toSet() else emptySet()
-        val loading = if (_state.value.showDirectorySizes && unavailable.isEmpty()) directories.toSet() else emptySet()
+        val supportsSize = repository.capabilities.supports(RepositoryOperation.SIZE)
+        val unavailable = if (supportsSize) emptySet() else directories.toSet()
+        val loading = if (_state.value.showDirectorySizes && supportsSize) directories.toSet() else emptySet()
 
         if (secondary) {
             secondaryDirectorySizeJob?.cancel()
@@ -305,7 +305,7 @@ class BrowserViewModel @Inject constructor(
             }
         }
 
-        if (!_state.value.showDirectorySizes || directories.isEmpty() || unavailable.isNotEmpty()) return
+        if (!_state.value.showDirectorySizes || directories.isEmpty() || loading.isEmpty()) return
 
         val cachePrefix = repository::class.qualifiedName ?: repository::class.java.name
         val job = viewModelScope.launch {

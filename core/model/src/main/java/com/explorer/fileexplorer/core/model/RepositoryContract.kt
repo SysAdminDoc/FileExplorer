@@ -62,11 +62,35 @@ class RepositoryException(
     cause: Throwable? = null,
 ) : IOException(error.message, cause)
 
+enum class RepositoryConsistency {
+    STRONG,
+    POINT_IN_TIME,
+    BEST_EFFORT,
+    UNKNOWN,
+}
+
+enum class RepositoryOperationCost {
+    LOW,
+    MODERATE,
+    HIGH,
+}
+
+data class RepositoryOperationSemantics(
+    val consistency: RepositoryConsistency,
+    val cost: RepositoryOperationCost,
+    val cancellable: Boolean,
+    val limit: String? = null,
+)
+
 data class RepositoryCapabilities(
     val provider: String,
     val supportedOperations: Set<RepositoryOperation>,
+    val operationSemantics: Map<RepositoryOperation, RepositoryOperationSemantics> = emptyMap(),
 ) {
     fun supports(operation: RepositoryOperation): Boolean = operation in supportedOperations
+
+    fun semantics(operation: RepositoryOperation): RepositoryOperationSemantics? =
+        operationSemantics[operation]
 
     companion object {
         val FILE_OPERATIONS: Set<RepositoryOperation> = setOf(
@@ -85,9 +109,26 @@ data class RepositoryCapabilities(
         )
 
         fun local(provider: String): RepositoryCapabilities =
-            RepositoryCapabilities(provider, FILE_OPERATIONS)
+            RepositoryCapabilities(
+                provider = provider,
+                supportedOperations = FILE_OPERATIONS,
+                operationSemantics = FILE_OPERATIONS.associateWith { operation ->
+                    RepositoryOperationSemantics(
+                        consistency = RepositoryConsistency.STRONG,
+                        cost = if (operation == RepositoryOperation.SIZE ||
+                            operation == RepositoryOperation.SEARCH ||
+                            operation == RepositoryOperation.CHECKSUM
+                        ) RepositoryOperationCost.MODERATE else RepositoryOperationCost.LOW,
+                        cancellable = true,
+                    )
+                },
+            )
 
-        fun network(provider: String, serverSideCopy: Boolean = true): RepositoryCapabilities {
+        fun network(
+            provider: String,
+            serverSideCopy: Boolean = true,
+            advancedOperations: Boolean = false,
+        ): RepositoryCapabilities {
             val operations = buildSet {
                 addAll(setOf(
                     RepositoryOperation.CONNECT,
@@ -103,8 +144,47 @@ data class RepositoryCapabilities(
                     RepositoryOperation.UPLOAD,
                 ))
                 if (serverSideCopy) add(RepositoryOperation.COPY)
+                if (advancedOperations) addAll(setOf(
+                    RepositoryOperation.SIZE,
+                    RepositoryOperation.SEARCH,
+                    RepositoryOperation.CHECKSUM,
+                ))
             }
-            return RepositoryCapabilities(provider, operations)
+            val semantics = operations.associateWith { operation ->
+                when (operation) {
+                    RepositoryOperation.SIZE,
+                    RepositoryOperation.SEARCH,
+                    RepositoryOperation.CHECKSUM,
+                    -> RepositoryOperationSemantics(
+                        consistency = RepositoryConsistency.POINT_IN_TIME,
+                        cost = RepositoryOperationCost.HIGH,
+                        cancellable = true,
+                        limit = "${RepositoryOperationLimits.MAX_NETWORK_TRAVERSAL_ENTRIES} entries, depth ${RepositoryOperationLimits.MAX_NETWORK_TRAVERSAL_DEPTH}",
+                    )
+                    RepositoryOperation.DOWNLOAD,
+                    RepositoryOperation.UPLOAD,
+                    -> RepositoryOperationSemantics(
+                        consistency = RepositoryConsistency.STRONG,
+                        cost = RepositoryOperationCost.HIGH,
+                        cancellable = true,
+                    )
+                    RepositoryOperation.COPY,
+                    RepositoryOperation.MOVE,
+                    RepositoryOperation.DELETE,
+                    RepositoryOperation.RENAME,
+                    -> RepositoryOperationSemantics(
+                        consistency = RepositoryConsistency.STRONG,
+                        cost = RepositoryOperationCost.MODERATE,
+                        cancellable = true,
+                    )
+                    else -> RepositoryOperationSemantics(
+                        consistency = RepositoryConsistency.STRONG,
+                        cost = RepositoryOperationCost.LOW,
+                        cancellable = true,
+                    )
+                }
+            }
+            return RepositoryCapabilities(provider, operations, semantics)
         }
 
         fun cloud(provider: String): RepositoryCapabilities = RepositoryCapabilities(

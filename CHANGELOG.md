@@ -9,6 +9,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added Android 15/16 upgrade gates for compile/target SDK, exported components, predictive back, backup rules, storage fallbacks, package visibility, and foreground-service timeouts.
 - Added a permission and distribution readiness matrix, a limited app-scoped storage mode when All Files Access is denied, and a launcher-only package visibility fallback for App Manager.
 - Hardened the optional Cast control so unsupported or theme-incompatible media-router widgets degrade to an inert control instead of crashing the browser.
+- Added provider-specific network capability semantics, bounded cancellable recursive size/search/checksum operations, streamed progress verification, and typed unsupported-operation failures for SMB, SFTP, FTP/FTPS, and WebDAV.
 - Hardened ZIP, 7z, TAR, and RAR extraction with shared path containment, depth and resource limits, symlink/hard-link rejection, cancellation checks, and staged commits.
 - Replaced SFTP shell-based copy with SSHJ-native staged transfers and verified rename/move operations, including remote-path safety, timeout, cancellation, and partial-output handling.
 - Made permanent deletion capability-aware: local overwrite is explicitly best effort, unsupported providers cannot claim secure deletion, and the browser reports partial outcomes with an irreversible-action confirmation.

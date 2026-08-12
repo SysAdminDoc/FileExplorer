@@ -5,6 +5,7 @@ import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.model.RepositoryCapabilities
 import com.explorer.fileexplorer.core.model.RepositoryErrorKind
+import com.explorer.fileexplorer.core.model.RepositoryOperationLimits
 import com.explorer.fileexplorer.core.model.RepositoryOperation
 import com.explorer.fileexplorer.core.model.asRepositoryException
 import com.explorer.fileexplorer.core.model.isMissingRepositoryResource
@@ -12,8 +13,13 @@ import com.explorer.fileexplorer.core.model.notConnectedRepositoryException
 import com.explorer.fileexplorer.core.model.repositoryException
 import com.explorer.fileexplorer.core.network.NetworkConnection
 import com.explorer.fileexplorer.core.network.NetworkFileRepository
+import com.explorer.fileexplorer.core.network.NetworkTraversalBudget
+import com.explorer.fileexplorer.core.network.checkedNetworkAdd
+import com.explorer.fileexplorer.core.network.checksumDigest
+import com.explorer.fileexplorer.core.network.checksumHex
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -30,6 +36,7 @@ import net.schmizz.sshj.sftp.Response
 import net.schmizz.sshj.userauth.keyprovider.KeyProvider
 import net.schmizz.sshj.xfer.FileSystemFile
 import java.io.File
+import java.io.FileInputStream
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermission
@@ -42,7 +49,10 @@ class SftpFileRepository @Inject constructor(
     private val diagnosticLog: com.explorer.fileexplorer.core.data.DiagnosticLog,
 ) : NetworkFileRepository {
 
-    override val capabilities: RepositoryCapabilities = RepositoryCapabilities.network("sftp")
+    override val capabilities: RepositoryCapabilities = RepositoryCapabilities.network(
+        provider = "sftp",
+        advancedOperations = true,
+    )
 
     private companion object {
         const val CONNECT_TIMEOUT_MS = 15_000
@@ -152,7 +162,9 @@ class SftpFileRepository @Inject constructor(
         var transferred = 0L
         try {
             ensureRemoteDirectory(s, destination)
-            val totalSize = sources.sumOf { remoteSize(s, it) }
+            val totalSize = sources.fold(0L) { total, source ->
+                checkedNetworkAdd(total, remoteSize(s, source))
+            }
             var count = 0
             for (src in sources) {
                 coroutineContext.ensureActive()
@@ -196,7 +208,9 @@ class SftpFileRepository @Inject constructor(
         )
         try {
             ensureRemoteDirectory(s, destination)
-            val totalSize = sources.sumOf { remoteSize(s, it) }
+            val totalSize = sources.fold(0L) { total, source ->
+                checkedNetworkAdd(total, remoteSize(s, source))
+            }
             var transferred = 0L
             var count = 0
             for (src in sources) {
@@ -277,11 +291,15 @@ class SftpFileRepository @Inject constructor(
         }
     }
 
-    private fun remoteSize(
+    private suspend fun remoteSize(
         sftp: SFTPClient,
         path: String,
         visitedDirectories: MutableSet<String> = mutableSetOf(),
+        budget: NetworkTraversalBudget = NetworkTraversalBudget(),
+        depth: Int = 0,
     ): Long {
+        coroutineContext.ensureActive()
+        budget.visit(depth)
         val attributes = sftp.lstat(path)
         rejectUnsupportedSource(path, attributes)
         return when (attributes.type) {
@@ -295,7 +313,16 @@ class SftpFileRepository @Inject constructor(
                         .asSequence()
                         .filterNot { it.name == "." || it.name == ".." }
                         .fold(0L) { total, entry ->
-                            addSizes(total, remoteSize(sftp, SftpRemotePath.child(path, entry.name)))
+                            checkedNetworkAdd(
+                                total,
+                                remoteSize(
+                                    sftp = sftp,
+                                    path = SftpRemotePath.child(path, entry.name),
+                                    visitedDirectories = visitedDirectories,
+                                    budget = budget,
+                                    depth = depth + 1,
+                                ),
+                            )
                         }
                 } finally {
                     visitedDirectories.remove(path)
@@ -305,11 +332,7 @@ class SftpFileRepository @Inject constructor(
         }
     }
 
-    private fun addSizes(first: Long, second: Long): Long = try {
-        Math.addExact(first, second)
-    } catch (e: ArithmeticException) {
-        throw IOException("Remote transfer size exceeds supported range", e)
-    }
+    private fun addSizes(first: Long, second: Long): Long = checkedNetworkAdd(first, second)
 
     private fun rejectUnsupportedSource(path: String, attributes: FileAttributes) {
         when (attributes.type) {
@@ -609,7 +632,9 @@ class SftpFileRepository @Inject constructor(
                 notConnectedRepositoryException(capabilities.provider, RepositoryOperation.DOWNLOAD),
             )
             val totalSize = s.stat(remotePath).size
+            onProgress(0, totalSize)
             s.get(remotePath, FileSystemFile(localPath))
+            if (File(localPath).length() != totalSize) throw IOException("SFTP download size mismatch")
             onProgress(totalSize, totalSize)
             Result.success(Unit)
         } catch (e: Exception) {
@@ -626,11 +651,110 @@ class SftpFileRepository @Inject constructor(
                 notConnectedRepositoryException(capabilities.provider, RepositoryOperation.UPLOAD),
             )
             val localFile = File(localPath)
+            onProgress(0, localFile.length())
             s.put(FileSystemFile(localFile), remotePath)
             onProgress(localFile.length(), localFile.length())
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e.asRepositoryException(capabilities.provider, RepositoryOperation.UPLOAD))
+        }
+    }
+
+    override suspend fun calculateSize(paths: List<String>): Long = withContext(Dispatchers.IO) {
+        val s = sftp ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.SIZE)
+        try {
+            val budget = NetworkTraversalBudget()
+            paths.fold(0L) { total, path ->
+                coroutineContext.ensureActive()
+                checkedNetworkAdd(total, remoteSize(s, path, budget = budget))
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.SIZE)
+        }
+    }
+
+    override fun search(
+        rootPath: String,
+        query: String,
+        regex: Boolean,
+        includeHidden: Boolean,
+    ): Flow<FileItem> = flow {
+        val s = sftp ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.SEARCH)
+        try {
+            val matcher = if (regex) Regex(query, RegexOption.IGNORE_CASE) else null
+            val pending = ArrayDeque<Pair<String, Int>>()
+            val budget = NetworkTraversalBudget()
+            var resultCount = 0
+            pending.addLast(rootPath to 0)
+            while (pending.isNotEmpty()) {
+                currentCoroutineContext().ensureActive()
+                val (path, depth) = pending.removeLast()
+                budget.visit(depth)
+                val attributes = s.lstat(path)
+                if (attributes.type != FileMode.Type.DIRECTORY) continue
+                for (entry in s.ls(path)) {
+                    currentCoroutineContext().ensureActive()
+                    if (entry.name == "." || entry.name == ".." || entry.attributes.type == FileMode.Type.SYMLINK) continue
+                    val item = remoteInfoToFileItem(entry, path)
+                    val matches = if (matcher != null) matcher.containsMatchIn(item.name)
+                    else item.name.contains(query, ignoreCase = true)
+                    if (matches && (includeHidden || !item.isHidden)) {
+                        resultCount++
+                        if (resultCount > RepositoryOperationLimits.MAX_NETWORK_SEARCH_RESULTS) {
+                            throw IOException("Remote search exceeded ${RepositoryOperationLimits.MAX_NETWORK_SEARCH_RESULTS} results")
+                        }
+                        emit(item)
+                    }
+                    if (entry.attributes.type == FileMode.Type.DIRECTORY) {
+                        pending.addLast(SftpRemotePath.child(path, entry.name) to (depth + 1))
+                    }
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.SEARCH)
+        }
+    }.flowOn(Dispatchers.IO)
+
+    override suspend fun getChecksum(path: String, algorithm: String): String = withContext(Dispatchers.IO) {
+        val s = sftp ?: throw notConnectedRepositoryException(capabilities.provider, RepositoryOperation.CHECKSUM)
+        val staging = try {
+            Files.createTempFile("fileexplorer-sftp-checksum-", ".part").toFile()
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.CHECKSUM)
+        }
+        try {
+            val expectedSize = s.stat(path).size.coerceAtLeast(0L)
+            if (expectedSize > RepositoryOperationLimits.MAX_NETWORK_CHECKSUM_BYTES) {
+                throw IOException("Remote checksum exceeds ${RepositoryOperationLimits.MAX_NETWORK_CHECKSUM_BYTES} bytes")
+            }
+            coroutineContext.ensureActive()
+            s.get(path, FileSystemFile(staging))
+            val digest = checksumDigest(algorithm)
+            var readBytes = 0L
+            FileInputStream(staging).use { input ->
+                val buffer = ByteArray(64 * 1024)
+                var read: Int
+                while (input.read(buffer).also { read = it } != -1) {
+                    coroutineContext.ensureActive()
+                    readBytes += read
+                    if (readBytes > RepositoryOperationLimits.MAX_NETWORK_CHECKSUM_BYTES) {
+                        throw IOException("Remote checksum exceeds ${RepositoryOperationLimits.MAX_NETWORK_CHECKSUM_BYTES} bytes")
+                    }
+                    digest.update(buffer, 0, read)
+                }
+            }
+            if (readBytes != expectedSize) throw IOException("SFTP checksum source changed during download")
+            checksumHex(digest)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw e.asRepositoryException(capabilities.provider, RepositoryOperation.CHECKSUM)
+        } finally {
+            staging.delete()
         }
     }
 

@@ -9,6 +9,7 @@ import com.explorer.fileexplorer.core.model.mapRepositoryFailure
 import com.explorer.fileexplorer.core.model.unsupportedRepositoryOperation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flow
 
 interface NetworkRepoProvider {
@@ -24,6 +25,21 @@ interface NetworkRepoProvider {
     suspend fun deleteFiles(paths: List<String>, onProgress: (String) -> Unit): Result<Int>
     suspend fun createDirectory(path: String): Result<FileItem>
     suspend fun rename(path: String, newName: String): Result<FileItem>
+
+    suspend fun calculateSize(paths: List<String>): Long =
+        throw unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.SIZE)
+
+    fun search(
+        rootPath: String,
+        query: String,
+        regex: Boolean,
+        includeHidden: Boolean,
+    ): Flow<FileItem> = flow {
+        throw unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.SEARCH)
+    }
+
+    suspend fun getChecksum(path: String, algorithm: String): String =
+        throw unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.CHECKSUM)
 }
 
 class NetworkRepoAdapter(private val delegate: NetworkRepoProvider) : FileRepository {
@@ -66,15 +82,20 @@ class NetworkRepoAdapter(private val delegate: NetworkRepoProvider) : FileReposi
         delegate.rename(path, newName)
             .mapRepositoryFailure(capabilities.provider, RepositoryOperation.RENAME)
 
-    override suspend fun calculateSize(paths: List<String>): Long =
-        throw unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.SIZE)
+    override suspend fun calculateSize(paths: List<String>): Long = call(RepositoryOperation.SIZE) {
+        delegate.calculateSize(paths)
+    }
 
     override fun search(rootPath: String, query: String, regex: Boolean, includeHidden: Boolean): Flow<FileItem> = flow {
-        throw unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.SEARCH)
+        try {
+            delegate.search(rootPath, query, regex, includeHidden).collect { emit(it) }
+        } catch (error: Throwable) {
+            throw error.asRepositoryException(capabilities.provider, RepositoryOperation.SEARCH)
+        }
     }
 
     override suspend fun getChecksum(path: String, algorithm: String): String =
-        throw unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.CHECKSUM)
+        call(RepositoryOperation.CHECKSUM) { delegate.getChecksum(path, algorithm) }
 
     private suspend fun <T> call(operation: RepositoryOperation, block: suspend () -> T): T = try {
         block()
