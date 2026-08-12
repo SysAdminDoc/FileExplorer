@@ -395,6 +395,71 @@ val verifyDependencyProvenance = tasks.register("verifyDependencyProvenance") {
     }
 }
 
+val verifyExportedSurfaceSmoke = tasks.register("verifyExportedSurfaceSmoke") {
+    group = "verification"
+    description = "Checks the manifest contract for exported Android and system-facing surfaces."
+    doLast {
+        val manifestFile = rootProject.file("app/src/main/AndroidManifest.xml")
+        check(manifestFile.isFile) { "Missing application manifest: ${manifestFile.path}" }
+        val manifest = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(manifestFile)
+        val components = listOf("activity", "service", "provider").flatMap { elements(manifest, it) }
+        fun component(suffix: String): Element = components.firstOrNull {
+            androidAttribute(it, "name").endsWith(suffix)
+        } ?: error("Manifest is missing $suffix")
+
+        check(androidAttribute(component("MainActivity"), "exported") == "true") {
+            "MainActivity must remain an exported launcher"
+        }
+        val tile = component("ShareServerTileService")
+        check(androidAttribute(tile, "exported") == "true" &&
+            androidAttribute(tile, "permission") == "android.permission.BIND_QUICK_SETTINGS_TILE"
+        ) { "Quick Settings tile must be explicitly exported with its binding permission" }
+        listOf("TransferService", "ShareServerService").forEach { suffix ->
+            check(androidAttribute(component(suffix), "exported") == "false") {
+                "$suffix must remain internal"
+            }
+        }
+        val fileProvider = component("androidx.core.content.FileProvider")
+        check(androidAttribute(fileProvider, "exported") == "false" &&
+            androidAttribute(fileProvider, "grantUriPermissions") == "true"
+        ) { "FileProvider must be private and grant URI permissions explicitly" }
+        val documentsProvider = component("FileDocumentsProvider")
+        check(androidAttribute(documentsProvider, "exported") == "true" &&
+            androidAttribute(documentsProvider, "permission") == "android.permission.MANAGE_DOCUMENTS" &&
+            androidAttribute(documentsProvider, "grantUriPermissions") == "true"
+        ) { "DocumentsProvider must expose only the managed SAF surface" }
+
+        val application = elements(manifest, "application").single()
+        check(
+            elements(application.ownerDocument, "meta-data").any { metadata ->
+                metadata.parentNode == application &&
+                    androidAttribute(metadata, "name") ==
+                    "com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            },
+        ) { "Cast options provider metadata is missing" }
+        logger.lifecycle("Exported surface manifest smoke passed for ${components.size} components")
+    }
+}
+
+val releaseSmoke = tasks.register("releaseSmoke") {
+    group = "verification"
+    description = "Builds and installs the debug artifact, then runs exported-surface and API-level smoke tests."
+    dependsOn(
+        verifyExportedSurfaceSmoke,
+        verifyAccessibilityLocalization,
+        verifyAndroidUpgradeReadiness,
+        ":app:assembleDebug",
+        ":app:connectedDebugAndroidTest",
+    )
+    doLast {
+        val artifact = rootProject.file("app/build/outputs/apk/debug/app-debug.apk")
+        check(artifact.isFile && artifact.length() > 0L) {
+            "Debug smoke artifact is missing or empty: ${artifact.path}"
+        }
+        logger.lifecycle("Release smoke passed with ${artifact.length()}-byte debug APK")
+    }
+}
+
 val scanDependencyAdvisories = tasks.register("scanDependencyAdvisories") {
     group = "verification"
     description = "Scans the resolved production Maven graph against OSV and fails on untriaged advisories."

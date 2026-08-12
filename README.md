@@ -271,12 +271,15 @@ Run the local policy checks before a release:
 ```powershell
 .\gradlew.bat verifyAndroidUpgradeReadiness verifyDependencyProvenance
 .\gradlew.bat scanDependencyAdvisories
+.\gradlew.bat releaseSmoke
 ```
 
 The first command checks Android 15/16 SDK, manifest, backup, storage, predictive-back,
 and foreground-service timeout requirements. The advisory task resolves the release
 runtime graph and queries OSV; use `-PosvAllowlist=OSV-ID,...` only for an explicitly
-triaged release decision.
+triaged release decision. `releaseSmoke` additionally validates exported components,
+builds and installs the debug artifact on a connected emulator, checks picker/share/
+DocumentsProvider/Quick Settings entry points, and recreates the main activity.
 
 ## Remote capability semantics
 
