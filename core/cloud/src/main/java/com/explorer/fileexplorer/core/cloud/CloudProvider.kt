@@ -3,7 +3,12 @@ package com.explorer.fileexplorer.core.cloud
 import android.content.Context
 import android.util.Log
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.model.CapabilityAssessment
+import com.explorer.fileexplorer.core.model.CapabilityStatus
 import com.explorer.fileexplorer.core.model.RepositoryCapabilities
+import com.explorer.fileexplorer.core.model.RepositoryCapabilityMatrix
+import com.explorer.fileexplorer.core.model.RepositoryFeature
+import com.explorer.fileexplorer.core.model.RepositoryOperation
 import com.explorer.fileexplorer.core.storage.CredentialCipher
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -32,6 +37,7 @@ enum class CloudAuthState {
 data class CloudServiceStatus(
     val service: CloudService,
     val state: CloudAuthState,
+    val capabilityMatrix: RepositoryCapabilityMatrix = RepositoryCapabilityMatrix.unavailable(service.name.lowercase()),
 )
 
 /** Persisted cloud account info. */
@@ -106,13 +112,93 @@ fun resolveCloudServiceStatus(
     provider: CloudProvider?,
     accounts: List<CloudAccount>,
 ): CloudServiceStatus {
-    if (provider == null) return CloudServiceStatus(service, CloudAuthState.UNAVAILABLE)
+    val baseMatrix = RepositoryCapabilityMatrix.from(
+        provider?.capabilities ?: RepositoryCapabilities.unsupported(service.name.lowercase()),
+        service.name,
+    )
+    if (provider == null) {
+        return CloudServiceStatus(
+            service = service,
+            state = CloudAuthState.UNAVAILABLE,
+            capabilityMatrix = baseMatrix.withFeature(
+                RepositoryFeature.CLOUD_SIGN_IN,
+                CapabilityAssessment(
+                    status = CapabilityStatus.UNAVAILABLE,
+                    reason = "${service.displayName} provider is not installed",
+                    operation = RepositoryOperation.AUTHENTICATE,
+                ),
+            ),
+        )
+    }
     val hasToken = accounts.any {
         it.service == service && (it.accessToken.isNotBlank() || it.refreshToken.isNotBlank())
     }
+    val state = if (hasToken) CloudAuthState.SIGNED_IN else provider.readiness
+    val signInAssessment = when (state) {
+        CloudAuthState.VERIFIED,
+        CloudAuthState.SIGNED_IN,
+        -> CapabilityAssessment(
+            status = CapabilityStatus.VERIFIED,
+            reason = if (state == CloudAuthState.SIGNED_IN) {
+                "${service.displayName} has a signed-in account"
+            } else {
+                "${service.displayName} sign-in is verified"
+            },
+            operation = RepositoryOperation.AUTHENTICATE,
+        )
+        CloudAuthState.REQUIRES_CONFIGURATION -> CapabilityAssessment(
+            status = CapabilityStatus.CONFIGURATION_REQUIRED,
+            reason = "${service.displayName} requires OAuth configuration",
+            operation = RepositoryOperation.AUTHENTICATE,
+        )
+        CloudAuthState.UNAVAILABLE -> CapabilityAssessment(
+            status = CapabilityStatus.UNAVAILABLE,
+            reason = "${service.displayName} sign-in is unavailable",
+            operation = RepositoryOperation.AUTHENTICATE,
+        )
+    }
+    val authenticatedMatrix = if (state == CloudAuthState.SIGNED_IN) {
+        baseMatrix
+    } else {
+        val gateStatus = if (state == CloudAuthState.UNAVAILABLE) {
+            CapabilityStatus.UNAVAILABLE
+        } else {
+            CapabilityStatus.CONFIGURATION_REQUIRED
+        }
+        val gateReason = if (state == CloudAuthState.UNAVAILABLE) {
+            "${service.displayName} operations are unavailable"
+        } else {
+            "Sign in to ${service.displayName} before using cloud file operations"
+        }
+        val gatedOperations = listOf(
+            RepositoryOperation.LIST,
+            RepositoryOperation.DOWNLOAD,
+            RepositoryOperation.UPLOAD,
+            RepositoryOperation.DELETE,
+            RepositoryOperation.RENAME,
+            RepositoryOperation.CREATE_FOLDER,
+            RepositoryOperation.QUOTA,
+        )
+        gatedOperations.fold(baseMatrix) { matrix, operation ->
+            if (!matrix.isActionEnabled(operation)) matrix else matrix.withOperation(
+                operation,
+                CapabilityAssessment(status = gateStatus, reason = gateReason, operation = operation),
+            )
+        }.let { matrix ->
+            if (matrix.isActionEnabled(RepositoryFeature.WRITE)) {
+                matrix.withFeature(
+                    RepositoryFeature.WRITE,
+                    CapabilityAssessment(status = gateStatus, reason = gateReason),
+                )
+            } else {
+                matrix
+            }
+        }
+    }
     return CloudServiceStatus(
         service = service,
-        state = if (hasToken) CloudAuthState.SIGNED_IN else provider.readiness,
+        state = state,
+        capabilityMatrix = authenticatedMatrix.withFeature(RepositoryFeature.CLOUD_SIGN_IN, signInAssessment),
     )
 }
 

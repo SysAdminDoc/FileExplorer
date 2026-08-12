@@ -68,6 +68,7 @@ data class PermanentDeleteConfirmation(
 
 data class BrowserUiState(
     val currentPath: String = Environment.getExternalStorageDirectory().absolutePath,
+    val capabilityMatrix: RepositoryCapabilityMatrix = RepositoryCapabilityMatrix.unavailable(),
     val files: List<FileItem> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -113,6 +114,7 @@ data class BrowserUiState(
     val swipeRightAction: SwipeAction = SwipeAction.NONE,
     val dualPaneEnabled: Boolean = false,
     val secondaryPath: String = Environment.getExternalStorageDirectory().absolutePath,
+    val secondaryCapabilityMatrix: RepositoryCapabilityMatrix = RepositoryCapabilityMatrix.unavailable(),
     val secondaryFiles: List<FileItem> = emptyList(),
     val secondaryIsLoading: Boolean = false,
     val secondaryError: String? = null,
@@ -177,6 +179,7 @@ class BrowserViewModel @Inject constructor(
     private val integrityRepository: IntegrityRepository,
     private val tagRepository: TagRepository,
     private val transferQueueManager: TransferQueueManager,
+    private val diagnosticLog: com.explorer.fileexplorer.core.data.DiagnosticLog,
     private val castMediaSender: CastMediaSender,
     private val bookmarkDao: BookmarkDao,
     private val savedSearchDao: SavedSearchDao,
@@ -279,7 +282,7 @@ class BrowserViewModel @Inject constructor(
         secondary: Boolean,
     ) {
         val directories = files.filter(FileItem::isDirectory).map(FileItem::path)
-        val supportsSize = repository.capabilities.supports(RepositoryOperation.SIZE)
+        val supportsSize = repository.capabilityMatrix(path).isActionEnabled(RepositoryOperation.SIZE)
         val unavailable = if (supportsSize) emptySet() else directories.toSet()
         val loading = if (_state.value.showDirectorySizes && supportsSize) directories.toSet() else emptySet()
 
@@ -399,6 +402,9 @@ class BrowserViewModel @Inject constructor(
                 )
             }
             val repo = repoFactory.getRepository(path)
+            val capabilityMatrix = repo.capabilityMatrix(path)
+            diagnosticLog.logCapabilities(capabilityMatrix)
+            _state.update { it.copy(capabilityMatrix = capabilityMatrix) }
             try {
                 repo.listFiles(path).collect { files ->
                     val sorted = sortFiles(files, preferences.sortOrder, _state.value.showHidden)
@@ -483,6 +489,9 @@ class BrowserViewModel @Inject constructor(
             }
             try {
                 val repository = repoFactory.getRepository(path)
+                val capabilityMatrix = repository.capabilityMatrix(path)
+                diagnosticLog.logCapabilities(capabilityMatrix)
+                _state.update { it.copy(secondaryCapabilityMatrix = capabilityMatrix) }
                 repository.listFiles(path).collect { files ->
                     val sorted = sortFiles(files, _state.value.sortOrder, _state.value.showHidden)
                     _state.update {
@@ -670,6 +679,14 @@ class BrowserViewModel @Inject constructor(
 
     fun confirmDrop(move: Boolean) {
         val request = _state.value.pendingDrop ?: return
+        val operation = if (move) RepositoryOperation.MOVE else RepositoryOperation.COPY
+        val matrix = repoFactory.getRepository(request.destinationPath).capabilityMatrix(request.destinationPath)
+        diagnosticLog.logCapabilities(matrix)
+        if (!matrix.isActionEnabled(operation)) {
+            viewModelScope.launch { _events.emit(BrowserEvent.Toast(matrix.explanation(operation))) }
+            _state.update { it.copy(pendingDrop = null) }
+            return
+        }
         _state.update { it.copy(pendingDrop = null) }
         transferQueueManager.enqueue(
             operation = if (move) FileOperation.MOVE else FileOperation.COPY,
@@ -722,6 +739,9 @@ class BrowserViewModel @Inject constructor(
             val preferences = DirectoryViewPreferenceCodec.decode(directoryViewPreferenceDao.getByPath(path))
             _state.update { it.copy(isLoading = true, selectedItems = emptySet()) }
             val repository = repoFactory.getRepository(path)
+            val capabilityMatrix = repository.capabilityMatrix(path)
+            diagnosticLog.logCapabilities(capabilityMatrix)
+            _state.update { it.copy(capabilityMatrix = capabilityMatrix) }
             try {
                 repository.listFiles(path).collect { files ->
                     val sorted = sortFiles(files, preferences.sortOrder, _state.value.showHidden)
@@ -753,9 +773,12 @@ class BrowserViewModel @Inject constructor(
             _state.update { it.copy(isLoading = true) }
             try {
                 val entries = archiveHelper.listArchive(archivePath, internalPath)
+                val capabilityMatrix = repoFactory.getRepository(archivePath).capabilityMatrix(archivePath)
+                diagnosticLog.logCapabilities(capabilityMatrix)
                 _state.update { it.copy(files = entries, isLoading = false, insideArchive = true,
                     archivePath = archivePath, archiveInternalPath = internalPath,
                     currentPath = "$archivePath/$internalPath".trimEnd('/'),
+                    capabilityMatrix = capabilityMatrix,
                     directorySizes = emptyMap(),
                     directorySizesLoading = emptySet(),
                     directorySizesUnavailable = emptySet()) }
@@ -790,6 +813,7 @@ class BrowserViewModel @Inject constructor(
         }
         when (action) {
             SwipeAction.DELETE -> {
+                if (!canUseFeature(RepositoryFeature.TRASH)) return
                 if (_state.value.confirmDelete) {
                     _state.update { it.copy(deleteConfirmationItem = item) }
                 } else {
@@ -828,6 +852,12 @@ class BrowserViewModel @Inject constructor(
         val archive = archivePath ?: _state.value.archivePath ?: return
         val dest = destination ?: _state.value.currentPath
         viewModelScope.launch {
+            val matrix = repoFactory.getRepository(archive).capabilityMatrix(archive)
+            diagnosticLog.logCapabilities(matrix)
+            if (!matrix.isActionEnabled(RepositoryFeature.ARCHIVE_EXTRACTION)) {
+                _events.emit(BrowserEvent.Toast(matrix.explanation(RepositoryFeature.ARCHIVE_EXTRACTION)))
+                return@launch
+            }
             _events.emit(BrowserEvent.Toast("Extracting..."))
             archiveHelper.extract(archive, dest)
                 .onSuccess { count -> _events.emit(BrowserEvent.Toast("Extracted $count items")) }
@@ -841,6 +871,12 @@ class BrowserViewModel @Inject constructor(
         if (items.isEmpty()) return
         val outputPath = "${_state.value.currentPath}/$outputName.${format.extension}"
         viewModelScope.launch {
+            val matrix = repoFactory.getRepository(outputPath).capabilityMatrix(outputPath)
+            diagnosticLog.logCapabilities(matrix)
+            if (!matrix.isActionEnabled(RepositoryFeature.ARCHIVE_CREATION)) {
+                _events.emit(BrowserEvent.Toast(matrix.explanation(RepositoryFeature.ARCHIVE_CREATION)))
+                return@launch
+            }
             _events.emit(BrowserEvent.Toast("Compressing..."))
             archiveHelper.createArchive(outputPath, items.map { it.path }, format, password)
                 .onSuccess { _events.emit(BrowserEvent.Toast("Archive created")); clearSelection(); refresh() }
@@ -852,6 +888,12 @@ class BrowserViewModel @Inject constructor(
         val paths = getSelectedFileItems().map { it.path }
         if (paths.isEmpty()) return
         viewModelScope.launch {
+            val matrix = repoFactory.getRepository(paths.first()).capabilityMatrix(paths.first(), paths)
+            diagnosticLog.logCapabilities(matrix)
+            if (!matrix.isActionEnabled(RepositoryFeature.CHECKSUMS)) {
+                _events.emit(BrowserEvent.Toast(matrix.explanation(RepositoryFeature.CHECKSUMS)))
+                return@launch
+            }
             var watched = 0
             var failed = 0
             paths.forEach { path ->
@@ -928,18 +970,22 @@ class BrowserViewModel @Inject constructor(
 
     fun copySelected() {
         val items = getSelectedFileItems()
+        if (!canUseOperation(RepositoryOperation.COPY)) return
         _state.update { it.copy(clipboard = ClipboardContent(items, FileOperation.COPY, it.currentPath), selectedItems = emptySet()) }
         viewModelScope.launch { _events.emit(BrowserEvent.Toast("${items.size} items copied")) }
     }
 
     fun cutSelected() {
         val items = getSelectedFileItems()
+        if (!canUseOperation(RepositoryOperation.MOVE)) return
         _state.update { it.copy(clipboard = ClipboardContent(items, FileOperation.MOVE, it.currentPath), selectedItems = emptySet()) }
         viewModelScope.launch { _events.emit(BrowserEvent.Toast("${items.size} items cut")) }
     }
 
     fun paste() {
         val cb = _state.value.clipboard; if (cb.isEmpty) return
+        val operation = if (cb.isCut) RepositoryOperation.MOVE else RepositoryOperation.COPY
+        if (!canUseOperation(operation, _state.value.currentPath)) return
         transferQueueManager.enqueue(
             operation = if (cb.isCut) FileOperation.MOVE else FileOperation.COPY,
             sourcePaths = cb.items.map { it.path },
@@ -960,6 +1006,12 @@ class BrowserViewModel @Inject constructor(
         if (paths.isEmpty()) return
         viewModelScope.launch {
             val repo = repoFactory.getRepository(paths.first())
+            val matrix = repo.capabilityMatrix(paths.first(), paths)
+            diagnosticLog.logCapabilities(matrix)
+            if (!matrix.isActionEnabled(RepositoryOperation.DELETE)) {
+                _events.emit(BrowserEvent.Toast(matrix.explanation(RepositoryOperation.DELETE)))
+                return@launch
+            }
             val capabilities = repo.deleteCapabilities(paths)
             if (!capabilities.supportsPermanentDelete) {
                 _events.emit(BrowserEvent.Toast("Permanent deletion is not supported by this provider"))
@@ -1004,6 +1056,12 @@ class BrowserViewModel @Inject constructor(
             if (paths.isEmpty()) return@launch
 
             if (useTrash) {
+                val matrix = repoFactory.getRepository(paths.first()).capabilityMatrix(paths.first(), paths)
+                diagnosticLog.logCapabilities(matrix)
+                if (!matrix.isActionEnabled(RepositoryFeature.TRASH)) {
+                    _events.emit(BrowserEvent.Toast(matrix.explanation(RepositoryFeature.TRASH)))
+                    return@launch
+                }
                 if (repoFactory.getRepository(paths.first()) !is LocalFileRepository) {
                     _events.emit(BrowserEvent.Toast("Trash is only available for local storage"))
                     return@launch
@@ -1065,7 +1123,14 @@ class BrowserViewModel @Inject constructor(
 
     fun rename(path: String, newName: String) {
         viewModelScope.launch {
-            repoFactory.getRepository(path).rename(path, newName)
+            val repository = repoFactory.getRepository(path)
+            val matrix = repository.capabilityMatrix(path)
+            diagnosticLog.logCapabilities(matrix)
+            if (!matrix.isActionEnabled(RepositoryOperation.RENAME)) {
+                _events.emit(BrowserEvent.Toast(matrix.explanation(RepositoryOperation.RENAME)))
+                return@launch
+            }
+            repository.rename(path, newName)
                 .onSuccess { _state.update { it.copy(renameItem = null) }; refresh() }
                 .onFailure { e -> _events.emit(BrowserEvent.Toast("Rename failed: ${e.message}")) }
         }
@@ -1101,6 +1166,12 @@ class BrowserViewModel @Inject constructor(
             val staged = mutableListOf<StagedRename>()
             try {
                 val repository = repoFactory.getRepository(snapshot.currentPath)
+                val matrix = repository.capabilityMatrix(snapshot.currentPath)
+                diagnosticLog.logCapabilities(matrix)
+                if (!matrix.isActionEnabled(RepositoryOperation.RENAME)) {
+                    _events.emit(BrowserEvent.Toast(matrix.explanation(RepositoryOperation.RENAME)))
+                    return@launch
+                }
                 val changedSources = preview.changedItems.map { it.item.path }.toSet()
                 val conflict = preview.changedItems.firstOrNull { operation ->
                     operation.targetPath !in changedSources && repository.exists(operation.targetPath)
@@ -1153,10 +1224,39 @@ class BrowserViewModel @Inject constructor(
             } else {
                 "${_state.value.currentPath}/$name"
             }
-            repoFactory.getRepository(path).createDirectory(path)
+            val repository = repoFactory.getRepository(path)
+            val matrix = repository.capabilityMatrix(path)
+            diagnosticLog.logCapabilities(matrix)
+            if (!matrix.isActionEnabled(RepositoryOperation.CREATE_DIRECTORY)) {
+                _events.emit(BrowserEvent.Toast(matrix.explanation(RepositoryOperation.CREATE_DIRECTORY)))
+                return@launch
+            }
+            repository.createDirectory(path)
                 .onSuccess { _state.update { it.copy(showNewFolderDialog = false) }; refresh() }
                 .onFailure { e -> _events.emit(BrowserEvent.Toast("Create failed: ${e.message}")) }
         }
+    }
+
+    private fun canUseOperation(
+        operation: RepositoryOperation,
+        path: String = _state.value.currentPath,
+    ): Boolean {
+        val matrix = repoFactory.getRepository(path).capabilityMatrix(path)
+        diagnosticLog.logCapabilities(matrix)
+        if (matrix.isActionEnabled(operation)) return true
+        viewModelScope.launch { _events.emit(BrowserEvent.Toast(matrix.explanation(operation))) }
+        return false
+    }
+
+    private fun canUseFeature(
+        feature: RepositoryFeature,
+        path: String = _state.value.currentPath,
+    ): Boolean {
+        val matrix = repoFactory.getRepository(path).capabilityMatrix(path)
+        diagnosticLog.logCapabilities(matrix)
+        if (matrix.isActionEnabled(feature)) return true
+        viewModelScope.launch { _events.emit(BrowserEvent.Toast(matrix.explanation(feature))) }
+        return false
     }
 
     fun showNewFolderDialog() { _state.update { it.copy(showNewFolderDialog = true) } }

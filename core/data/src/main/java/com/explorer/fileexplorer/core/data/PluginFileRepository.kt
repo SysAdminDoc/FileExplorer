@@ -24,7 +24,10 @@ class PluginFileRepository(
     private val descriptor: PluginDescriptor,
 ) : FileRepository {
 
-    override val capabilities: RepositoryCapabilities = RepositoryCapabilities.local("plugin:${descriptor.id}")
+    override val capabilities: RepositoryCapabilities = RepositoryCapabilities.local(
+        provider = "plugin:${descriptor.id}",
+        kind = com.explorer.fileexplorer.core.model.RepositoryProviderKind.PLUGIN,
+    )
 
     override fun listFiles(path: String): Flow<List<FileItem>> = flow {
         emit(PluginFileCodec.entries(execute(RepositoryOperation.LIST, PluginRequests.list(path))))

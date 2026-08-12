@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import com.explorer.fileexplorer.core.model.RepositoryError
+import com.explorer.fileexplorer.core.model.RepositoryCapabilityMatrix
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -25,6 +26,7 @@ data class DiagnosticEntry(
 class DiagnosticLog @Inject constructor() {
     private val maxEntries = 200
     private val _entries = MutableStateFlow<List<DiagnosticEntry>>(emptyList())
+    private var lastCapabilitySnapshot: String? = null
     val entries: Flow<List<DiagnosticEntry>> = _entries.asStateFlow()
 
     fun log(provider: String, operation: String, error: Throwable, detail: String = "") {
@@ -40,11 +42,16 @@ class DiagnosticLog @Inject constructor() {
     }
 
     fun log(provider: String, operation: String, message: String) {
+        log(provider, operation, message, detail = "")
+    }
+
+    fun log(provider: String, operation: String, message: String, detail: String) {
         val entry = DiagnosticEntry(
             timestamp = System.currentTimeMillis(),
             provider = provider,
             operation = operation,
             error = redactSecrets(message),
+            detail = redactSecrets(detail),
         )
         _entries.value = (_entries.value + entry).takeLast(maxEntries)
     }
@@ -62,6 +69,21 @@ class DiagnosticLog @Inject constructor() {
             detail = redactSecrets(detail),
         )
         _entries.value = (_entries.value + entry).takeLast(maxEntries)
+    }
+
+    /** Records one deduplicated provider/location capability snapshot for diagnostics export. */
+    fun logCapabilities(matrix: RepositoryCapabilityMatrix, detail: String = "") {
+        val summary = matrix.diagnosticSummary()
+        synchronized(this) {
+            if (summary == lastCapabilitySnapshot) return
+            lastCapabilitySnapshot = summary
+        }
+        log(
+            provider = matrix.provider,
+            operation = "CAPABILITY_MATRIX",
+            message = summary,
+            detail = detail,
+        )
     }
 
     suspend fun exportToString(): String = withContext(Dispatchers.IO) {

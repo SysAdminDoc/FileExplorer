@@ -2,6 +2,8 @@ package com.explorer.fileexplorer.core.cloud
 
 import android.content.Intent
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.model.CapabilityStatus
+import com.explorer.fileexplorer.core.model.RepositoryFeature
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlin.test.Test
@@ -13,6 +15,10 @@ class CloudProviderStatusTest {
         val status = resolveCloudServiceStatus(CloudService.GOOGLE_DRIVE, null, emptyList())
 
         assertEquals(CloudAuthState.UNAVAILABLE, status.state)
+        assertEquals(
+            CapabilityStatus.UNAVAILABLE,
+            status.capabilityMatrix.featureStatus(RepositoryFeature.WRITE).status,
+        )
     }
 
     @Test
@@ -22,6 +28,14 @@ class CloudProviderStatusTest {
         val status = resolveCloudServiceStatus(provider.service, provider, emptyList())
 
         assertEquals(CloudAuthState.VERIFIED, status.state)
+        assertEquals(
+            CapabilityStatus.VERIFIED,
+            status.capabilityMatrix.featureStatus(RepositoryFeature.CLOUD_SIGN_IN).status,
+        )
+        assertEquals(
+            CapabilityStatus.CONFIGURATION_REQUIRED,
+            status.capabilityMatrix.featureStatus(RepositoryFeature.WRITE).status,
+        )
     }
 
     @Test
@@ -38,6 +52,14 @@ class CloudProviderStatusTest {
         val status = resolveCloudServiceStatus(provider.service, provider, listOf(account))
 
         assertEquals(CloudAuthState.SIGNED_IN, status.state)
+        assertEquals(
+            CapabilityStatus.VERIFIED,
+            status.capabilityMatrix.featureStatus(RepositoryFeature.CLOUD_SIGN_IN).status,
+        )
+        assertEquals(
+            CapabilityStatus.VERIFIED,
+            status.capabilityMatrix.featureStatus(RepositoryFeature.WRITE).status,
+        )
     }
 
     private class FakeProvider(

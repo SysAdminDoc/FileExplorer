@@ -1,6 +1,7 @@
 package com.explorer.fileexplorer.feature.settings
 
 import android.widget.Toast
+import android.os.Environment
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -31,6 +32,11 @@ import com.explorer.fileexplorer.core.data.LocalTrashManager
 import com.explorer.fileexplorer.core.data.PortableSettings
 import com.explorer.fileexplorer.core.data.PortableSettingsPolicy
 import com.explorer.fileexplorer.core.data.PortableSettingsStore
+import com.explorer.fileexplorer.core.data.FileRepositoryFactory
+import com.explorer.fileexplorer.core.cloud.CloudAccountManager
+import com.explorer.fileexplorer.core.model.CapabilityStatus
+import com.explorer.fileexplorer.core.model.RepositoryCapabilityMatrix
+import com.explorer.fileexplorer.core.model.RepositoryFeature
 import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.designsystem.ThemeMode
 import com.explorer.fileexplorer.plugin.PluginDescriptor
@@ -104,6 +110,11 @@ object ThumbnailCacheSettings {
             .putString(PREF_LOCATION, location.key)
             .commit()
 }
+
+data class CapabilityMatrixRow(
+    val label: String,
+    val matrix: RepositoryCapabilityMatrix,
+)
 
 enum class SwipeAction(@androidx.annotation.StringRes val labelRes: Int, @androidx.annotation.StringRes val descriptionRes: Int) {
     NONE(DesignSystemR.string.no_action, DesignSystemR.string.leave_row_in_place),
@@ -277,12 +288,16 @@ class SettingsViewModel @Inject constructor(
     private val repo: SettingsRepository,
     private val backupManager: BackupManager,
     private val diagnosticLog: com.explorer.fileexplorer.core.data.DiagnosticLog,
+    private val repositoryFactory: FileRepositoryFactory,
+    private val cloudAccountManager: CloudAccountManager,
     private val pluginManager: PluginManager,
     @ApplicationContext private val context: android.content.Context,
 ) : ViewModel() {
     val state = repo.settings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsState())
     private val _plugins = MutableStateFlow<List<PluginDescriptor>>(emptyList())
     val plugins: StateFlow<List<PluginDescriptor>> = _plugins.asStateFlow()
+    private val _capabilityMatrix = MutableStateFlow<List<CapabilityMatrixRow>>(emptyList())
+    val capabilityMatrix: StateFlow<List<CapabilityMatrixRow>> = _capabilityMatrix.asStateFlow()
 
     private val _toasts = kotlinx.coroutines.flow.MutableSharedFlow<String>()
     val toasts: kotlinx.coroutines.flow.SharedFlow<String> = _toasts.asSharedFlow()
@@ -290,7 +305,25 @@ class SettingsViewModel @Inject constructor(
     val importPreview: StateFlow<BackupPreview?> = _importPreview.asStateFlow()
     private var preparedBackup: com.explorer.fileexplorer.core.data.PreparedBackup? = null
 
-    init { refreshPlugins() }
+    init {
+        refreshPlugins()
+        refreshCapabilityMatrix()
+    }
+
+    fun refreshCapabilityMatrix() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val localPath = Environment.getExternalStorageDirectory().absolutePath
+            val localRepository = repositoryFactory.getRepository(localPath)
+            val rows = buildList {
+                add(CapabilityMatrixRow("Local storage", localRepository.capabilityMatrix(localPath)))
+                cloudAccountManager.statuses().forEach { (service, status) ->
+                    add(CapabilityMatrixRow(service.displayName, status.capabilityMatrix))
+                }
+            }
+            rows.forEach { row -> diagnosticLog.logCapabilities(row.matrix, "settings capability matrix") }
+            _capabilityMatrix.value = rows
+        }
+    }
 
     fun refreshPlugins() {
         viewModelScope.launch(Dispatchers.IO) { _plugins.value = pluginManager.discover() }
@@ -412,6 +445,7 @@ fun SettingsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val plugins by viewModel.plugins.collectAsStateWithLifecycle()
+    val capabilityMatrix by viewModel.capabilityMatrix.collectAsStateWithLifecycle()
     val importPreview by viewModel.importPreview.collectAsStateWithLifecycle()
     val appContext = LocalContext.current
 
@@ -587,6 +621,10 @@ fun SettingsScreen(
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
+            CapabilityMatrixPanel(rows = capabilityMatrix)
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
             // About
             Text(
                 text = stringResource(DesignSystemR.string.about).uppercase(),
@@ -626,6 +664,52 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = viewModel::cancelImport) {
                     Text(stringResource(DesignSystemR.string.cancel))
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun CapabilityMatrixPanel(rows: List<CapabilityMatrixRow>) {
+    Text(
+        text = stringResource(DesignSystemR.string.capability_matrix).uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+    )
+    Text(
+        text = stringResource(DesignSystemR.string.capability_matrix_description),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp),
+    )
+    rows.forEach { row ->
+        ListItem(
+            headlineContent = { Text(row.label) },
+            supportingContent = {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        stringResource(
+                            DesignSystemR.string.capability_provider_location,
+                            row.matrix.provider,
+                            row.matrix.location,
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    RepositoryFeature.entries.forEach { feature ->
+                        val assessment = row.matrix.featureStatus(feature)
+                        val status = assessment.status.name.lowercase().replace('_', ' ')
+                        Text(
+                            "${feature.displayName}: $status — ${assessment.reason}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (assessment.status == CapabilityStatus.UNAVAILABLE) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
                 }
             },
         )

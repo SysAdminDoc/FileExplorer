@@ -181,6 +181,9 @@
     <string name="plugin_needs_approval">Needs approval</string>
     <string name="plugin_signature_changed">Signing certificate changed; review approval</string>
     <string name="plugin_capabilities">Declared capabilities: %1$s</string>
+    <string name="capability_matrix">Provider capabilities</string>
+    <string name="capability_matrix_description">Feature status is resolved for the current provider and location. Expensive, best-effort, configuration-required, and unavailable actions are labeled before use.</string>
+    <string name="capability_provider_location">Provider: %1$s • Location: %2$s</string>
     <string name="version">Version</string>
     <string name="version_value">1.5.0</string>
     <string name="days_short">%1$dd</string>

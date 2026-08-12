@@ -58,29 +58,29 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 | File Encryption | AES-256-GCM encryption with an Android Keystore key and biometric-gated decryption from the browser | Complete |
 | Shizuku Android/data and obb | Optional UserService backend for scoped browsing and file operations under Android/data and Android/obb | Optional |
 | Large-screen layout | Adaptive places, file list, and preview panes with keyboard shortcuts and mouse context menus | Complete |
-| File Operations | Copy, move, trash, restore, permanent delete, rename, create. Foreground service with progress notification | Complete |
+| File Operations | Provider-aware copy, move, trash, restore, permanent delete, rename, and create actions. Foreground service with progress notification | Verified (provider-scoped) |
 | Trash Bin | `.FileExplorer-Trash/` per storage volume, 30-day default purge, configurable TTL, restore and empty-trash screen | Complete |
-| Search | Streaming results via Coroutine Flow, regex support, search history | Complete |
+| Search | Streaming results via Coroutine Flow, regex support, search history, and provider-specific cost/availability status | Verified (provider-scoped) |
 | Bookmarks | Bookmark any directory, persisted in Room DB, accessible from drawer | Complete |
 | Recent Files | Track opened files, quick access from drawer | Complete |
 | Recent Locations | Automatically track recently visited directories in recency order | Complete |
 | Root Access | libsu 6.0.0, browse /data /system /vendor, SELinux context, chmod/chown, remount | Complete |
 | Root Module Browser | List Magisk, KernelSU, and APatch modules, toggle disable markers, and install trusted ZIPs through the detected manager | Complete |
-| Archives | Browse ZIP/7z/TAR/RAR as virtual folders. RAR extraction is read-only; ZIP supports AES-256 passwords | Complete |
+| Archives | Browse ZIP/7z/TAR/RAR as virtual folders. RAR is read-only; local ZIP/7z/TAR extraction and archive creation are capability-gated | Verified (bounded local archives) |
 | SMB/CIFS | Windows network shares via smbj 0.13.0 with domain auth and SMB3 server-side copy fallback | Complete |
 | SFTP | SSH file transfer via sshj 0.40.0 with known_hosts verification, password + private key auth | Complete |
 | FTP/FTPS | File transfer via Apache Commons Net 3.13.0 with TLS toggle | Complete |
 | WebDAV | HTTP/HTTPS via sardine-android 0.9 with server-side copy/move | Complete |
 | Connection Manager | Save, edit, test network connections with Android Keystore-encrypted passwords. Remote file browser | Complete |
-| Provider Contracts | Shared capabilities and typed unsupported/auth/permission/transport/conflict/corrupt errors across local, root, USB, plugin, network, and cloud adapters, with bounded redacted diagnostics | Complete |
+| Provider Contracts | Shared capabilities, provider/location feature matrix, and typed unsupported/auth/permission/transport/conflict/corrupt errors across local, root, USB, plugin, network, and cloud adapters, with bounded redacted diagnostics | Verified (provider-scoped) |
 | Plugin Trust | Explicit certificate-bound approval and revocation, declared-capability checks, bounded isolated IPC, and path-free audit events | Verified (local trust boundary) |
 | Google Drive | REST API v3. Browse, upload, download, delete, rename, quota display | Requires configuration |
 | Dropbox | HTTP API v2. Browse, upload, download, folder operations | Requires configuration |
 | OneDrive | Microsoft Graph API. Full file operations, quota tracking | Requires configuration |
 | Biometric Lock | Fingerprint/face/device credential via AndroidX Biometric | Complete |
 | Encrypted Vault | Opaque-ID AES-256-GCM storage with an encrypted index, Android Keystore key, and biometric/device-credential gate | Verified (local files) |
-| Secure Delete | DoD 5220.22-M 3-pass overwrite before deletion | Complete |
-| Checksum Verify | MD5, SHA-1, SHA-256, SHA-512 via java.security.MessageDigest | Complete |
+| Secure Delete | Provider-aware local overwrite before deletion; flash storage, snapshots, copy-on-write filesystems, and remote providers remain best-effort or unsupported | Verified (provider-scoped) |
+| Checksum Verify | MD5, SHA-1, SHA-256, SHA-512 via java.security.MessageDigest where the current provider exposes checksum support | Verified (provider-scoped) |
 | Integrity Watch | Room-backed SHA-256 watches for files and directory trees, with periodic drift notifications | Complete |
 | File Tags | Room-backed tags with multi-tag AND search and browser assignment | Complete |
 | Encrypted Volumes | Root-only mount and unmount workflow for existing gocryptfs or EncFS volumes | Requires configuration |

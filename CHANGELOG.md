@@ -27,6 +27,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added executable localization and accessibility gates for resource placeholders, inline UI strings, Compose semantics, RTL, large text, and minimum touch targets.
 - Added migration, archive-format, disconnected-provider, and DocumentsProvider contract coverage for debug/API 37 verification.
 - Added a release smoke lane that validates exported components and Cast metadata, builds and installs the debug APK, and exercises picker/share/provider/tile resolution plus activity recreation on a connected emulator.
+- Added a provider/location capability matrix shared by browser, search, cloud, Settings, diagnostics, and automation validation; expensive, best-effort, configuration-gated, read-only, and unavailable actions are surfaced before execution.
 - Added an independent dual-pane browser layout with per-pane navigation, refresh, sorting, hidden-file filtering, and selection.
 - Added long-press drag-and-drop transfers between panes with self/descendant path protection and explicit Copy or Move confirmation.
 - Added per-pane tabs with independent selection, close, long-press reorder, and swipe-to-close behavior.

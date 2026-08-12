@@ -30,6 +30,9 @@ import com.explorer.fileexplorer.core.cloud.CloudService
 import com.explorer.fileexplorer.core.cloud.CloudServiceStatus
 import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.model.RepositoryCapabilityMatrix
+import com.explorer.fileexplorer.core.model.RepositoryFeature
+import com.explorer.fileexplorer.core.model.RepositoryOperation
 import com.explorer.fileexplorer.core.ui.FileListItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -70,8 +73,9 @@ class CloudViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             accountManager.accounts.collect { accounts ->
+                val statuses = accountManager.statuses()
                 _state.update {
-                    it.copy(accounts = accounts, serviceStatuses = accountManager.statuses())
+                    it.copy(accounts = accounts, serviceStatuses = statuses)
                 }
             }
         }
@@ -79,6 +83,11 @@ class CloudViewModel @Inject constructor(
 
     fun browseAccount(account: CloudAccount, folderId: String = "root") {
         val provider = accountManager.getProvider(account.service) ?: return
+        val matrix = RepositoryCapabilityMatrix.from(provider.capabilities, account.service.name)
+        if (!matrix.isActionEnabled(RepositoryOperation.LIST)) {
+            viewModelScope.launch { _toasts.emit(matrix.explanation(RepositoryOperation.LIST)) }
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, browsingAccount = account, currentFolderId = folderId) }
             try {
@@ -117,6 +126,11 @@ class CloudViewModel @Inject constructor(
     fun deleteCloudItem(item: FileItem) {
         val account = _state.value.browsingAccount ?: return
         val provider = accountManager.getProvider(account.service) ?: return
+        val matrix = RepositoryCapabilityMatrix.from(provider.capabilities, account.service.name)
+        if (!matrix.isActionEnabled(RepositoryOperation.DELETE)) {
+            viewModelScope.launch { _toasts.emit(matrix.explanation(RepositoryOperation.DELETE)) }
+            return
+        }
         viewModelScope.launch {
             provider.delete(account, item.path)
                 .onSuccess { _toasts.emit("Deleted ${item.name}"); browseAccount(account, _state.value.currentFolderId) }
@@ -127,6 +141,11 @@ class CloudViewModel @Inject constructor(
     fun createCloudFolder(name: String) {
         val account = _state.value.browsingAccount ?: return
         val provider = accountManager.getProvider(account.service) ?: return
+        val matrix = RepositoryCapabilityMatrix.from(provider.capabilities, account.service.name)
+        if (!matrix.isActionEnabled(RepositoryOperation.CREATE_FOLDER)) {
+            viewModelScope.launch { _toasts.emit(matrix.explanation(RepositoryOperation.CREATE_FOLDER)) }
+            return
+        }
         viewModelScope.launch {
             provider.createFolder(account, name, _state.value.currentFolderId)
                 .onSuccess { _toasts.emit("Folder created"); browseAccount(account, _state.value.currentFolderId) }
@@ -162,6 +181,11 @@ class CloudViewModel @Inject constructor(
     fun hideAddDialog() { _state.update { it.copy(showAddDialog = false) } }
 
     fun addAccount(service: CloudService) {
+        val status = accountManager.statusFor(service)
+        if (!status.capabilityMatrix.isActionEnabled(RepositoryFeature.CLOUD_SIGN_IN)) {
+            viewModelScope.launch { _toasts.emit(status.capabilityMatrix.explanation(RepositoryFeature.CLOUD_SIGN_IN)) }
+            return
+        }
         val provider = accountManager.getProvider(service)
         if (provider == null) {
             viewModelScope.launch { _toasts.emit("${service.displayName} requires OAuth configuration") }
@@ -304,12 +328,22 @@ fun CloudScreen(
                         }
                         ListItem(
                             headlineContent = { Text(service.displayName) },
-                            supportingContent = { Text(cloudStatusLabel(status.state)) },
+                            supportingContent = {
+                                Column {
+                                    Text(cloudStatusLabel(status.state))
+                                    if (!status.capabilityMatrix.isActionEnabled(RepositoryFeature.CLOUD_SIGN_IN)) {
+                                        Text(
+                                            status.capabilityMatrix.explanation(RepositoryFeature.CLOUD_SIGN_IN),
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                }
+                            },
                             leadingContent = { Icon(icon, null) },
                             modifier = Modifier.fillMaxWidth(),
                         )
                         FilledTonalButton(
-                            enabled = status.state == CloudAuthState.VERIFIED,
+                            enabled = status.capabilityMatrix.isActionEnabled(RepositoryFeature.CLOUD_SIGN_IN),
                             onClick = { viewModel.addAccount(service); viewModel.hideAddDialog() },
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                         ) { Text("${stringResource(DesignSystemR.string.connect)} ${service.displayName}") }

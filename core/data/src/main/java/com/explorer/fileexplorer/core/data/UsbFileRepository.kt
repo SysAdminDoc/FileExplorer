@@ -34,7 +34,10 @@ class UsbFileRepository @Inject constructor(
     private val usbStorageManager: UsbStorageManager,
 ) : FileRepository {
 
-    override val capabilities: RepositoryCapabilities = RepositoryCapabilities.local("usb")
+    override val capabilities: RepositoryCapabilities = RepositoryCapabilities.local(
+        provider = "usb",
+        kind = com.explorer.fileexplorer.core.model.RepositoryProviderKind.SAF,
+    )
 
     override fun listFiles(path: String): Flow<List<FileItem>> = flow {
         val directory = usbStorageManager.documentForPath(path)

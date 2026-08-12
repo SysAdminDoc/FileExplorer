@@ -226,6 +226,12 @@ fun BrowserScreen(
                         insideArchive = state.insideArchive,
                         onClear = viewModel::clearSelection, onSelectAll = viewModel::selectAll,
                         onCopy = viewModel::copySelected, onCut = viewModel::cutSelected,
+                        canCopy = state.capabilityMatrix.isActionEnabled(RepositoryOperation.COPY),
+                        canMove = state.capabilityMatrix.isActionEnabled(RepositoryOperation.MOVE),
+                        canTrash = state.capabilityMatrix.isActionEnabled(RepositoryFeature.TRASH),
+                        canDelete = state.capabilityMatrix.isActionEnabled(RepositoryOperation.DELETE),
+                        canCompress = state.capabilityMatrix.isActionEnabled(RepositoryFeature.ARCHIVE_CREATION),
+                        canWatchIntegrity = state.capabilityMatrix.isActionEnabled(RepositoryFeature.CHECKSUMS),
                         onDelete = viewModel::deleteSelected,
                         onPermanentDelete = viewModel::permanentlyDeleteSelected,
                         onShare = viewModel::shareSelected,
@@ -252,17 +258,20 @@ fun BrowserScreen(
                         onViewToggle = viewModel::toggleViewMode, onToggleHidden = viewModel::toggleHidden,
                         onToggleColumn = viewModel::toggleColumn,
                         onNewFolder = viewModel::showNewFolderDialog,
+                        canCreateFolder = state.capabilityMatrix.isActionEnabled(RepositoryOperation.CREATE_DIRECTORY),
                         viewMode = state.viewMode, visibleColumns = state.visibleColumns, showHidden = state.showHidden,
                         canPaste = state.canPaste, onPaste = viewModel::paste,
                         rootEnabled = state.rootEnabled, isRootPath = state.isRootPath,
                         insideArchive = state.insideArchive,
+                        canExtract = state.capabilityMatrix.isActionEnabled(RepositoryFeature.ARCHIVE_EXTRACTION),
                         dualPaneEnabled = state.dualPaneEnabled,
                         onToggleDualPane = viewModel::toggleDualPane,
                         onExtractAll = { viewModel.extractArchive() })
                 }
             },
             floatingActionButton = {
-                if (!state.selectionMode && !state.insideArchive) {
+                if (!state.selectionMode && !state.insideArchive &&
+                    state.capabilityMatrix.isActionEnabled(RepositoryOperation.CREATE_DIRECTORY)) {
                     FloatingActionButton(onClick = viewModel::showNewFolderDialog,
                         containerColor = MaterialTheme.colorScheme.primary) {
                         Icon(Icons.Filled.CreateNewFolder, stringResource(DesignSystemR.string.new_folder))
@@ -334,6 +343,22 @@ fun BrowserScreen(
                     )
                     // Breadcrumb
                     BreadcrumbBar(currentPath = state.currentPath, onNavigate = viewModel::navigateTo)
+                    if (state.capabilityMatrix.hasNonVerifiedFeature &&
+                        state.capabilityMatrix.featureSummary().isNotBlank()) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = state.capabilityMatrix.featureSummary(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                            )
+                        }
+                    }
                 }
 
                 // Sort menu
@@ -534,17 +559,17 @@ fun BrowserScreen(
 private fun BrowserTopBar(
     onMenuClick: () -> Unit, onSearchClick: () -> Unit, onSortClick: () -> Unit,
     onViewToggle: () -> Unit, onToggleHidden: () -> Unit, onToggleColumn: (FileColumn) -> Unit,
-    onNewFolder: () -> Unit, viewMode: ViewMode, visibleColumns: Set<FileColumn>, showHidden: Boolean,
+    onNewFolder: () -> Unit, canCreateFolder: Boolean, viewMode: ViewMode, visibleColumns: Set<FileColumn>, showHidden: Boolean,
     canPaste: Boolean, onPaste: () -> Unit,
     rootEnabled: Boolean, isRootPath: Boolean, insideArchive: Boolean,
-    dualPaneEnabled: Boolean, onToggleDualPane: () -> Unit, onExtractAll: () -> Unit,
+    dualPaneEnabled: Boolean, canExtract: Boolean, onToggleDualPane: () -> Unit, onExtractAll: () -> Unit,
 ) {
     TopAppBar(
         title = { Text(stringResource(DesignSystemR.string.app_name), maxLines = 1, overflow = TextOverflow.Ellipsis) },
         navigationIcon = { IconButton(onClick = onMenuClick) { Icon(Icons.Filled.Menu, stringResource(DesignSystemR.string.menu)) } },
         actions = {
             if (insideArchive) {
-                IconButton(onClick = onExtractAll) { Icon(Icons.Filled.Unarchive, stringResource(DesignSystemR.string.extract_all)) }
+                IconButton(onClick = onExtractAll, enabled = canExtract) { Icon(Icons.Filled.Unarchive, stringResource(DesignSystemR.string.extract_all)) }
             }
             if (canPaste) { IconButton(onClick = onPaste) { Icon(Icons.Filled.ContentPaste, stringResource(DesignSystemR.string.paste)) } }
             IconButton(onClick = onSearchClick) { Icon(Icons.Filled.Search, stringResource(DesignSystemR.string.search)) }
@@ -585,7 +610,7 @@ private fun BrowserTopBar(
                     )
                 }
                 if (!insideArchive) {
-                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.new_folder)) },
+                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.new_folder)) }, enabled = canCreateFolder,
                         onClick = { onNewFolder(); moreExpanded = false }, leadingIcon = { Icon(Icons.Filled.CreateNewFolder, null) })
                 }
             }
@@ -600,6 +625,7 @@ private fun BrowserTopBar(
 private fun SelectionTopBar(
     selectedCount: Int, insideArchive: Boolean,
     onClear: () -> Unit, onSelectAll: () -> Unit,
+    canCopy: Boolean, canMove: Boolean, canTrash: Boolean, canDelete: Boolean, canCompress: Boolean, canWatchIntegrity: Boolean,
     onCopy: () -> Unit, onCut: () -> Unit, onDelete: () -> Unit, onPermanentDelete: () -> Unit, onShare: () -> Unit,
     onSendNearby: () -> Unit,
     onCast: () -> Unit,
@@ -614,13 +640,14 @@ private fun SelectionTopBar(
         actions = {
             IconButton(onClick = onSelectAll) { Icon(Icons.Filled.SelectAll, stringResource(DesignSystemR.string.select_all)) }
             if (!insideArchive) {
-                IconButton(onClick = onCopy) { Icon(Icons.Filled.ContentCopy, stringResource(DesignSystemR.string.copy)) }
-                IconButton(onClick = onCut) { Icon(Icons.Filled.ContentCut, stringResource(DesignSystemR.string.cut)) }
+                IconButton(onClick = onCopy, enabled = canCopy) { Icon(Icons.Filled.ContentCopy, stringResource(DesignSystemR.string.copy)) }
+                IconButton(onClick = onCut, enabled = canMove) { Icon(Icons.Filled.ContentCut, stringResource(DesignSystemR.string.cut)) }
                 Box(
                     modifier = Modifier
                         .size(48.dp)
                         .combinedClickable(
-                            onClick = onDelete,
+                            enabled = canTrash || canDelete,
+                            onClick = { if (canTrash) onDelete() },
                             onLongClick = onPermanentDelete,
                             role = Role.Button,
                         ),
@@ -633,11 +660,11 @@ private fun SelectionTopBar(
             IconButton(onClick = { moreExpanded = true }) { Icon(Icons.Filled.MoreVert, stringResource(DesignSystemR.string.more)) }
             DropdownMenu(expanded = moreExpanded, onDismissRequest = { moreExpanded = false }) {
                 if (!insideArchive) {
-                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.delete_permanently)) }, onClick = { onPermanentDelete(); moreExpanded = false },
+                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.delete_permanently)) }, enabled = canDelete, onClick = { onPermanentDelete(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.DeleteForever, null) })
-                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.compress)) }, onClick = { onCompress(); moreExpanded = false },
+                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.compress)) }, enabled = canCompress, onClick = { onCompress(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.FolderZip, null) })
-                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.watch_for_changes)) }, onClick = { onWatchIntegrity(); moreExpanded = false },
+                    DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.watch_for_changes)) }, enabled = canWatchIntegrity, onClick = { onWatchIntegrity(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.VerifiedUser, null) })
                     DropdownMenuItem(text = { Text(stringResource(DesignSystemR.string.set_tags)) }, onClick = { onTag(); moreExpanded = false },
                         leadingIcon = { Icon(Icons.Filled.Label, null) })

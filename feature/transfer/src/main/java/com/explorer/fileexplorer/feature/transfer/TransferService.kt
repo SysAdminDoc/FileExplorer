@@ -197,6 +197,11 @@ class TransferService : Service() {
             try {
                 when (operation) {
                     FileOperation.COPY -> {
+                        AutomationContract.validateCapabilities(
+                            AutomationContract.Operation.COPY,
+                            repository.capabilityMatrix(sources.first()),
+                            repository.capabilityMatrix(destination),
+                        ).getOrThrow()
                         repository.copyFiles(
                             sources = sources,
                             destination = destination,
@@ -214,6 +219,11 @@ class TransferService : Service() {
                         }.getOrThrow()
                     }
                     FileOperation.MOVE -> {
+                        AutomationContract.validateCapabilities(
+                            AutomationContract.Operation.MOVE,
+                            repository.capabilityMatrix(sources.first()),
+                            repository.capabilityMatrix(destination),
+                        ).getOrThrow()
                         repository.moveFiles(
                             sources = sources,
                             destination = destination,
@@ -237,6 +247,15 @@ class TransferService : Service() {
                         }.getOrThrow()
                     }
                     FileOperation.COMPRESS -> {
+                        val sourceMatrix = repositoryFactory.getRepository(sources.first())
+                            .capabilityMatrix(sources.first())
+                        val destinationMatrix = repositoryFactory.getRepository(destination)
+                            .capabilityMatrix(destination)
+                        AutomationContract.validateCapabilities(
+                            AutomationContract.Operation.ZIP,
+                            sourceMatrix,
+                            destinationMatrix,
+                        ).getOrThrow()
                         archiveHelper.createArchive(
                             outputPath = destination,
                             sourcePaths = sources,
@@ -363,6 +382,11 @@ class TransferService : Service() {
         var transferredBefore = 0L
 
         try {
+            AutomationContract.validateCapabilities(
+                AutomationContract.Operation.UPLOAD,
+                fileRepository.capabilityMatrix(sources.first()),
+                com.explorer.fileexplorer.core.model.RepositoryCapabilityMatrix.from(repository.capabilities, destination),
+            ).getOrThrow()
             sources.forEach { source ->
                 require(java.io.File(source).isFile) {
                     "Upload source is not a local file: $source"

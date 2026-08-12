@@ -622,7 +622,7 @@ class TransferQueueManager @Inject constructor(
         if (source.isDirectory != candidate.isDirectory) return false
         if (source.isDirectory) return true
         if (source.size != candidate.size) return false
-        if (repository.capabilities.supports(RepositoryOperation.CHECKSUM) &&
+        if (repository.capabilityMatrix(sourcePath).isActionEnabled(RepositoryOperation.CHECKSUM) &&
             source.size <= 2L * 1024L * 1024L * 1024L
         ) {
             return runCatching {

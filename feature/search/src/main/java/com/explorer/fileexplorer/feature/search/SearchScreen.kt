@@ -22,7 +22,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
-import com.explorer.fileexplorer.core.data.LocalFileRepository
+import com.explorer.fileexplorer.core.data.DiagnosticLog
+import com.explorer.fileexplorer.core.data.FileRepositoryFactory
 import com.explorer.fileexplorer.core.data.TagRepository
 import com.explorer.fileexplorer.core.database.SearchHistoryDao
 import com.explorer.fileexplorer.core.database.SearchHistoryEntity
@@ -31,6 +32,9 @@ import com.explorer.fileexplorer.core.database.SavedSearchEntity
 import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.database.TagEntity
 import com.explorer.fileexplorer.core.model.FileItem
+import com.explorer.fileexplorer.core.model.CapabilityStatus
+import com.explorer.fileexplorer.core.model.RepositoryCapabilityMatrix
+import com.explorer.fileexplorer.core.model.RepositoryFeature
 import com.explorer.fileexplorer.core.ui.FileListItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -49,11 +53,13 @@ data class SearchUiState(
     val history: List<SearchHistoryEntity> = emptyList(),
     val availableTags: List<TagEntity> = emptyList(),
     val selectedTags: Set<String> = emptySet(),
+    val capabilityMatrix: RepositoryCapabilityMatrix = RepositoryCapabilityMatrix.unavailable(),
 )
 
 @HiltViewModel
 class SearchViewModel @Inject constructor(
-    private val fileRepository: LocalFileRepository,
+    private val repositoryFactory: FileRepositoryFactory,
+    private val diagnosticLog: DiagnosticLog,
     private val searchHistoryDao: SearchHistoryDao,
     private val savedSearchDao: SavedSearchDao,
     private val tagRepository: TagRepository,
@@ -77,7 +83,12 @@ class SearchViewModel @Inject constructor(
     }
 
     fun updateQuery(query: String) { _state.update { it.copy(query = query) } }
-    fun setSearchPath(path: String) { _state.update { it.copy(searchPath = path) } }
+    fun setSearchPath(path: String) {
+        val repository = repositoryFactory.getRepository(path)
+        val matrix = repository.capabilityMatrix(path)
+        diagnosticLog.logCapabilities(matrix)
+        _state.update { it.copy(searchPath = path, capabilityMatrix = matrix) }
+    }
     fun applySavedSearch(query: String, path: String, useRegex: Boolean) {
         _state.update { it.copy(query = query, searchPath = path, useRegex = useRegex) }
         search()
@@ -100,6 +111,12 @@ class SearchViewModel @Inject constructor(
 
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
+            val path = _state.value.searchPath
+            val repository = repositoryFactory.getRepository(path)
+            val matrix = repository.capabilityMatrix(path)
+            diagnosticLog.logCapabilities(matrix)
+            _state.update { it.copy(capabilityMatrix = matrix) }
+            if (!matrix.isActionEnabled(RepositoryFeature.SEARCH)) return@launch
             _state.update { it.copy(isSearching = true, results = emptyList()) }
 
             // Save to history
@@ -109,8 +126,8 @@ class SearchViewModel @Inject constructor(
             val taggedPaths = selectedTags.takeIf { it.isNotEmpty() }
                 ?.let { tagRepository.pathsForAllTags(it) }
 
-            fileRepository.searchStreaming(
-                rootPath = _state.value.searchPath,
+            repository.search(
+                rootPath = path,
                 query = query,
                 regex = _state.value.useRegex,
                 includeHidden = _state.value.includeHidden,
@@ -203,7 +220,11 @@ fun SearchScreen(
                         enabled = state.query.isNotBlank(),
                         onClick = { showSaveDialog = true },
                     ) { Icon(Icons.Filled.BookmarkAdd, stringResource(DesignSystemR.string.save_search)) }
-                    IconButton(onClick = viewModel::search) { Icon(Icons.Filled.Search, stringResource(DesignSystemR.string.search)) }
+                    IconButton(
+                        enabled = (state.query.isNotBlank() || state.selectedTags.isNotEmpty()) &&
+                            state.capabilityMatrix.isActionEnabled(RepositoryFeature.SEARCH),
+                        onClick = viewModel::search,
+                    ) { Icon(Icons.Filled.Search, stringResource(DesignSystemR.string.search)) }
                 },
             )
         },
@@ -232,6 +253,15 @@ fun SearchScreen(
                 } else if (state.results.isNotEmpty()) {
                     Text(stringResource(DesignSystemR.string.results_count, state.results.size), style = MaterialTheme.typography.labelMedium)
                 }
+            }
+
+            if (state.capabilityMatrix.featureStatus(RepositoryFeature.SEARCH).status != CapabilityStatus.VERIFIED) {
+                Text(
+                    text = state.capabilityMatrix.explanation(RepositoryFeature.SEARCH),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
             }
 
             if (state.availableTags.isNotEmpty()) {

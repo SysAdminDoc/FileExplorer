@@ -3,6 +3,10 @@ package com.explorer.fileexplorer.core.data
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.model.RepositoryCapabilities
+import com.explorer.fileexplorer.core.model.RepositoryCapabilityMatrix
+import com.explorer.fileexplorer.core.model.RepositoryFeature
+import com.explorer.fileexplorer.core.model.CapabilityAssessment
+import com.explorer.fileexplorer.core.model.CapabilityStatus
 import kotlinx.coroutines.flow.Flow
 
 enum class SecureDeleteCapability {
@@ -37,6 +41,42 @@ interface FileRepository {
 
     /** Capabilities for irreversible deletion at this provider/location. */
     fun deleteCapabilities(paths: List<String>): DeleteCapabilities = DeleteCapabilities.PROVIDER_DELETE_ONLY
+
+    /** Resolves operation and feature support for this provider at one concrete location. */
+    fun capabilityMatrix(
+        location: String = capabilities.provider,
+        paths: List<String> = emptyList(),
+    ): RepositoryCapabilityMatrix {
+        val delete = deleteCapabilities(paths)
+        val secureDelete = when {
+            !delete.supportsPermanentDelete -> CapabilityAssessment(
+                status = CapabilityStatus.UNAVAILABLE,
+                reason = "Permanent deletion is not supported at this location",
+            )
+            delete.secureDelete == SecureDeleteCapability.BEST_EFFORT -> CapabilityAssessment(
+                status = CapabilityStatus.BEST_EFFORT,
+                reason = delete.secureDeleteDescription,
+            )
+            else -> CapabilityAssessment(
+                status = CapabilityStatus.UNAVAILABLE,
+                reason = delete.secureDeleteDescription,
+            )
+        }
+        val matrix = capabilities
+            .let { com.explorer.fileexplorer.core.model.RepositoryCapabilityMatrix.from(it, location) }
+            .withFeature(RepositoryFeature.SECURE_DELETE, secureDelete)
+        return if (this is LocalFileRepository) {
+            matrix.withFeature(
+                RepositoryFeature.TRASH,
+                CapabilityAssessment(
+                    status = CapabilityStatus.VERIFIED,
+                    reason = "Local files can be moved to the app Trash",
+                ),
+            )
+        } else {
+            matrix
+        }
+    }
 
     /** List files in a directory. Returns Flow for streaming large directories. */
     fun listFiles(path: String): Flow<List<FileItem>>

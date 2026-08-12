@@ -86,6 +86,7 @@ data class RepositoryCapabilities(
     val provider: String,
     val supportedOperations: Set<RepositoryOperation>,
     val operationSemantics: Map<RepositoryOperation, RepositoryOperationSemantics> = emptyMap(),
+    val kind: RepositoryProviderKind = RepositoryProviderKind.UNKNOWN,
 ) {
     fun supports(operation: RepositoryOperation): Boolean = operation in supportedOperations
 
@@ -108,7 +109,10 @@ data class RepositoryCapabilities(
             RepositoryOperation.CHECKSUM,
         )
 
-        fun local(provider: String): RepositoryCapabilities =
+        fun local(
+            provider: String,
+            kind: RepositoryProviderKind = RepositoryProviderKind.LOCAL,
+        ): RepositoryCapabilities =
             RepositoryCapabilities(
                 provider = provider,
                 supportedOperations = FILE_OPERATIONS,
@@ -122,6 +126,7 @@ data class RepositoryCapabilities(
                         cancellable = true,
                     )
                 },
+                kind = kind,
             )
 
         fun network(
@@ -184,7 +189,12 @@ data class RepositoryCapabilities(
                     )
                 }
             }
-            return RepositoryCapabilities(provider, operations, semantics)
+            return RepositoryCapabilities(
+                provider = provider,
+                supportedOperations = operations,
+                operationSemantics = semantics,
+                kind = RepositoryProviderKind.NETWORK,
+            )
         }
 
         fun cloud(provider: String): RepositoryCapabilities = RepositoryCapabilities(
@@ -201,10 +211,15 @@ data class RepositoryCapabilities(
                 RepositoryOperation.RENAME,
                 RepositoryOperation.QUOTA,
             ),
+            kind = RepositoryProviderKind.CLOUD,
         )
 
         fun unsupported(provider: String): RepositoryCapabilities =
-            RepositoryCapabilities(provider, emptySet())
+            RepositoryCapabilities(
+                provider = provider,
+                supportedOperations = emptySet(),
+                kind = RepositoryProviderKind.UNKNOWN,
+            )
     }
 }
 

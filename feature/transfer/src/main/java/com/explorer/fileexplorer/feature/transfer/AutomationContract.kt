@@ -2,6 +2,9 @@ package com.explorer.fileexplorer.feature.transfer
 
 import com.explorer.fileexplorer.core.data.ArchiveFormat
 import com.explorer.fileexplorer.core.model.ConflictResolution
+import com.explorer.fileexplorer.core.model.RepositoryCapabilityMatrix
+import com.explorer.fileexplorer.core.model.RepositoryFeature
+import com.explorer.fileexplorer.core.model.RepositoryOperation
 import java.security.MessageDigest
 import java.util.Locale
 
@@ -113,6 +116,34 @@ object AutomationContract {
             "7z" -> ArchiveFormat.SEVEN_Z
             "tar.gz", "tgz" -> ArchiveFormat.TAR_GZ
             else -> error("Unsupported archive format: $value")
+        }
+    }
+
+    /** Validates an external action against the same provider/location matrix used by the UI. */
+    fun validateCapabilities(
+        request: Request,
+        source: RepositoryCapabilityMatrix,
+        destination: RepositoryCapabilityMatrix,
+    ): Result<Unit> = validateCapabilities(request.operation, source, destination)
+
+    fun validateCapabilities(
+        operation: Operation,
+        source: RepositoryCapabilityMatrix,
+        destination: RepositoryCapabilityMatrix,
+    ): Result<Unit> = runCatching {
+        when (operation) {
+            Operation.COPY -> destination.require(RepositoryOperation.COPY).getOrThrow()
+            Operation.MOVE -> destination.require(RepositoryOperation.MOVE).getOrThrow()
+            Operation.ZIP -> {
+                source.require(RepositoryOperation.INFO).getOrThrow()
+                source.require(RepositoryFeature.ARCHIVE_CREATION).getOrThrow()
+                destination.require(RepositoryFeature.ARCHIVE_CREATION).getOrThrow()
+                destination.require(RepositoryFeature.WRITE).getOrThrow()
+            }
+            Operation.UPLOAD -> {
+                source.require(RepositoryOperation.INFO).getOrThrow()
+                destination.require(RepositoryOperation.UPLOAD).getOrThrow()
+            }
         }
     }
 

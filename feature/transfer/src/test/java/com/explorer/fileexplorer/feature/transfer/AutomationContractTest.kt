@@ -2,6 +2,9 @@ package com.explorer.fileexplorer.feature.transfer
 
 import com.explorer.fileexplorer.core.data.ArchiveFormat
 import com.explorer.fileexplorer.core.model.ConflictResolution
+import com.explorer.fileexplorer.core.model.RepositoryCapabilities
+import com.explorer.fileexplorer.core.model.RepositoryCapabilityMatrix
+import com.explorer.fileexplorer.core.model.RepositoryOperation
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -109,5 +112,40 @@ class AutomationContractTest {
         ).getOrThrow()
 
         assertEquals(first.idempotencyKey, second.idempotencyKey)
+    }
+
+    @Test
+    fun capabilityValidationRejectsUnavailableRemoteSearchAndAllowsSupportedCopy() {
+        val network = RepositoryCapabilityMatrix.from(
+            RepositoryCapabilities.network("ftp"),
+            "ftp://host/home",
+        )
+        val request = AutomationContract.parse(
+            action = AutomationContract.ACTION_COPY,
+            sourcePaths = listOf("ftp://host/home/source"),
+            destination = "ftp://host/home/destination",
+        ).getOrThrow()
+
+        assertTrue(AutomationContract.validateCapabilities(request, network, network).isSuccess)
+        assertTrue(network.require(RepositoryOperation.SEARCH).isFailure)
+    }
+
+    @Test
+    fun capabilityValidationRejectsArchiveCreationOutsideLocalStorage() {
+        val network = RepositoryCapabilityMatrix.from(
+            RepositoryCapabilities.network("smb"),
+            "smb://host/share/archive.zip",
+        )
+        val request = AutomationContract.parse(
+            action = AutomationContract.ACTION_ZIP,
+            sourcePaths = listOf("smb://host/share/source"),
+            destination = "smb://host/share/archive.zip",
+        ).getOrThrow()
+
+        val result = AutomationContract.validateCapabilities(request, network, network)
+        assertTrue(result.isFailure)
+        assertTrue(
+            result.exceptionOrNull()?.message.orEmpty().lowercase().contains("archive creation unavailable"),
+        )
     }
 }
