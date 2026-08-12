@@ -30,6 +30,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added long-press drag-and-drop transfers between panes with self/descendant path protection and explicit Copy or Move confirmation.
 - Added per-pane tabs with independent selection, close, long-press reorder, and swipe-to-close behavior.
 - Added a Storage Analyzer screen with recursive treemap drill-down, duplicate-content groups, progress/cancel scanning, and largest-file list.
+- Hardened Storage Analyzer scans with opt-in bounded indexing, sample-then-full hashing, metadata-only resumable checkpoints, inaccessible-entry accounting, and review-before-Trash duplicate cleanup that preserves one copy.
 - Added batch rename with counter, date, parent, and regex capture-group tokens, collision validation, and live preview before a two-phase rename.
 - Added a queued transfer manager with pause/resume, reordering, bandwidth limits, conflict resolution, and text diff previews; browser paste and dual-pane transfers now enqueue work.
 - Added Room-backed transfer recovery with idempotency keys, URI/path checkpoints, durable cancellation and retry causes, startup rehydration, retry controls, and an explicit foreground queue monitor.

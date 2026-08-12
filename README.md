@@ -43,7 +43,7 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 | Dual-pane Browsing | Independent left/right folders with long-press drag-and-drop copy or move | Complete |
 | Tabbed Browsing | Multiple tabs per pane with add, select, reorder, and swipe-to-close controls | Complete |
 | Collections | MediaStore-backed Photos, Videos, Music, Documents, Downloads, and APK smart categories | Complete |
-| Storage Analyzer | Recursive size treemap, SHA-256 duplicate groups, and largest-file list | Complete |
+| Storage Analyzer | Opt-in bounded size treemap, sampled/full SHA-256 duplicate groups, resumable scans, and review-before-Trash cleanup | Verified (local storage) |
 | Batch Rename | Regex capture groups, counter/date/parent tokens, collision checks, and live preview | Complete |
 | Transfer Queue | Room-backed pausable and reorderable copy, move, and delete queue with process-death recovery, retry checkpoints, throttling, metadata conflict previews, persisted decisions, deterministic keep-both names, and text diff preview | Verified (local recovery) |
 | DocumentsProvider | SAF access to the local storage root with browsing, search, recent files, document mutations, dynamic-root handling, and symlink-safe path validation | Verified (SAF contract) |

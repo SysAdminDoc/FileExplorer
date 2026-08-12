@@ -31,8 +31,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.explorer.fileexplorer.core.data.DuplicateGroup
+import com.explorer.fileexplorer.core.data.LocalTrashManager
 import com.explorer.fileexplorer.core.data.StorageAnalyzer
 import com.explorer.fileexplorer.core.data.StorageEntry
+import com.explorer.fileexplorer.core.data.StorageScanPhase
 import com.explorer.fileexplorer.core.data.StorageScanProgress
 import com.explorer.fileexplorer.core.data.StorageScanResult
 import com.explorer.fileexplorer.core.data.StorageTreeNode
@@ -46,6 +48,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.math.min
 import javax.inject.Inject
+import java.nio.file.Paths
 
 data class StorageAnalyzerUiState(
     val rootPath: String = Environment.getExternalStorageDirectory().absolutePath,
@@ -53,32 +56,69 @@ data class StorageAnalyzerUiState(
     val progress: StorageScanProgress = StorageScanProgress(),
     val result: StorageScanResult? = null,
     val error: String? = null,
+    val actionInProgress: Boolean = false,
+    val lastActionMovedCount: Int? = null,
+    val actionError: String? = null,
 )
 
 @HiltViewModel
 class StorageAnalyzerViewModel @Inject constructor(
     private val analyzer: StorageAnalyzer,
+    private val trashManager: LocalTrashManager,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(StorageAnalyzerUiState())
     val state: StateFlow<StorageAnalyzerUiState> = _state.asStateFlow()
     private var scanJob: Job? = null
 
-    fun scan() {
+    fun scan(resume: Boolean = false) {
         scanJob?.cancel()
         val rootPath = _state.value.rootPath
+        val checkpoint = if (resume) _state.value.result?.checkpoint else null
         scanJob = viewModelScope.launch {
             _state.update { it.copy(isScanning = true, progress = StorageScanProgress(), error = null) }
             try {
-                val result = analyzer.scan(rootPath) { progress ->
-                    _state.update { it.copy(progress = progress) }
-                }
+                val result = analyzer.scan(
+                    rootPath,
+                    onProgress = { progress -> _state.update { it.copy(progress = progress) } },
+                    resumeFrom = checkpoint,
+                )
                 _state.update { it.copy(isScanning = false, result = result) }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _state.update { it.copy(isScanning = false, error = e.message ?: "Unable to analyze storage") }
             }
+        }
+    }
+
+    fun moveDuplicatesToTrash(paths: Set<String>) {
+        if (paths.isEmpty() || _state.value.actionInProgress) return
+        val root = Paths.get(_state.value.rootPath).toAbsolutePath().normalize()
+        val safePaths = paths.mapNotNull { path ->
+            runCatching { Paths.get(path).toAbsolutePath().normalize() }
+                .getOrNull()
+                ?.takeIf { it != root && it.startsWith(root) }
+                ?.toString()
+        }
+        if (safePaths.size != paths.size) {
+            _state.update { it.copy(actionError = "Only files inside the analyzed root can be reviewed") }
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(actionInProgress = true, actionError = null, lastActionMovedCount = null) }
+            val result = trashManager.moveToTrash(safePaths, listOf(root.toString()))
+            result.fold(
+                onSuccess = { count ->
+                    _state.update { it.copy(actionInProgress = false, lastActionMovedCount = count) }
+                    scan()
+                },
+                onFailure = { error ->
+                    _state.update {
+                        it.copy(actionInProgress = false, actionError = error.message ?: "Unable to move duplicates to Trash")
+                    }
+                },
+            )
         }
     }
 
@@ -105,8 +145,7 @@ fun StorageAnalyzerScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     var section by remember { mutableStateOf(AnalyzerSection.TREEMAP) }
     var nodeStack by remember(state.result) { mutableStateOf(state.result?.let { listOf(it.root) } ?: emptyList()) }
-
-    LaunchedEffect(Unit) { viewModel.scan() }
+    var duplicateSelection by remember(state.result) { mutableStateOf(emptySet<String>()) }
 
     BackHandler(enabled = nodeStack.size > 1) {
         nodeStack = nodeStack.dropLast(1)
@@ -144,7 +183,15 @@ fun StorageAnalyzerScreen(
             if (state.isScanning) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 Text(
-                    text = stringResource(DesignSystemR.string.scanning_progress, state.progress.files, state.progress.directories),
+                    text = if (state.progress.phase == StorageScanPhase.HASHING) {
+                        stringResource(
+                            DesignSystemR.string.hashing_progress,
+                            state.progress.files,
+                            state.progress.hashBytesRead / 1024,
+                        )
+                    } else {
+                        stringResource(DesignSystemR.string.scanning_progress, state.progress.files, state.progress.directories)
+                    },
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 8.dp),
@@ -159,11 +206,41 @@ fun StorageAnalyzerScreen(
                 )
             }
 
+            state.lastActionMovedCount?.let { count ->
+                Text(
+                    text = stringResource(DesignSystemR.string.duplicates_moved_to_trash, count),
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(vertical = 4.dp),
+                )
+            }
+            state.actionError?.let { error ->
+                Text(
+                    text = stringResource(DesignSystemR.string.duplicate_action_failed, error),
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(vertical = 4.dp),
+                )
+            }
+
             val result = state.result
             if (result == null) {
                 AnalyzerEmptyState(isScanning = state.isScanning, onScan = viewModel::scan)
             } else {
-                AnalyzerSummary(result)
+                        AnalyzerSummary(result)
+                        if (!result.isComplete || !result.hashAnalysisComplete) {
+                            Card(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(stringResource(DesignSystemR.string.analysis_incomplete), style = MaterialTheme.typography.bodySmall)
+                                    Text(
+                                        stringResource(DesignSystemR.string.analysis_skipped_files, result.skippedFiles),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    OutlinedButton(onClick = { viewModel.scan(resume = true) }, enabled = !state.isScanning) {
+                                        Text(stringResource(DesignSystemR.string.resume_analysis))
+                                    }
+                                }
+                            }
+                        }
                 Spacer(Modifier.height(12.dp))
                 AnalyzerSectionSelector(section = section, onSelect = { section = it })
                 Spacer(Modifier.height(8.dp))
@@ -191,7 +268,25 @@ fun StorageAnalyzerScreen(
                             modifier = Modifier.padding(vertical = 8.dp),
                         )
                     }
-                    AnalyzerSection.DUPLICATES -> DuplicateList(result.duplicateGroups)
+                    AnalyzerSection.DUPLICATES -> DuplicateList(
+                        groups = result.duplicateGroups,
+                        selectedPaths = duplicateSelection,
+                        actionInProgress = state.actionInProgress,
+                        onToggle = { path, group ->
+                            val selectedInGroup = group.files.count { it.path in duplicateSelection }
+                            duplicateSelection = if (path in duplicateSelection) {
+                                duplicateSelection - path
+                            } else if (selectedInGroup < group.files.size - 1) {
+                                duplicateSelection + path
+                            } else {
+                                duplicateSelection
+                            }
+                        },
+                        onMoveToTrash = {
+                            viewModel.moveDuplicatesToTrash(duplicateSelection)
+                            duplicateSelection = emptySet()
+                        },
+                    )
                     AnalyzerSection.LARGEST -> LargestFileList(result.largestFiles)
                 }
             }
@@ -336,20 +431,47 @@ private fun sliceRects(nodes: List<StorageTreeNode>, width: Int, height: Int): L
 }
 
 @Composable
-private fun DuplicateList(groups: List<DuplicateGroup>) {
+private fun DuplicateList(
+    groups: List<DuplicateGroup>,
+    selectedPaths: Set<String>,
+    actionInProgress: Boolean,
+    onToggle: (String, DuplicateGroup) -> Unit,
+    onMoveToTrash: () -> Unit,
+) {
     if (groups.isEmpty()) {
         AnalyzerMessage(stringResource(DesignSystemR.string.no_duplicate_files))
         return
     }
-    LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(groups, key = { group -> "${group.size}:${group.files.firstOrNull()?.path}" }) { group ->
-            DuplicateCard(group)
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (selectedPaths.isNotEmpty()) {
+            Button(
+                onClick = onMoveToTrash,
+                enabled = !actionInProgress,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            ) {
+                Text(stringResource(DesignSystemR.string.move_selected_duplicates_to_trash, selectedPaths.size))
+            }
+        }
+        Text(
+            stringResource(DesignSystemR.string.duplicate_keep_one),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(groups, key = { group -> "${group.size}:${group.files.firstOrNull()?.path}" }) { group ->
+                DuplicateCard(group, selectedPaths, onToggle)
+            }
         }
     }
 }
 
 @Composable
-private fun DuplicateCard(group: DuplicateGroup) {
+private fun DuplicateCard(
+    group: DuplicateGroup,
+    selectedPaths: Set<String>,
+    onToggle: (String, DuplicateGroup) -> Unit,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
@@ -357,7 +479,22 @@ private fun DuplicateCard(group: DuplicateGroup) {
                 style = MaterialTheme.typography.titleSmall,
             )
             group.files.forEach { file ->
-                Text(file.path, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val selectedCount = group.files.count { it.path in selectedPaths }
+                val checked = file.path in selectedPaths
+                val enabled = checked || selectedCount < group.files.size - 1
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = enabled) { onToggle(file.path, group) },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = checked,
+                        onCheckedChange = { onToggle(file.path, group) },
+                        enabled = enabled,
+                    )
+                    Text(file.path, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
     }
