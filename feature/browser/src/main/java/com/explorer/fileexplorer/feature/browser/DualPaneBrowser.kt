@@ -89,7 +89,7 @@ internal fun DualPaneContent(
             modifier = Modifier
                 .weight(1f)
                 .onGloballyPositioned { primaryBounds = it.boundsInRoot() },
-            title = "Left pane",
+            title = stringResource(DesignSystemR.string.left_pane),
             path = state.currentPath,
             files = state.files,
             isLoading = state.isLoading,
@@ -130,7 +130,7 @@ internal fun DualPaneContent(
             modifier = Modifier
                 .weight(1f)
                 .onGloballyPositioned { secondaryBounds = it.boundsInRoot() },
-            title = "Right pane",
+            title = stringResource(DesignSystemR.string.right_pane),
             path = state.secondaryPath,
             files = state.secondaryFiles,
             isLoading = state.secondaryIsLoading,

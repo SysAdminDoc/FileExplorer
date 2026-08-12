@@ -10,6 +10,7 @@ import android.provider.DocumentsContract.Document
 import android.provider.DocumentsContract.Root
 import android.provider.DocumentsProvider
 import android.webkit.MimeTypeMap
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
@@ -30,6 +31,7 @@ class FileDocumentsProvider : DocumentsProvider() {
 
     override fun queryRoots(projection: Array<String>?): Cursor {
         val cursor = MatrixCursor(projection ?: ROOT_COLUMNS)
+        val localStorageLabel = appContext()?.getString(DesignSystemR.string.local_storage) ?: return cursor
         roots().forEach { root ->
             val row = cursor.newRow()
             cursor.columnNames.forEach { column ->
@@ -37,7 +39,7 @@ class FileDocumentsProvider : DocumentsProvider() {
                     Root.COLUMN_ROOT_ID -> row.add(column, root.id)
                     Root.COLUMN_DOCUMENT_ID -> row.add(column, root.id)
                     Root.COLUMN_TITLE -> row.add(column, root.title)
-                    Root.COLUMN_SUMMARY -> row.add(column, "Local storage")
+                    Root.COLUMN_SUMMARY -> row.add(column, localStorageLabel)
                     Root.COLUMN_FLAGS -> row.add(column, rootFlags(root.file))
                     Root.COLUMN_ICON -> row.add(column, android.R.drawable.ic_menu_save)
                     Root.COLUMN_MIME_TYPES -> row.add(column, "*/*")
@@ -380,7 +382,8 @@ class FileDocumentsProvider : DocumentsProvider() {
         val external = Environment.getExternalStorageDirectory()
         if (!external.exists() || !external.isDirectory) return emptyList()
         val canonical = runCatching { external.canonicalFile }.getOrNull() ?: return emptyList()
-        return listOf(ProviderRoot(documentId(canonical), canonical, "Internal storage"))
+        val title = appContext()?.getString(DesignSystemR.string.local_storage) ?: return emptyList()
+        return listOf(ProviderRoot(documentId(canonical), canonical, title))
     }
 
     private fun authority(): String = "${appContext()?.packageName ?: "com.explorer.fileexplorer"}.documents"

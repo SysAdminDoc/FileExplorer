@@ -8,7 +8,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import com.explorer.fileexplorer.core.designsystem.*
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.model.FileItem
 
 @Composable
@@ -19,7 +21,11 @@ fun FileIcon(
     val (icon, tint) = getFileIconAndColor(item)
     Icon(
         imageVector = icon,
-        contentDescription = if (item.isDirectory) "Folder" else "File: ${item.extension}",
+        contentDescription = stringResource(
+            if (item.isDirectory) DesignSystemR.string.folder_icon_description
+            else DesignSystemR.string.file_icon_description,
+            item.extension.ifBlank { item.mimeType },
+        ),
         tint = tint,
         modifier = modifier,
     )

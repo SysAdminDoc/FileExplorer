@@ -2,6 +2,7 @@ package com.explorer.fileexplorer.feature.network
 
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
+import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -28,7 +29,7 @@ class ShareServerTileService : TileService() {
 
     private fun updateTile() {
         qsTile?.state = if (controller.status.value.isRunning) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        qsTile?.label = "Share Server"
+        qsTile?.label = getString(DesignSystemR.string.share_server)
         qsTile?.updateTile()
     }
 }

@@ -33,8 +33,12 @@
     <string name="shizuku_access">Shizuku Access</string>
     <string name="android_data">Android/data</string>
     <string name="storage">Storage</string>
+    <string name="local_storage">Local storage</string>
     <string name="quick_access">Quick access</string>
     <string name="bookmarks">Bookmarks</string>
+    <string name="places">Places</string>
+    <string name="left_pane">Left pane</string>
+    <string name="right_pane">Right pane</string>
     <string name="usb_otg">USB OTG</string>
     <string name="choose_folder">Choose folder</string>
     <string name="choose_usb_folder">Choose USB folder</string>
@@ -241,6 +245,7 @@
     <string name="permanent_delete_best_effort_warning">Secure overwrite is enabled. Local overwrite is best effort and cannot guarantee erasure on flash storage, snapshots, or copy-on-write filesystems.</string>
     <string name="permanent_delete_unsupported_warning">Secure overwrite is unavailable for this provider. Items will be deleted without overwrite-based erasure.</string>
     <string name="share">Share</string>
+    <string name="share_failed">Share failed</string>
     <string name="rename">Rename</string>
     <string name="folder_name">Folder name</string>
     <string name="new_name">New name</string>
@@ -274,6 +279,11 @@
     <string name="biometric_lock">Biometric Lock</string>
     <string name="require_biometric">Require biometric authentication to open app</string>
     <string name="biometrics_unavailable">Biometrics not available on this device</string>
+    <string name="authenticate_to_decrypt">Authenticate to decrypt selected files</string>
+    <string name="authenticate_to_protect_selected">Authenticate to protect selected files</string>
+    <string name="decryption_cancelled">Decryption cancelled: %1$s</string>
+    <string name="vault_authentication_cancelled">Vault authentication cancelled: %1$s</string>
+    <string name="authenticate_to_view_protected_files">Authenticate to view protected files</string>
     <string name="encrypted_vault">Encrypted vault</string>
     <string name="enable_vault">Enable Vault</string>
     <string name="vault_description">Encrypted storage for sensitive files; access requires biometric or device-credential authentication</string>
@@ -325,6 +335,25 @@
     <string name="trash_empty">Trash is empty</string>
     <string name="deleted_at">Deleted %1$s</string>
     <string name="folder">Folder</string>
+    <string name="file_icon_description">File: %1$s</string>
+    <string name="folder_icon_description">Folder</string>
+    <plurals name="items_count">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
+    <string name="just_now">Just now</string>
+    <plurals name="minutes_ago">
+        <item quantity="one">%1$d minute ago</item>
+        <item quantity="other">%1$d minutes ago</item>
+    </plurals>
+    <plurals name="hours_ago">
+        <item quantity="one">%1$d hour ago</item>
+        <item quantity="other">%1$d hours ago</item>
+    </plurals>
+    <plurals name="days_ago">
+        <item quantity="one">%1$d day ago</item>
+        <item quantity="other">%1$d days ago</item>
+    </plurals>
     <string name="install_zip">Install ZIP</string>
     <string name="refresh_modules">Refresh modules</string>
     <string name="no_installed_modules">No installed modules</string>

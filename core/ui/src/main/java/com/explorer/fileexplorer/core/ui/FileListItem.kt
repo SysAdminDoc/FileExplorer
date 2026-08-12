@@ -15,13 +15,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.explorer.fileexplorer.core.model.FileColumn
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
-import java.text.SimpleDateFormat
+import java.text.DateFormat
 import java.util.*
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -63,6 +68,8 @@ fun FileListItem(
     } else {
         Modifier
     }
+    val swipeLeftLabel = stringResource(DesignSystemR.string.swipe_left)
+    val swipeRightLabel = stringResource(DesignSystemR.string.swipe_right)
 
     val backgroundColor by animateColorAsState(
         targetValue = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
@@ -78,9 +85,23 @@ fun FileListItem(
             modifier = Modifier
                 .then(swipeModifier)
                 .combinedClickable(
+                    onClickLabel = stringResource(DesignSystemR.string.open),
+                    onLongClickLabel = stringResource(DesignSystemR.string.select),
+                    role = Role.Button,
                     onClick = onClick,
                     onLongClick = onLongClick,
                 )
+                .semantics {
+                    customActions = buildList {
+                        onSwipeLeft?.let { action ->
+                            add(CustomAccessibilityAction(swipeLeftLabel) { action(); true })
+                        }
+                        onSwipeRight?.let { action ->
+                            add(CustomAccessibilityAction(swipeRightLabel) { action(); true })
+                        }
+                    }
+                }
+                .heightIn(min = 48.dp)
                 .padding(horizontal = 16.dp, vertical = if (compact) 4.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -116,7 +137,7 @@ fun FileListItem(
                         if (item.isDirectory) {
                             item.childCount?.let { count ->
                                 Text(
-                                    text = "$count items",
+                                    text = pluralStringResource(DesignSystemR.plurals.items_count, count, count),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -150,7 +171,8 @@ fun FileListItem(
                     }
                     if (FileColumn.TYPE in visibleColumns) {
                         Text(
-                            text = if (item.isDirectory) "Folder" else item.extension.ifBlank { item.mimeType },
+                            text = if (item.isDirectory) stringResource(DesignSystemR.string.folder)
+                            else item.extension.ifBlank { item.mimeType },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -172,16 +194,33 @@ fun FileListItem(
     }
 }
 
-private val dateFormatter = SimpleDateFormat("MMM d, yyyy HH:mm", Locale.getDefault())
+private val dateFormatter = DateFormat.getDateTimeInstance(
+    DateFormat.MEDIUM,
+    DateFormat.SHORT,
+    Locale.getDefault(),
+)
 
+@Composable
 private fun formatDate(millis: Long): String {
     val now = System.currentTimeMillis()
     val diff = now - millis
     return when {
-        diff < 60_000 -> "Just now"
-        diff < 3_600_000 -> "${diff / 60_000}m ago"
-        diff < 86_400_000 -> "${diff / 3_600_000}h ago"
-        diff < 604_800_000 -> "${diff / 86_400_000}d ago"
+        diff < 60_000 -> stringResource(DesignSystemR.string.just_now)
+        diff < 3_600_000 -> pluralStringResource(
+            DesignSystemR.plurals.minutes_ago,
+            (diff / 60_000).toInt(),
+            diff / 60_000,
+        )
+        diff < 86_400_000 -> pluralStringResource(
+            DesignSystemR.plurals.hours_ago,
+            (diff / 3_600_000).toInt(),
+            diff / 3_600_000,
+        )
+        diff < 604_800_000 -> pluralStringResource(
+            DesignSystemR.plurals.days_ago,
+            (diff / 86_400_000).toInt(),
+            diff / 86_400_000,
+        )
         else -> dateFormatter.format(Date(millis))
     }
 }

@@ -22,6 +22,19 @@ cd FileExplorer
 3. Run on device or emulator (API 26+)
 4. Grant **All Files Access** when prompted
 
+## Verification
+
+Use the Android Studio JBR when the inherited `JAVA_HOME` is stale, and run Gradle serially on memory-constrained machines:
+
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+.\gradlew.bat --no-daemon --console=plain test
+.\gradlew.bat --no-daemon --console=plain verifyAccessibilityLocalization
+.\gradlew.bat --no-daemon --console=plain :core:ui:compileDebugAndroidTestKotlin
+```
+
+`verifyAccessibilityLocalization` checks localized resource keys and format placeholders, reports Android fallback keys, and rejects new inline user-facing strings in Kotlin UI sources. The Compose instrumentation contract covers file-row actions, descriptions, touch targets, RTL, and large-text density.
+
 ## Features
 
 | Feature | Description | Status |

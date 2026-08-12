@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.height
@@ -22,7 +23,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -50,7 +53,14 @@ fun FileGridItem(
     Surface(color = backgroundColor, modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
-                .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                .combinedClickable(
+                    onClickLabel = stringResource(DesignSystemR.string.open),
+                    onLongClickLabel = stringResource(DesignSystemR.string.select),
+                    role = Role.Button,
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                )
+                .heightIn(min = 48.dp)
                 .padding(horizontal = 10.dp, vertical = 14.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
@@ -78,8 +88,18 @@ fun FileGridItem(
                 modifier = if (item.isHidden) Modifier.alpha(0.6f) else Modifier,
             )
             val metadata = buildList {
-                if (FileColumn.SIZE in visibleColumns) add(item.displaySize)
-                if (FileColumn.TYPE in visibleColumns) add(if (item.isDirectory) "Folder" else item.extension.ifBlank { item.mimeType })
+                if (FileColumn.SIZE in visibleColumns) {
+                    if (item.isDirectory) {
+                        item.childCount?.let { count ->
+                            add(pluralStringResource(DesignSystemR.plurals.items_count, count, count))
+                        }
+                    } else {
+                        add(item.displaySize)
+                    }
+                }
+                if (FileColumn.TYPE in visibleColumns) {
+                    add(if (item.isDirectory) stringResource(DesignSystemR.string.folder) else item.extension.ifBlank { item.mimeType })
+                }
                 if (FileColumn.DATE in visibleColumns && item.lastModified > 0) add(formatGridDate(item.lastModified))
             }
             if (metadata.isNotEmpty()) {
@@ -97,12 +117,25 @@ fun FileGridItem(
     }
 }
 
+@Composable
 private fun formatGridDate(millis: Long): String {
     val diff = System.currentTimeMillis() - millis
     return when {
-        diff < 60_000 -> "Just now"
-        diff < 3_600_000 -> "${diff / 60_000}m ago"
-        diff < 86_400_000 -> "${diff / 3_600_000}h ago"
-        else -> "${diff / 86_400_000}d ago"
+        diff < 60_000 -> stringResource(DesignSystemR.string.just_now)
+        diff < 3_600_000 -> pluralStringResource(
+            DesignSystemR.plurals.minutes_ago,
+            (diff / 60_000).toInt(),
+            diff / 60_000,
+        )
+        diff < 86_400_000 -> pluralStringResource(
+            DesignSystemR.plurals.hours_ago,
+            (diff / 3_600_000).toInt(),
+            diff / 3_600_000,
+        )
+        else -> pluralStringResource(
+            DesignSystemR.plurals.days_ago,
+            (diff / 86_400_000).toInt(),
+            diff / 86_400_000,
+        )
     }
 }

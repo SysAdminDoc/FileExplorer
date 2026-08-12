@@ -201,7 +201,7 @@ private fun LargePlacesPane(
         ) {
             item {
                 Text(
-                    "PLACES",
+                    stringResource(DesignSystemR.string.places).uppercase(),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -218,7 +218,7 @@ private fun LargePlacesPane(
             }
             item {
                 LargePlaceItem(
-                    title = "Downloads",
+                    title = stringResource(DesignSystemR.string.downloads),
                     subtitle = "/storage/emulated/0/Download",
                     icon = Icons.Filled.Download,
                     selected = currentPath == "/storage/emulated/0/Download",
@@ -228,7 +228,7 @@ private fun LargePlacesPane(
             if (bookmarks.isNotEmpty()) {
                 item {
                     Text(
-                        "BOOKMARKS",
+                        stringResource(DesignSystemR.string.bookmarks).uppercase(),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),

@@ -158,7 +158,7 @@ private fun TabChip(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = onClose) {
                 Icon(Icons.Filled.Close, contentDescription = stringResource(DesignSystemR.string.close_tab, label), modifier = Modifier.size(16.dp))
             }
         }
