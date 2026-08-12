@@ -13,6 +13,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import java.io.FileNotFoundException
+import java.io.IOException
+import java.nio.file.Files
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -57,6 +59,7 @@ class FileDocumentsProviderContractTest {
             )
             assertTrue(flags and Root.FLAG_SUPPORTS_SEARCH != 0)
             assertTrue(flags and Root.FLAG_SUPPORTS_RECENTS != 0)
+            assertTrue(flags and Root.FLAG_SUPPORTS_IS_CHILD != 0)
             assertTrue(cursor.getString(cursor.getColumnIndexOrThrow(Root.COLUMN_SUMMARY)).isNotBlank())
         }
 
@@ -75,6 +78,7 @@ class FileDocumentsProviderContractTest {
             assertEquals("alpha.txt", cursor.getString(cursor.getColumnIndexOrThrow(Document.COLUMN_DISPLAY_NAME)))
             assertEquals("text/plain", cursor.getString(cursor.getColumnIndexOrThrow(Document.COLUMN_MIME_TYPE)))
             assertEquals(16L, cursor.getLong(cursor.getColumnIndexOrThrow(Document.COLUMN_SIZE)))
+            assertTrue(cursor.getLong(cursor.getColumnIndexOrThrow(Document.COLUMN_LAST_MODIFIED)) >= 0L)
             val flags = cursor.getInt(cursor.getColumnIndexOrThrow(Document.COLUMN_FLAGS))
             assertTrue(flags and Document.FLAG_SUPPORTS_WRITE != 0)
             assertTrue(flags and Document.FLAG_SUPPORTS_RENAME != 0)
@@ -128,6 +132,44 @@ class FileDocumentsProviderContractTest {
         val outside = File(context.filesDir, "documents-provider-outside-${UUID.randomUUID()}")
         assertFailsWith<FileNotFoundException> {
             provider.queryDocument(DocumentIdCodec.encode(outside.canonicalPath), null)
+        }
+    }
+
+    @Test
+    fun rootsTrackRemovalAndReappearance() {
+        assertEquals(1, queryRoots().use { it.count })
+
+        assertTrue(testRoot.deleteRecursively())
+        assertEquals(0, queryRoots().use { it.count })
+
+        assertTrue(testRoot.mkdirs())
+        assertEquals(1, queryRoots().use { it.count })
+    }
+
+    @Test
+    fun symbolicLinksAreExcludedFromQueriesAndDocumentIds() {
+        val target = File(testRoot, "target.txt").apply { writeText("target") }
+        val link = File(testRoot, "link.txt")
+        try {
+            Files.createSymbolicLink(link.toPath(), target.toPath())
+        } catch (_: UnsupportedOperationException) {
+            return
+        } catch (_: SecurityException) {
+            return
+        } catch (_: IOException) {
+            return
+        }
+
+        val rootId = queryRootId()
+        queryChildDocuments(rootId).use { cursor ->
+            val names = buildList {
+                while (cursor.moveToNext()) add(cursor.getString(cursor.getColumnIndexOrThrow(Document.COLUMN_DISPLAY_NAME)))
+            }
+            assertTrue("target.txt" in names)
+            assertFalse("link.txt" in names)
+        }
+        assertFailsWith<FileNotFoundException> {
+            provider.queryDocument(DocumentIdCodec.encode(link.absolutePath), null)
         }
     }
 

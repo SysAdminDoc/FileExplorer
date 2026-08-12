@@ -101,16 +101,37 @@ class UsbStorageManager @Inject constructor(
     }
 
     suspend fun savedRoots(): List<UsbStorageRoot> = withContext(Dispatchers.IO) {
-        storedTreeUris().mapNotNull { rawUri ->
+        val revoked = mutableSetOf<String>()
+        val roots = storedTreeUris().mapNotNull { rawUri ->
             val uri = rawUri.toUri()
-            val document = DocumentFile.fromTreeUri(context, uri) ?: return@mapNotNull null
-            if (!document.exists() || !document.isDirectory) return@mapNotNull null
+            if (!hasPersistedGrant(uri)) {
+                revoked += rawUri
+                return@mapNotNull null
+            }
+            val document = runCatching { DocumentFile.fromTreeUri(context, uri) }
+                .getOrElse { error ->
+                    if (error is SecurityException) revoked += rawUri
+                    null
+                }
+                ?: return@mapNotNull null
+            val available = runCatching { document.exists() && document.isDirectory }
+                .getOrElse { error ->
+                    if (error is SecurityException) revoked += rawUri
+                    false
+                }
+            if (!available) return@mapNotNull null
             UsbStorageRoot(
                 path = UsbPathCodec.rootPath(rawUri),
                 name = document.name ?: "USB storage",
-                canWrite = document.canWrite(),
+                canWrite = runCatching { document.canWrite() }.getOrDefault(false),
             )
         }
+        if (revoked.isNotEmpty()) {
+            preferences.edit {
+                putStringSet(PREF_TREE_URIS, storedTreeUris().filterNot { it in revoked }.toSet())
+            }
+        }
+        roots
     }
 
     suspend fun saveTree(uri: Uri): Result<UsbStorageRoot> = withContext(Dispatchers.IO) {
@@ -122,14 +143,19 @@ class UsbStorageManager @Inject constructor(
         if (!document.exists() || !document.isDirectory) {
             return@withContext Result.failure(IllegalArgumentException("The selected folder is not a directory"))
         }
-        try {
-            context.contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-            )
-        } catch (error: SecurityException) {
+        val readWriteFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val persisted = runCatching {
+            context.contentResolver.takePersistableUriPermission(uri, readWriteFlags)
+            true
+        }.getOrElse {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                true
+            }.getOrDefault(false)
+        }
+        if (!persisted) {
             return@withContext Result.failure(
-                IllegalStateException("Android did not grant persistent USB access", error),
+                IllegalStateException("Android did not grant persistent USB access"),
             )
         }
         val rawUri = uri.toString()
@@ -152,11 +178,12 @@ class UsbStorageManager @Inject constructor(
         preferences.edit {
             putStringSet(PREF_TREE_URIS, storedTreeUris().filterNot { it == rawUri }.toSet())
         }
+        val uri = rawUri.toUri()
         runCatching {
-            context.contentResolver.releasePersistableUriPermission(
-                rawUri.toUri(),
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-            )
+            context.contentResolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runCatching {
+            context.contentResolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         }
         true
     }
@@ -172,6 +199,11 @@ class UsbStorageManager @Inject constructor(
 
     private fun storedTreeUris(): Set<String> =
         preferences.getStringSet(PREF_TREE_URIS, emptySet()).orEmpty().toSet()
+
+    private fun hasPersistedGrant(uri: Uri): Boolean = context.contentResolver.persistedUriPermissions.any { permission ->
+        permission.uri == uri &&
+            (permission.isReadPermission || permission.isWritePermission)
+    }
 
     private fun isMassStorageDevice(device: UsbDevice): Boolean =
         device.deviceClass == UsbConstants.USB_CLASS_MASS_STORAGE ||

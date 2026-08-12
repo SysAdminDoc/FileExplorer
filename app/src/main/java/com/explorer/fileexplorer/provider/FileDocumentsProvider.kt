@@ -248,7 +248,8 @@ class FileDocumentsProvider @JvmOverloads internal constructor(
     }
 
     private fun rootFlags(root: File): Int {
-        var flags = Root.FLAG_LOCAL_ONLY or Root.FLAG_SUPPORTS_RECENTS or Root.FLAG_SUPPORTS_SEARCH
+        var flags = Root.FLAG_LOCAL_ONLY or Root.FLAG_SUPPORTS_RECENTS or
+            Root.FLAG_SUPPORTS_SEARCH or Root.FLAG_SUPPORTS_IS_CHILD
         if (root.canWrite()) flags = flags or Root.FLAG_SUPPORTS_CREATE
         return flags
     }
@@ -257,10 +258,13 @@ class FileDocumentsProvider @JvmOverloads internal constructor(
         if (isRoot(file)) {
             return if (file.canWrite()) Document.FLAG_DIR_SUPPORTS_CREATE else 0
         }
-        var flags = Document.FLAG_SUPPORTS_DELETE or
-            Document.FLAG_SUPPORTS_RENAME or
-            Document.FLAG_SUPPORTS_MOVE or
-            Document.FLAG_SUPPORTS_COPY
+        val parentWritable = file.parentFile?.canWrite() == true
+        var flags = Document.FLAG_SUPPORTS_COPY
+        if (parentWritable) {
+            flags = flags or Document.FLAG_SUPPORTS_DELETE or
+                Document.FLAG_SUPPORTS_RENAME or
+                Document.FLAG_SUPPORTS_MOVE
+        }
         if (file.isDirectory) {
             if (file.canWrite()) flags = flags or Document.FLAG_DIR_SUPPORTS_CREATE
         } else if (file.canWrite()) {
@@ -280,18 +284,29 @@ class FileDocumentsProvider @JvmOverloads internal constructor(
         val decoded = DocumentIdCodec.decode(documentId)
             ?: throw FileNotFoundException("Invalid document id")
         val candidate = try {
-            Paths.get(decoded).toFile().canonicalFile
+            Paths.get(decoded).toAbsolutePath().normalize().toFile()
         } catch (error: Exception) {
             throw notFound("Invalid document path", error)
         }
         val candidatePath = candidate.toPath()
-        if (roots().none { DocumentPathPolicy.isWithinRoot(candidatePath, it.file.toPath()) }) {
+        val root = roots().firstOrNull { root ->
+            DocumentPathPolicy.isSafePath(candidatePath, root.file.toPath())
+        }
+        if (root == null) {
             throw FileNotFoundException("Document is outside the exported storage root")
         }
         if (!candidate.exists()) {
             throw FileNotFoundException("Document does not exist")
         }
-        return candidate
+        return try {
+            val canonical = candidate.canonicalFile
+            if (!DocumentPathPolicy.isSafePath(canonical.toPath(), root.file.toPath())) {
+                throw FileNotFoundException("Document resolves outside the exported storage root")
+            }
+            canonical
+        } catch (error: IOException) {
+            throw notFound("Unable to resolve document path", error)
+        }
     }
 
     private fun rootForId(rootId: String): ProviderRoot =

@@ -46,7 +46,7 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 | Storage Analyzer | Recursive size treemap, SHA-256 duplicate groups, and largest-file list | Complete |
 | Batch Rename | Regex capture groups, counter/date/parent tokens, collision checks, and live preview | Complete |
 | Transfer Queue | Room-backed pausable and reorderable copy, move, and delete queue with process-death recovery, retry checkpoints, throttling, metadata conflict previews, persisted decisions, deterministic keep-both names, and text diff preview | Verified (local recovery) |
-| DocumentsProvider | SAF access to the local storage root with browsing, search, recent files, and document mutations | Complete |
+| DocumentsProvider | SAF access to the local storage root with browsing, search, recent files, document mutations, dynamic-root handling, and symlink-safe path validation | Verified (SAF contract) |
 | USB OTG | UsbManager mass-storage detection, persistent SAF tree access, and DocumentFile read/write browsing | Requires configuration |
 | Quick Share | Selection menu action backed by the Android Sharesheet for nearby-device delivery | Requires Quick Share or another compatible receiver |
 | Media casting | Cast a selected local or SAF-backed photo, video, or audio file through Chromecast's Cast dialog | Requires Chromecast / Google Cast services |
