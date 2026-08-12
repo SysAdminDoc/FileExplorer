@@ -2,6 +2,7 @@ package com.explorer.fileexplorer.feature.transfer
 
 import com.explorer.fileexplorer.core.data.ArchiveFormat
 import com.explorer.fileexplorer.core.model.ConflictResolution
+import java.security.MessageDigest
 import java.util.Locale
 
 /** Stable external action and extra names for Tasker, Automate, and similar tools. */
@@ -19,6 +20,7 @@ object AutomationContract {
     const val EXTRA_CONNECTION_ID = "connection_id"
     const val EXTRA_CONFLICT = "conflict"
     const val EXTRA_REQUEST_ID = "request_id"
+    const val EXTRA_IDEMPOTENCY_KEY = "idempotency_key"
     const val EXTRA_OPERATION = "operation"
     const val EXTRA_STATUS = "status"
     const val EXTRA_ERROR = "error"
@@ -43,6 +45,8 @@ object AutomationContract {
         val archiveFormat: ArchiveFormat = ArchiveFormat.ZIP,
         val conflictResolution: ConflictResolution = ConflictResolution.RENAME,
         val connectionId: Long? = null,
+        val idempotencyKey: String = "",
+        val deterministicKeepBoth: Boolean = false,
     )
 
     fun parse(
@@ -52,6 +56,7 @@ object AutomationContract {
         format: String? = null,
         connectionId: Long? = null,
         conflict: String? = null,
+        idempotencyKey: String? = null,
     ): Result<Request> = runCatching {
         val operation = when (action) {
             ACTION_COPY -> Operation.COPY
@@ -74,6 +79,13 @@ object AutomationContract {
 
         val archiveFormat = if (operation == Operation.ZIP) parseArchiveFormat(format) else ArchiveFormat.ZIP
         val conflictResolution = parseConflict(conflict)
+        val deterministicKeepBoth = conflict?.trim()?.equals("keep-both", ignoreCase = true) == true
+        val stableIdempotencyKey = idempotencyKey?.trim()?.takeIf { it.isNotEmpty() }
+            ?: stableKey(operation, sources, target)
+        require(stableIdempotencyKey.length <= MAX_IDEMPOTENCY_KEY_LENGTH) {
+            "The idempotency key is too long"
+        }
+        require('\u0000' !in stableIdempotencyKey) { "The idempotency key cannot contain NUL" }
         val uploadConnectionId = if (operation == Operation.UPLOAD) {
             require(connectionId != null && connectionId > 0) {
                 "Upload actions require a positive saved connection_id"
@@ -90,6 +102,8 @@ object AutomationContract {
             archiveFormat = archiveFormat,
             conflictResolution = conflictResolution,
             connectionId = uploadConnectionId,
+            idempotencyKey = stableIdempotencyKey,
+            deterministicKeepBoth = deterministicKeepBoth,
         )
     }
 
@@ -111,4 +125,20 @@ object AutomationContract {
             else -> error("Unsupported conflict mode: $value")
         }
     }
+
+    private fun stableKey(operation: Operation, sources: List<String>, destination: String): String {
+        val payload = buildString {
+            append(operation.name)
+            append('\u0000')
+            sources.forEach { source -> append(source).append('\u0000') }
+            append(destination)
+        }
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(payload.toByteArray(Charsets.UTF_8))
+            .take(12)
+            .joinToString("") { "%02x".format(it) }
+        return "automation-$digest"
+    }
+
+    private const val MAX_IDEMPOTENCY_KEY_LENGTH = 128
 }

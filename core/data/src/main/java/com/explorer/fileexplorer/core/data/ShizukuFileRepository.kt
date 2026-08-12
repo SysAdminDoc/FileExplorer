@@ -1,6 +1,7 @@
 package com.explorer.fileexplorer.core.data
 
 import android.webkit.MimeTypeMap
+import com.explorer.fileexplorer.core.model.ConflictNamePolicy
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.model.RepositoryCapabilities
@@ -67,6 +68,7 @@ class ShizukuFileRepository @Inject constructor(
         sources: List<String>,
         destination: String,
         conflictResolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
         if (!ShizukuPaths.isAllowed(destination) || sources.any { !ShizukuPaths.isAllowed(it) }) {
@@ -75,9 +77,16 @@ class ShizukuFileRepository @Inject constructor(
         var count = 0
         for (source in sources) {
             onProgress(0, 0, source.substringAfterLast('/'))
-            val flags = if (conflictResolution == ConflictResolution.OVERWRITE) "-rf" else "-rn"
+            val name = source.substringAfterLast('/')
+            val targetName = resolveShizukuTarget(destination, name, conflictResolution, conflictSuffix)
+            if (targetName == null) {
+                count++
+                continue
+            }
+            val flags = if (conflictResolution == ConflictResolution.OVERWRITE) "-rf" else "-r"
+            val targetPath = requireNotNull(ShizukuPaths.child(destination, targetName))
             val result = shizukuManager.execute(
-                    "cp $flags -- ${ShizukuPaths.shellQuote(source)} ${ShizukuPaths.shellQuote(destination)}/",
+                    "cp $flags -- ${ShizukuPaths.shellQuote(source)} ${ShizukuPaths.shellQuote(targetPath)}",
                 )
             if (!result.isSuccess) return@withContext Result.failure(commandFailure(RepositoryOperation.COPY, result.output))
             count++
@@ -89,6 +98,7 @@ class ShizukuFileRepository @Inject constructor(
         sources: List<String>,
         destination: String,
         conflictResolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
         if (!ShizukuPaths.isAllowed(destination) || sources.any { !ShizukuPaths.isAllowed(it) }) {
@@ -97,14 +107,55 @@ class ShizukuFileRepository @Inject constructor(
         var count = 0
         for (source in sources) {
             onProgress(0, 0, source.substringAfterLast('/'))
+            val name = source.substringAfterLast('/')
+            val targetName = resolveShizukuTarget(destination, name, conflictResolution, conflictSuffix)
+            if (targetName == null) {
+                count++
+                continue
+            }
             val flags = if (conflictResolution == ConflictResolution.OVERWRITE) "-f" else "-n"
+            val targetPath = requireNotNull(ShizukuPaths.child(destination, targetName))
             val result = shizukuManager.execute(
-                    "mv $flags -- ${ShizukuPaths.shellQuote(source)} ${ShizukuPaths.shellQuote(destination)}/",
+                    "mv $flags -- ${ShizukuPaths.shellQuote(source)} ${ShizukuPaths.shellQuote(targetPath)}",
                 )
             if (!result.isSuccess) return@withContext Result.failure(commandFailure(RepositoryOperation.MOVE, result.output))
             count++
         }
         Result.success(count)
+    }
+
+    private suspend fun resolveShizukuTarget(
+        destination: String,
+        sourceName: String,
+        resolution: ConflictResolution,
+        conflictSuffix: String?,
+    ): String? {
+        val requested = ShizukuPaths.child(destination, sourceName)
+            ?: return null
+        if (!exists(requested)) return sourceName
+        return when (resolution) {
+            ConflictResolution.SKIP -> null
+            ConflictResolution.OVERWRITE -> sourceName
+            ConflictResolution.RENAME,
+            ConflictResolution.ASK,
+            -> {
+                val deterministic = conflictSuffix?.let { ConflictNamePolicy.fileName(sourceName, it) }
+                var candidate = deterministic ?: numberedName(sourceName, 1)
+                var index = 1
+                while (ShizukuPaths.child(destination, candidate)?.let { exists(it) } == true) {
+                    index++
+                    candidate = numberedName(deterministic ?: sourceName, index)
+                }
+                candidate
+            }
+        }
+    }
+
+    private fun numberedName(name: String, number: Int): String {
+        val dot = name.lastIndexOf('.')
+        val base = if (dot > 0) name.substring(0, dot) else name
+        val extension = if (dot > 0) name.substring(dot) else ""
+        return "$base ($number)$extension"
     }
 
     override suspend fun deleteFiles(

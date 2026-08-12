@@ -47,6 +47,8 @@ class TransferService : Service() {
         const val EXTRA_CONNECTION_ID = "connection_id"
         const val EXTRA_CONFLICT = "conflict"
         const val EXTRA_REQUEST_ID = "request_id"
+        const val EXTRA_IDEMPOTENCY_KEY = "idempotency_key"
+        const val EXTRA_KEEP_BOTH = "keep_both"
         const val EXTRA_QUEUE_TASK_ID = "queue_task_id"
 
         private val _currentTask = MutableStateFlow<TransferTask?>(null)
@@ -160,6 +162,10 @@ class TransferService : Service() {
         }.getOrDefault(ConflictResolution.RENAME)
         val connectionId = intent.getLongExtra(EXTRA_CONNECTION_ID, 0L).takeIf { it > 0L }
         val requestId = intent.getStringExtra(EXTRA_REQUEST_ID)
+        val idempotencyKey = intent.getStringExtra(EXTRA_IDEMPOTENCY_KEY)
+            ?: requestId
+            ?: "automation-${operation.name.lowercase()}-${sources.joinToString("\u0000")}-${destination}"
+        val keepBoth = intent.getBooleanExtra(EXTRA_KEEP_BOTH, false)
 
         startForeground(NOTIFICATION_ID, buildNotification("Preparing...", 0f))
 
@@ -191,7 +197,14 @@ class TransferService : Service() {
             try {
                 when (operation) {
                     FileOperation.COPY -> {
-                        repository.copyFiles(sources, destination, conflict) { transferred, total, file ->
+                        repository.copyFiles(
+                            sources = sources,
+                            destination = destination,
+                            conflictResolution = conflict,
+                            conflictSuffix = if (keepBoth) {
+                                ConflictNamePolicy.suffix(idempotencyKey, sources.joinToString("\u0000"), destination)
+                            } else null,
+                        ) { transferred, total, file ->
                             val progress = if (total > 0) transferred.toFloat() / total else 0f
                             _currentTask.value = _currentTask.value?.copy(
                                 transferredBytes = transferred, totalBytes = total,
@@ -201,7 +214,14 @@ class TransferService : Service() {
                         }.getOrThrow()
                     }
                     FileOperation.MOVE -> {
-                        repository.moveFiles(sources, destination, conflict) { transferred, total, file ->
+                        repository.moveFiles(
+                            sources = sources,
+                            destination = destination,
+                            conflictResolution = conflict,
+                            conflictSuffix = if (keepBoth) {
+                                ConflictNamePolicy.suffix(idempotencyKey, sources.joinToString("\u0000"), destination)
+                            } else null,
+                        ) { transferred, total, file ->
                             val progress = if (total > 0) transferred.toFloat() / total else 0f
                             _currentTask.value = _currentTask.value?.copy(
                                 transferredBytes = transferred, totalBytes = total,

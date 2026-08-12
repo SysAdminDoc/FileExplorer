@@ -1,6 +1,7 @@
 package com.explorer.fileexplorer.core.network.webdav
 
 import android.webkit.MimeTypeMap
+import com.explorer.fileexplorer.core.model.ConflictNamePolicy
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.model.RepositoryCapabilities
@@ -118,6 +119,7 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
     override suspend fun copyFiles(
         sources: List<String>, destination: String,
         conflictResolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
         val s = sardine ?: return@withContext Result.failure(
@@ -127,7 +129,12 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
         try {
             for (src in sources) {
                 val name = src.trimEnd('/').substringAfterLast('/')
-                val destUrl = "${resolveUrl(destination)}/$name"
+                val targetName = resolveWebDavTarget(s, destination, name, conflictResolution, conflictSuffix)
+                if (targetName == null) {
+                    count++
+                    continue
+                }
+                val destUrl = "${resolveUrl(destination).trimEnd('/')}/$targetName"
                 val size = calculateSize(listOf(src))
                 onProgress(0, size, name)
                 s.copy(resolveUrl(src), destUrl)
@@ -143,6 +150,7 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
     override suspend fun moveFiles(
         sources: List<String>, destination: String,
         conflictResolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
         val s = sardine ?: return@withContext Result.failure(
@@ -152,7 +160,12 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
         try {
             for (src in sources) {
                 val name = src.trimEnd('/').substringAfterLast('/')
-                val destUrl = "${resolveUrl(destination)}/$name"
+                val targetName = resolveWebDavTarget(s, destination, name, conflictResolution, conflictSuffix)
+                if (targetName == null) {
+                    count++
+                    continue
+                }
+                val destUrl = "${resolveUrl(destination).trimEnd('/')}/$targetName"
                 val size = calculateSize(listOf(src))
                 onProgress(0, size, name)
                 s.move(resolveUrl(src), destUrl)
@@ -382,6 +395,41 @@ class WebDavFileRepository @Inject constructor() : NetworkFileRepository {
 
     private fun davResourcePath(parent: String, resource: DavResource): String =
         davResourceToFileItem(resource, parent).path
+
+    private fun resolveWebDavTarget(
+        sardine: OkHttpSardine,
+        destination: String,
+        sourceName: String,
+        resolution: ConflictResolution,
+        conflictSuffix: String?,
+    ): String? {
+        val parentUrl = resolveUrl(destination).trimEnd('/')
+        fun exists(name: String): Boolean = sardine.exists("$parentUrl/$name")
+        if (!exists(sourceName)) return sourceName
+        return when (resolution) {
+            ConflictResolution.SKIP -> null
+            ConflictResolution.OVERWRITE -> sourceName
+            ConflictResolution.RENAME,
+            ConflictResolution.ASK,
+            -> {
+                val deterministic = conflictSuffix?.let { ConflictNamePolicy.fileName(sourceName, it) }
+                var candidate = deterministic ?: numberedName(sourceName, 1)
+                var index = 1
+                while (exists(candidate)) {
+                    index++
+                    candidate = numberedName(deterministic ?: sourceName, index)
+                }
+                candidate
+            }
+        }
+    }
+
+    private fun numberedName(name: String, number: Int): String {
+        val dot = name.lastIndexOf('.')
+        val base = if (dot > 0) name.substring(0, dot) else name
+        val extension = if (dot > 0) name.substring(dot) else ""
+        return "$base ($number)$extension"
+    }
 
     private fun davResourceToFileItem(res: DavResource, parentPath: String): FileItem {
         val name = res.name ?: res.href.path.trimEnd('/').substringAfterLast('/')

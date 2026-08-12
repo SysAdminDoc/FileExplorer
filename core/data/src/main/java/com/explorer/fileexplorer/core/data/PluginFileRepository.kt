@@ -51,9 +51,10 @@ class PluginFileRepository(
         sources: List<String>,
         destination: String,
         conflictResolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = result(RepositoryOperation.COPY) {
-        val response = execute(RepositoryOperation.COPY, PluginRequests.copy(sources, destination, conflictResolution))
+        val response = execute(RepositoryOperation.COPY, PluginRequests.copy(sources, destination, conflictResolution, conflictSuffix))
         onProgress(response.getLong("bytes", -1L), response.getLong("total_bytes", -1L), "")
         response.getInt("count", -1).takeIf { it >= 0 } ?: error("Plugin did not return a copy count")
     }
@@ -62,9 +63,10 @@ class PluginFileRepository(
         sources: List<String>,
         destination: String,
         conflictResolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = result(RepositoryOperation.MOVE) {
-        val response = execute(RepositoryOperation.MOVE, PluginRequests.move(sources, destination, conflictResolution))
+        val response = execute(RepositoryOperation.MOVE, PluginRequests.move(sources, destination, conflictResolution, conflictSuffix))
         onProgress(response.getLong("bytes", -1L), response.getLong("total_bytes", -1L), "")
         response.getInt("count", -1).takeIf { it >= 0 } ?: error("Plugin did not return a move count")
     }

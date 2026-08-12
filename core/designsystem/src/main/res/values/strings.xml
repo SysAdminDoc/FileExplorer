@@ -209,6 +209,9 @@
     <string name="file_conflict">File conflict</string>
     <string name="incoming">Incoming: %1$s</string>
     <string name="existing">Existing: %1$s</string>
+    <string name="conflict_incoming_metadata">Incoming metadata: %1$s, modified %2$s</string>
+    <string name="conflict_existing_metadata">Existing metadata: %1$s, modified %2$s</string>
+    <string name="conflict_keep_both_target">Keep-both target: %1$s</string>
     <string name="apply_choice_to_all">Apply this choice to all conflicts</string>
     <string name="skip">Skip</string>
     <string name="replace">Replace</string>

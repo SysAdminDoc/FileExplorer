@@ -41,6 +41,13 @@ data class TransferConflict(
     val destinationPath: String,
     val isText: Boolean,
     val diffPreview: String = "",
+    val sourceSize: Long? = null,
+    val destinationSize: Long? = null,
+    val sourceModified: Long? = null,
+    val destinationModified: Long? = null,
+    val sourceIsDirectory: Boolean = false,
+    val destinationIsDirectory: Boolean = false,
+    val plannedKeepBothPath: String? = null,
 )
 
 data class TransferQueueTask(
@@ -58,6 +65,7 @@ data class TransferQueueTask(
     val currentFile: String = "",
     val error: String? = null,
     val conflict: TransferConflict? = null,
+    val conflictDecisions: Map<String, TransferConflictAction> = emptyMap(),
     val idempotencyKey: String = "transfer-$id",
     val retryCount: Int = 0,
     val intendedEntries: List<TransferJournalEntry> = emptyList(),

@@ -39,7 +39,7 @@ class AppDatabaseMigrationTest {
 
         val migrated = migrationHelper.runMigrationsAndValidate(
             DATABASE_NAME,
-            9,
+            10,
             true,
             MIGRATION_2_3,
             MIGRATION_3_4,
@@ -48,6 +48,7 @@ class AppDatabaseMigrationTest {
             MIGRATION_6_7,
             MIGRATION_7_8,
             MIGRATION_8_9,
+            MIGRATION_9_10,
         )
 
         migrated.query("SELECT name, path, sort_order FROM bookmarks").use { cursor ->
@@ -77,6 +78,8 @@ class AppDatabaseMigrationTest {
             assertTrue("intended_entries" in columns)
             assertTrue("committed_entries" in columns)
             assertTrue("recovery_policy" in columns)
+            assertTrue("conflict_decisions" in columns)
+            assertTrue("conflict_planned_keep_both_path" in columns)
         }
         migrated.close()
     }

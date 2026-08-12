@@ -57,12 +57,14 @@ interface NetworkFileRepository {
     suspend fun copyFiles(
         sources: List<String>, destination: String,
         conflictResolution: ConflictResolution = ConflictResolution.OVERWRITE,
+        conflictSuffix: String? = null,
         onProgress: (Long, Long, String) -> Unit = { _, _, _ -> },
     ): Result<Int>
 
     suspend fun moveFiles(
         sources: List<String>, destination: String,
         conflictResolution: ConflictResolution = ConflictResolution.OVERWRITE,
+        conflictSuffix: String? = null,
         onProgress: (Long, Long, String) -> Unit = { _, _, _ -> },
     ): Result<Int>
 

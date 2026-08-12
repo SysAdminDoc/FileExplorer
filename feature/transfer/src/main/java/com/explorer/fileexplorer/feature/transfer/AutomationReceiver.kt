@@ -16,6 +16,8 @@ class AutomationReceiver : BroadcastReceiver() {
             format = intent.getStringExtra(AutomationContract.EXTRA_FORMAT),
             connectionId = readLongExtra(intent, AutomationContract.EXTRA_CONNECTION_ID),
             conflict = intent.getStringExtra(AutomationContract.EXTRA_CONFLICT),
+            idempotencyKey = intent.getStringExtra(AutomationContract.EXTRA_IDEMPOTENCY_KEY)
+                ?: intent.getStringExtra(AutomationContract.EXTRA_REQUEST_ID),
         )
 
         request.onFailure { error ->
@@ -43,9 +45,9 @@ class AutomationReceiver : BroadcastReceiver() {
                     TransferService.EXTRA_CONFLICT,
                     parsed.conflictResolution.name,
                 )
-                intent.getStringExtra(AutomationContract.EXTRA_REQUEST_ID)?.let {
-                    putExtra(TransferService.EXTRA_REQUEST_ID, it)
-                }
+                putExtra(TransferService.EXTRA_IDEMPOTENCY_KEY, parsed.idempotencyKey)
+                putExtra(TransferService.EXTRA_KEEP_BOTH, parsed.deterministicKeepBoth)
+                putExtra(TransferService.EXTRA_REQUEST_ID, parsed.idempotencyKey)
             }
 
             runCatching { ContextCompat.startForegroundService(context, serviceIntent) }

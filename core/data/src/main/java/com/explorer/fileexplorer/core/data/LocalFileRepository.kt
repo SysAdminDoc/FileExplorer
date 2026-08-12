@@ -2,6 +2,7 @@ package com.explorer.fileexplorer.core.data
 
 import android.content.Context
 import android.webkit.MimeTypeMap
+import com.explorer.fileexplorer.core.model.ConflictNamePolicy
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.model.RepositoryCapabilities
@@ -69,6 +70,7 @@ class LocalFileRepository @Inject constructor(
         sources: List<String>,
         destination: String,
         conflictResolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
         try {
@@ -83,7 +85,7 @@ class LocalFileRepository @Inject constructor(
             for (src in sources) {
                 val srcPath = Paths.get(src)
                 val requestedTarget = destinationDirectory.toPath().resolve(srcPath.fileName.toString())
-                val target = resolveTransferTarget(requestedTarget, conflictResolution)
+                val target = resolveTransferTarget(requestedTarget, conflictResolution, conflictSuffix)
                 val sourceSize = calculateSize(listOf(src))
                 if (target == null) {
                     transferred += sourceSize
@@ -156,6 +158,7 @@ class LocalFileRepository @Inject constructor(
         sources: List<String>,
         destination: String,
         conflictResolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
         try {
@@ -174,7 +177,7 @@ class LocalFileRepository @Inject constructor(
                     count++
                     continue
                 }
-                val target = resolveTransferTarget(requestedTarget, conflictResolution)
+                val target = resolveTransferTarget(requestedTarget, conflictResolution, conflictSuffix)
                 if (target == null) {
                     onProgress(sourceSize, sourceSize, srcPath.fileName.toString())
                     count++
@@ -279,10 +282,19 @@ class LocalFileRepository @Inject constructor(
         Files.deleteIfExists(path)
     }
 
-    private fun resolveTransferTarget(target: Path, resolution: ConflictResolution): Path? = when {
+    private fun resolveTransferTarget(target: Path, resolution: ConflictResolution, conflictSuffix: String?): Path? = when {
         !Files.exists(target) -> target
         resolution == ConflictResolution.SKIP -> null
-        resolution == ConflictResolution.RENAME || resolution == ConflictResolution.ASK -> resolveConflict(target)
+        resolution == ConflictResolution.RENAME || resolution == ConflictResolution.ASK -> {
+            val deterministic = conflictSuffix?.let {
+                target.resolveSibling(ConflictNamePolicy.fileName(target.fileName.toString(), it))
+            }
+            when {
+                deterministic != null && !Files.exists(deterministic) -> deterministic
+                deterministic != null -> resolveConflict(deterministic)
+                else -> resolveConflict(target)
+            }
+        }
         else -> target
     }
 

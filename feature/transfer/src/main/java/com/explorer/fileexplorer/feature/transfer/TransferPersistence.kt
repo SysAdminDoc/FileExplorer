@@ -43,6 +43,30 @@ private object TransferJournalCodec {
     }
 }
 
+private object TransferConflictDecisionCodec {
+    fun encode(decisions: Map<String, TransferConflictAction>): String = decisions.entries
+        .sortedBy { it.key }
+        .joinToString("\n") { (source, action) ->
+            listOf(
+                Base64.getEncoder().encodeToString(source.toByteArray(StandardCharsets.UTF_8)),
+                action.name,
+            ).joinToString("|")
+        }
+
+    fun decode(encoded: String): Map<String, TransferConflictAction> {
+        if (encoded.isBlank()) return emptyMap()
+        return encoded.lineSequence().filter { it.isNotBlank() }.associate { line ->
+            val fields = line.split('|')
+            require(fields.size == 2) { "Invalid persisted transfer conflict decision" }
+            val source = String(Base64.getDecoder().decode(fields[0]), StandardCharsets.UTF_8)
+            val action = runCatching { TransferConflictAction.valueOf(fields[1]) }
+                .getOrElse { throw IllegalArgumentException("Invalid persisted transfer conflict decision", it) }
+            require(source.isNotBlank()) { "Persisted transfer conflict decision has no source" }
+            source to action
+        }
+    }
+}
+
 internal fun TransferQueueTask.toEntity(queueOrder: Int): TransferTaskEntity = TransferTaskEntity(
     id = id,
     idempotencyKey = idempotencyKey.ifBlank { "transfer-$id" },
@@ -64,6 +88,14 @@ internal fun TransferQueueTask.toEntity(queueOrder: Int): TransferTaskEntity = T
     conflictDestinationPath = conflict?.destinationPath,
     conflictIsText = conflict?.isText ?: false,
     conflictDiffPreview = conflict?.diffPreview ?: "",
+    conflictSourceSize = conflict?.sourceSize,
+    conflictDestinationSize = conflict?.destinationSize,
+    conflictSourceModified = conflict?.sourceModified,
+    conflictDestinationModified = conflict?.destinationModified,
+    conflictSourceIsDirectory = conflict?.sourceIsDirectory ?: false,
+    conflictDestinationIsDirectory = conflict?.destinationIsDirectory ?: false,
+    conflictPlannedKeepBothPath = conflict?.plannedKeepBothPath,
+    conflictDecisions = TransferConflictDecisionCodec.encode(conflictDecisions),
     intendedEntries = TransferJournalCodec.encode(intendedEntries),
     committedEntries = TransferJournalCodec.encode(committedEntries),
     recoveryPolicy = recoveryPolicy.name,
@@ -97,6 +129,7 @@ internal fun TransferTaskEntity.toTask(): TransferQueueTask {
         runCatching { TransferConflictAction.valueOf(value) }
             .getOrElse { throw IllegalArgumentException("Invalid persisted transfer conflict action: $value", it) }
     }
+    val parsedConflictDecisions = TransferConflictDecisionCodec.decode(conflictDecisions)
     val parsedPaths = TransferPathCodec.decode(sourcePaths)
     require(parsedPaths.isNotEmpty()) { "Persisted transfer has no sources" }
     require(id > 0L) { "Persisted transfer has invalid id" }
@@ -127,6 +160,13 @@ internal fun TransferTaskEntity.toTask(): TransferQueueTask {
             destinationPath = savedConflictDestination!!,
             isText = conflictIsText,
             diffPreview = conflictDiffPreview,
+            sourceSize = conflictSourceSize,
+            destinationSize = conflictDestinationSize,
+            sourceModified = conflictSourceModified,
+            destinationModified = conflictDestinationModified,
+            sourceIsDirectory = conflictSourceIsDirectory,
+            destinationIsDirectory = conflictDestinationIsDirectory,
+            plannedKeepBothPath = conflictPlannedKeepBothPath,
         )
     } else {
         null
@@ -148,6 +188,7 @@ internal fun TransferTaskEntity.toTask(): TransferQueueTask {
         currentFile = currentFile,
         error = error,
         conflict = parsedConflict,
+        conflictDecisions = parsedConflictDecisions,
         intendedEntries = parsedIntendedEntries,
         committedEntries = parsedCommittedEntries,
         recoveryPolicy = parsedRecoveryPolicy,

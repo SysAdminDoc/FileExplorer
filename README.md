@@ -45,7 +45,7 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 | Collections | MediaStore-backed Photos, Videos, Music, Documents, Downloads, and APK smart categories | Complete |
 | Storage Analyzer | Recursive size treemap, SHA-256 duplicate groups, and largest-file list | Complete |
 | Batch Rename | Regex capture groups, counter/date/parent tokens, collision checks, and live preview | Complete |
-| Transfer Queue | Room-backed pausable and reorderable copy, move, and delete queue with process-death recovery, retry checkpoints, throttling, conflict choices, and text diff preview | Verified (local recovery) |
+| Transfer Queue | Room-backed pausable and reorderable copy, move, and delete queue with process-death recovery, retry checkpoints, throttling, metadata conflict previews, persisted decisions, deterministic keep-both names, and text diff preview | Verified (local recovery) |
 | DocumentsProvider | SAF access to the local storage root with browsing, search, recent files, and document mutations | Complete |
 | USB OTG | UsbManager mass-storage detection, persistent SAF tree access, and DocumentFile read/write browsing | Requires configuration |
 | Quick Share | Selection menu action backed by the Android Sharesheet for nearby-device delivery | Requires Quick Share or another compatible receiver |
@@ -107,8 +107,8 @@ string array), plus the `destination` extra. Use these action names:
 
 | Action | Additional extras |
 |--------|-------------------|
-| `com.explorer.fileexplorer.action.COPY` | Optional `conflict`: `rename` (default), `overwrite`, or `skip` |
-| `com.explorer.fileexplorer.action.MOVE` | Optional `conflict`: `rename` (default), `overwrite`, or `skip` |
+| `com.explorer.fileexplorer.action.COPY` | Optional `conflict`: `rename` (default), `overwrite`, `skip`, or `keep-both`; optional `idempotency_key` |
+| `com.explorer.fileexplorer.action.MOVE` | Optional `conflict`: `rename` (default), `overwrite`, `skip`, or `keep-both`; optional `idempotency_key` |
 | `com.explorer.fileexplorer.action.ZIP` | Optional `format`: `zip` (default), `7z`, or `tar.gz` |
 | `com.explorer.fileexplorer.action.UPLOAD` | Required positive `connection_id` for a saved Network connection; `destination` is the remote path |
 
@@ -116,6 +116,11 @@ Actions return `RESULT_OK` when the foreground transfer is accepted. Add a
 unique `request_id` to receive a completion broadcast with action
 `com.explorer.fileexplorer.action.TRANSFER_RESULT`; its `status` is
 `completed`, `failed`, or `cancelled`, and failures include `error`.
+`idempotency_key` is used to make repeated deliveries resolve to the same
+keep-both artifact; when omitted, copy and move requests derive a stable key
+from their operation, sources, and destination. The queue shows source and
+destination size/modified-time metadata before mutation, persists each
+per-source choice, and records cancellation as an explicit result.
 Upload sources must be local files. A saved network connection is connected
 automatically for the action and disconnected afterward if it was not already active.
 
@@ -296,6 +301,13 @@ staged, committed, and backup entries; interrupted journals are rolled back or
 cleaned before the next operation. The transfer queue persists its intended and
 committed entries in Room, so cancellation and process death show partial completion
 instead of silently retrying an unknown filesystem state.
+
+When a queued conflict is resolved with **Keep both**, the target name includes a
+stable `copy-<hash>` suffix derived from the task idempotency key and source/target
+paths. A retry first compares the existing deterministic artifact with the source
+(checksum when the provider supports it, otherwise type and size) and records it as
+committed without invoking the provider again. If an unrelated artifact already has
+that name, providers fall back to a numbered variant.
 
 ## Permissions
 

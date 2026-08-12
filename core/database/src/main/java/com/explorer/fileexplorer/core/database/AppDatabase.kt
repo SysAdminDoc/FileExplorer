@@ -27,7 +27,7 @@ import javax.inject.Singleton
         FileTagEntity::class,
         TransferTaskEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -62,6 +62,7 @@ object DatabaseModule {
             MIGRATION_6_7,
             MIGRATION_7_8,
             MIGRATION_8_9,
+            MIGRATION_9_10,
         ).build()
     }
 
@@ -216,5 +217,18 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
         db.execSQL("ALTER TABLE `transfer_tasks` ADD COLUMN `intended_entries` TEXT NOT NULL DEFAULT ''")
         db.execSQL("ALTER TABLE `transfer_tasks` ADD COLUMN `committed_entries` TEXT NOT NULL DEFAULT ''")
         db.execSQL("ALTER TABLE `transfer_tasks` ADD COLUMN `recovery_policy` TEXT NOT NULL DEFAULT 'ROLLBACK'")
+    }
+}
+
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `transfer_tasks` ADD COLUMN `conflict_source_size` INTEGER")
+        db.execSQL("ALTER TABLE `transfer_tasks` ADD COLUMN `conflict_destination_size` INTEGER")
+        db.execSQL("ALTER TABLE `transfer_tasks` ADD COLUMN `conflict_source_modified` INTEGER")
+        db.execSQL("ALTER TABLE `transfer_tasks` ADD COLUMN `conflict_destination_modified` INTEGER")
+        db.execSQL("ALTER TABLE `transfer_tasks` ADD COLUMN `conflict_source_is_directory` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `transfer_tasks` ADD COLUMN `conflict_destination_is_directory` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `transfer_tasks` ADD COLUMN `conflict_planned_keep_both_path` TEXT")
+        db.execSQL("ALTER TABLE `transfer_tasks` ADD COLUMN `conflict_decisions` TEXT NOT NULL DEFAULT ''")
     }
 }

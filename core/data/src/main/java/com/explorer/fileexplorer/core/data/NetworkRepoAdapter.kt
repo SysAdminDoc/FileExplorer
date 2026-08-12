@@ -20,8 +20,8 @@ interface NetworkRepoProvider {
     fun listFiles(path: String): Flow<List<FileItem>>
     suspend fun getFileInfo(path: String): FileItem?
     suspend fun exists(path: String): Boolean
-    suspend fun copyFiles(sources: List<String>, destination: String, conflictResolution: ConflictResolution, onProgress: (Long, Long, String) -> Unit): Result<Int>
-    suspend fun moveFiles(sources: List<String>, destination: String, conflictResolution: ConflictResolution, onProgress: (Long, Long, String) -> Unit): Result<Int>
+    suspend fun copyFiles(sources: List<String>, destination: String, conflictResolution: ConflictResolution, conflictSuffix: String? = null, onProgress: (Long, Long, String) -> Unit): Result<Int>
+    suspend fun moveFiles(sources: List<String>, destination: String, conflictResolution: ConflictResolution, conflictSuffix: String? = null, onProgress: (Long, Long, String) -> Unit): Result<Int>
     suspend fun deleteFiles(paths: List<String>, onProgress: (String) -> Unit): Result<Int>
     suspend fun createDirectory(path: String): Result<FileItem>
     suspend fun rename(path: String, newName: String): Result<FileItem>
@@ -59,12 +59,12 @@ class NetworkRepoAdapter(private val delegate: NetworkRepoProvider) : FileReposi
         delegate.exists(path)
     }
 
-    override suspend fun copyFiles(sources: List<String>, destination: String, conflictResolution: ConflictResolution, onProgress: (Long, Long, String) -> Unit): Result<Int> =
-        delegate.copyFiles(sources, destination, conflictResolution, onProgress)
+    override suspend fun copyFiles(sources: List<String>, destination: String, conflictResolution: ConflictResolution, conflictSuffix: String?, onProgress: (Long, Long, String) -> Unit): Result<Int> =
+        delegate.copyFiles(sources, destination, conflictResolution, conflictSuffix, onProgress)
             .mapRepositoryFailure(capabilities.provider, RepositoryOperation.COPY)
 
-    override suspend fun moveFiles(sources: List<String>, destination: String, conflictResolution: ConflictResolution, onProgress: (Long, Long, String) -> Unit): Result<Int> =
-        delegate.moveFiles(sources, destination, conflictResolution, onProgress)
+    override suspend fun moveFiles(sources: List<String>, destination: String, conflictResolution: ConflictResolution, conflictSuffix: String?, onProgress: (Long, Long, String) -> Unit): Result<Int> =
+        delegate.moveFiles(sources, destination, conflictResolution, conflictSuffix, onProgress)
             .mapRepositoryFailure(capabilities.provider, RepositoryOperation.MOVE)
 
     override suspend fun deleteFiles(paths: List<String>, onProgress: (String) -> Unit): Result<Int> =

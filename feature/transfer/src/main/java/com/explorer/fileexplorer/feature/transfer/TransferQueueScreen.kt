@@ -262,6 +262,30 @@ private fun ConflictResolutionDialog(
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(stringResource(DesignSystemR.string.incoming, conflict.sourcePath), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(stringResource(DesignSystemR.string.existing, conflict.destinationPath), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    stringResource(
+                        DesignSystemR.string.conflict_incoming_metadata,
+                        conflict.sourceSize?.let(::formatBytes) ?: "unknown",
+                        conflict.sourceModified?.toString() ?: "unknown",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    stringResource(
+                        DesignSystemR.string.conflict_existing_metadata,
+                        conflict.destinationSize?.let(::formatBytes) ?: "unknown",
+                        conflict.destinationModified?.toString() ?: "unknown",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                conflict.plannedKeepBothPath?.let { plannedPath ->
+                    Text(
+                        stringResource(DesignSystemR.string.conflict_keep_both_target, plannedPath),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 if (conflict.isText && conflict.diffPreview.isNotBlank()) {
                     HorizontalDivider()
                     SelectionContainer {

@@ -3,11 +3,14 @@ package com.explorer.fileexplorer.feature.transfer
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
+import com.explorer.fileexplorer.core.data.FileRepository
 import com.explorer.fileexplorer.core.data.FileRepositoryFactory
 import com.explorer.fileexplorer.core.data.UsbPathCodec
 import com.explorer.fileexplorer.core.database.TransferTaskDao
+import com.explorer.fileexplorer.core.model.ConflictNamePolicy
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileOperation
+import com.explorer.fileexplorer.core.model.RepositoryOperation
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -155,6 +158,7 @@ class TransferQueueManager @Inject constructor(
                 conflict = null,
                 conflictAction = if (applyToAll) action else it.conflictAction,
                 applyConflictToAll = applyToAll,
+                conflictDecisions = it.conflictDecisions + (task.conflict.sourcePath to action),
             )
         }
         waiter?.complete(action)
@@ -330,12 +334,30 @@ class TransferQueueManager @Inject constructor(
                 ensureNotCancelled(taskId)
                 val task = tasks.value.first { it.id == taskId }
                 val target = targetPath(task.destination, source)
-                val sourceSize = if (task.operationNeedsDestination()) repository.calculateSize(listOf(source)) else 0L
-                val conflict = if (task.operationNeedsDestination() && repository.exists(target)) {
-                    buildConflict(source, target)
+                val sourceSize = if (task.operationNeedsDestination()) {
+                    runCatching { repository.calculateSize(listOf(source)) }.getOrDefault(0L)
+                } else 0L
+                val targetExists = task.operationNeedsDestination() && repository.exists(target)
+                val conflict = if (targetExists) {
+                    buildConflict(repository, source, target, sourceSize, task.idempotencyKey)
                 } else null
+                if (targetExists && matchesDelivery(repository, source, target, task.operation)) {
+                    transferredBefore += sourceSize
+                    updateTask(taskId) {
+                        it.copy(
+                            transferredBytes = transferredBefore,
+                            completedSources = index + 1,
+                            currentFile = source,
+                            committedEntries = it.committedEntries.recordJournal(source, TransferJournalState.COMMITTED),
+                        )
+                    }
+                    persistTaskNow(taskId)
+                    return@forEachIndexed
+                }
                 val action = if (conflict == null) null else {
-                    sharedAction ?: requestConflict(taskId, conflict)
+                    sharedAction
+                        ?: tasks.value.first { it.id == taskId }.conflictDecisions[source]
+                        ?: requestConflict(taskId, conflict)
                 }
                 if (action != null && tasks.value.first { it.id == taskId }.applyConflictToAll) sharedAction = action
                 if (action == TransferConflictAction.SKIP) {
@@ -350,6 +372,27 @@ class TransferQueueManager @Inject constructor(
                     return@forEachIndexed
                 }
 
+                val conflictSuffix = if (action == TransferConflictAction.KEEP_BOTH && conflict != null) {
+                    ConflictNamePolicy.suffix(task.idempotencyKey, source, target)
+                } else {
+                    null
+                }
+                if (action == TransferConflictAction.KEEP_BOTH && conflict != null &&
+                    alreadyDelivered(repository, conflict, task.operation)
+                ) {
+                    transferredBefore += sourceSize
+                    updateTask(taskId) {
+                        it.copy(
+                            transferredBytes = transferredBefore,
+                            completedSources = index + 1,
+                            currentFile = source,
+                            committedEntries = it.committedEntries.recordJournal(source, TransferJournalState.COMMITTED),
+                        )
+                    }
+                    persistTaskNow(taskId)
+                    return@forEachIndexed
+                }
+
                 val resolution = when (action) {
                     TransferConflictAction.REPLACE -> ConflictResolution.OVERWRITE
                     TransferConflictAction.RENAME, TransferConflictAction.KEEP_BOTH, null -> ConflictResolution.RENAME
@@ -357,7 +400,12 @@ class TransferQueueManager @Inject constructor(
                 }
                 val limiter = BandwidthLimiter(tasks.value.first { it.id == taskId }.bandwidthLimitBytesPerSecond)
                 val result = when (task.operation) {
-                    FileOperation.COPY -> repository.copyFiles(listOf(source), task.destination, resolution) { copied, _, file ->
+                    FileOperation.COPY -> repository.copyFiles(
+                        sources = listOf(source),
+                        destination = task.destination,
+                        conflictResolution = resolution,
+                        conflictSuffix = conflictSuffix,
+                    ) { copied, _, file ->
                         ensureNotCancelled(taskId)
                         limiter.throttle(copied)
                         updateTask(taskId) {
@@ -368,7 +416,12 @@ class TransferQueueManager @Inject constructor(
                             )
                         }
                     }
-                    FileOperation.MOVE -> repository.moveFiles(listOf(source), task.destination, resolution) { moved, _, file ->
+                    FileOperation.MOVE -> repository.moveFiles(
+                        sources = listOf(source),
+                        destination = task.destination,
+                        conflictResolution = resolution,
+                        conflictSuffix = conflictSuffix,
+                    ) { moved, _, file ->
                         ensureNotCancelled(taskId)
                         limiter.throttle(moved)
                         updateTask(taskId) {
@@ -405,7 +458,7 @@ class TransferQueueManager @Inject constructor(
                     it.copy(
                         state = TransferQueueState.CANCELLED,
                         conflict = null,
-                        error = it.partialJournalMessage(),
+                        error = it.partialJournalMessage("Transfer cancelled") ?: "Transfer cancelled",
                     )
                 }
             } else {
@@ -507,13 +560,76 @@ class TransferQueueManager @Inject constructor(
         }
     }
 
-    private suspend fun buildConflict(source: String, target: String): TransferConflict {
+    private fun deterministicTargetPath(target: String, suffix: String): String {
+        if (UsbPathCodec.isUsbPath(target)) {
+            val parent = UsbPathCodec.parentPath(target) ?: return target
+            val name = UsbPathCodec.name(target) ?: return target
+            return UsbPathCodec.childPath(parent, ConflictNamePolicy.fileName(name, suffix))
+        }
+        return ConflictNamePolicy.pathWithName(target, suffix)
+    }
+
+    private suspend fun buildConflict(
+        repository: FileRepository,
+        source: String,
+        target: String,
+        sourceSize: Long,
+        operationKey: String,
+    ): TransferConflict {
+        val sourceInfo = runCatching { repository.getFileInfo(source) }.getOrNull()
+        val destinationInfo = runCatching { repository.getFileInfo(target) }.getOrNull()
         val extension = source.substringAfterLast('.', "").lowercase()
-        val isText = extension in TEXT_EXTENSIONS
+        val isText = sourceInfo?.isText ?: extension in TEXT_EXTENSIONS
         val diff = if (isText && !source.contains("://") && !target.contains("://")) {
             textDiff(source, target)
         } else ""
-        return TransferConflict(source, target, isText, diff)
+        return TransferConflict(
+            sourcePath = source,
+            destinationPath = target,
+            isText = isText,
+            diffPreview = diff,
+            sourceSize = sourceInfo?.size ?: sourceSize,
+            destinationSize = destinationInfo?.size,
+            sourceModified = sourceInfo?.lastModified,
+            destinationModified = destinationInfo?.lastModified,
+            sourceIsDirectory = sourceInfo?.isDirectory == true,
+            destinationIsDirectory = destinationInfo?.isDirectory == true,
+            plannedKeepBothPath = deterministicTargetPath(
+                target,
+                ConflictNamePolicy.suffix(operationKey, source, target),
+            ),
+        )
+    }
+
+    private suspend fun alreadyDelivered(
+        repository: FileRepository,
+        conflict: TransferConflict,
+        operation: FileOperation,
+    ): Boolean {
+        val candidatePath = conflict.plannedKeepBothPath ?: return false
+        return matchesDelivery(repository, conflict.sourcePath, candidatePath, operation)
+    }
+
+    private suspend fun matchesDelivery(
+        repository: FileRepository,
+        sourcePath: String,
+        destinationPath: String,
+        operation: FileOperation,
+    ): Boolean {
+        val candidate = runCatching { repository.getFileInfo(destinationPath) }.getOrNull() ?: return false
+        val source = runCatching { repository.getFileInfo(sourcePath) }.getOrNull()
+        if (source == null) return operation == FileOperation.MOVE
+        if (source.isDirectory != candidate.isDirectory) return false
+        if (source.isDirectory) return true
+        if (source.size != candidate.size) return false
+        if (repository.capabilities.supports(RepositoryOperation.CHECKSUM) &&
+            source.size <= 2L * 1024L * 1024L * 1024L
+        ) {
+            return runCatching {
+                repository.getChecksum(sourcePath) == repository.getChecksum(destinationPath)
+            }.getOrDefault(true)
+        }
+        return true
     }
 
     private fun textDiff(source: String, target: String): String {

@@ -72,10 +72,10 @@ class App : Application(), SingletonImageLoader.Factory {
         override fun listFiles(path: String): Flow<List<FileItem>> = repo.listFiles(path)
         override suspend fun getFileInfo(path: String): FileItem? = repo.getFileInfo(path)
         override suspend fun exists(path: String): Boolean = repo.exists(path)
-        override suspend fun copyFiles(sources: List<String>, destination: String, conflictResolution: ConflictResolution, onProgress: (Long, Long, String) -> Unit): Result<Int> =
-            repo.copyFiles(sources, destination, conflictResolution, onProgress)
-        override suspend fun moveFiles(sources: List<String>, destination: String, conflictResolution: ConflictResolution, onProgress: (Long, Long, String) -> Unit): Result<Int> =
-            repo.moveFiles(sources, destination, conflictResolution, onProgress)
+        override suspend fun copyFiles(sources: List<String>, destination: String, conflictResolution: ConflictResolution, conflictSuffix: String?, onProgress: (Long, Long, String) -> Unit): Result<Int> =
+            repo.copyFiles(sources, destination, conflictResolution, conflictSuffix, onProgress)
+        override suspend fun moveFiles(sources: List<String>, destination: String, conflictResolution: ConflictResolution, conflictSuffix: String?, onProgress: (Long, Long, String) -> Unit): Result<Int> =
+            repo.moveFiles(sources, destination, conflictResolution, conflictSuffix, onProgress)
         override suspend fun deleteFiles(paths: List<String>, onProgress: (String) -> Unit): Result<Int> =
             repo.deleteFiles(paths, onProgress)
         override suspend fun createDirectory(path: String): Result<FileItem> = repo.createDirectory(path)

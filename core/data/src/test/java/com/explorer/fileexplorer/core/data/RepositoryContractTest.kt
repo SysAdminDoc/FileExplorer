@@ -101,6 +101,7 @@ class RepositoryContractTest {
             sources: List<String>,
             destination: String,
             conflictResolution: ConflictResolution,
+            conflictSuffix: String?,
             onProgress: (Long, Long, String) -> Unit,
         ): Result<Int> = Result.success(0)
 
@@ -108,6 +109,7 @@ class RepositoryContractTest {
             sources: List<String>,
             destination: String,
             conflictResolution: ConflictResolution,
+            conflictSuffix: String?,
             onProgress: (Long, Long, String) -> Unit,
         ): Result<Int> = Result.success(0)
 

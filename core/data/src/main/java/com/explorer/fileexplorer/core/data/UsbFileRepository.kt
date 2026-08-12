@@ -3,6 +3,7 @@ package com.explorer.fileexplorer.core.data
 import android.content.Context
 import android.webkit.MimeTypeMap
 import androidx.documentfile.provider.DocumentFile
+import com.explorer.fileexplorer.core.model.ConflictNamePolicy
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.model.RepositoryCapabilities
@@ -69,6 +70,7 @@ class UsbFileRepository @Inject constructor(
         sources: List<String>,
         destination: String,
         conflictResolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
         val targetDirectory: Any = if (UsbPathCodec.isUsbPath(destination)) {
@@ -95,6 +97,7 @@ class UsbFileRepository @Inject constructor(
                         sourcePath = source,
                         targetDirectory = targetDirectory,
                         resolution = conflictResolution,
+                        conflictSuffix = conflictSuffix,
                         onProgress = { bytes, name ->
                             transferred += bytes
                             onProgress(transferred, totalBytes, name)
@@ -104,6 +107,7 @@ class UsbFileRepository @Inject constructor(
                         sourcePath = source,
                         targetDirectory = targetDirectory,
                         resolution = conflictResolution,
+                        conflictSuffix = conflictSuffix,
                         onProgress = { bytes, name ->
                             transferred += bytes
                             onProgress(transferred, totalBytes, name)
@@ -123,9 +127,16 @@ class UsbFileRepository @Inject constructor(
         sources: List<String>,
         destination: String,
         conflictResolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
-        val copyResult = copyFiles(sources, destination, conflictResolution, onProgress)
+        val copyResult = copyFiles(
+            sources = sources,
+            destination = destination,
+            conflictResolution = conflictResolution,
+            conflictSuffix = conflictSuffix,
+            onProgress = onProgress,
+        )
         if (copyResult.isFailure) return@withContext copyResult
         if (conflictResolution == ConflictResolution.SKIP) return@withContext copyResult
         try {
@@ -328,34 +339,36 @@ class UsbFileRepository @Inject constructor(
         sourcePath: String,
         targetDirectory: DocumentFile,
         resolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, String) -> Unit,
     ): CopyOutcome {
         val sourceDocument = if (UsbPathCodec.isUsbPath(sourcePath)) {
             usbStorageManager.documentForPath(sourcePath)
         } else null
         if (sourceDocument != null) {
-            return copyDocument(sourceDocument, targetDirectory, sourceDocument.name ?: "USB item", resolution, onProgress)
+            return copyDocument(sourceDocument, targetDirectory, sourceDocument.name ?: "USB item", resolution, conflictSuffix, onProgress)
         }
         if (UsbPathCodec.isUsbPath(sourcePath)) throw IOException("USB source is unavailable")
         val localSource = File(sourcePath)
         if (!localSource.exists()) throw IOException("Source does not exist: $sourcePath")
-        return copyLocal(localSource, targetDirectory, localSource.name, resolution, onProgress)
+        return copyLocal(localSource, targetDirectory, localSource.name, resolution, conflictSuffix, onProgress)
     }
 
     private fun copySourceToLocal(
         sourcePath: String,
         targetDirectory: File,
         resolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, String) -> Unit,
     ): CopyOutcome {
         if (UsbPathCodec.isUsbPath(sourcePath)) {
             val source = usbStorageManager.documentForPath(sourcePath)
                 ?: throw IOException("USB source is unavailable")
-            return copyDocumentToLocal(source, targetDirectory, source.name ?: "USB item", resolution, onProgress)
+            return copyDocumentToLocal(source, targetDirectory, source.name ?: "USB item", resolution, conflictSuffix, onProgress)
         }
         val source = File(sourcePath)
         if (!source.exists()) throw IOException("Source does not exist: $sourcePath")
-        return copyLocalToLocal(source, targetDirectory, source.name, resolution, onProgress)
+        return copyLocalToLocal(source, targetDirectory, source.name, resolution, conflictSuffix, onProgress)
     }
 
     private fun copyDocument(
@@ -363,16 +376,17 @@ class UsbFileRepository @Inject constructor(
         targetDirectory: DocumentFile,
         sourceName: String,
         resolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, String) -> Unit,
     ): CopyOutcome {
-        val targetName = prepareTarget(targetDirectory, sourceName, resolution) ?:
+        val targetName = prepareTarget(targetDirectory, sourceName, resolution, conflictSuffix) ?:
             return CopyOutcome(success = true, changed = false, bytes = documentSize(source))
         if (source.isDirectory) {
             val target = targetDirectory.createDirectory(targetName)
                 ?: throw IOException("Unable to create USB directory: $targetName")
             var bytes = 0L
             for (child in source.listFiles()) {
-                val result = copyDocument(child, target, child.name ?: "USB item", resolution, onProgress)
+                val result = copyDocument(child, target, child.name ?: "USB item", resolution, conflictSuffix, onProgress)
                 bytes += result.bytes
             }
             return CopyOutcome(success = true, changed = true, bytes = bytes)
@@ -393,16 +407,17 @@ class UsbFileRepository @Inject constructor(
         targetDirectory: DocumentFile,
         sourceName: String,
         resolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, String) -> Unit,
     ): CopyOutcome {
-        val targetName = prepareTarget(targetDirectory, sourceName, resolution) ?:
+        val targetName = prepareTarget(targetDirectory, sourceName, resolution, conflictSuffix) ?:
             return CopyOutcome(success = true, changed = false, bytes = localSize(source))
         if (source.isDirectory) {
             val target = targetDirectory.createDirectory(targetName)
                 ?: throw IOException("Unable to create USB directory: $targetName")
             var bytes = 0L
             source.listFiles()?.forEach { child ->
-                val result = copyLocal(child, target, child.name, resolution, onProgress)
+                val result = copyLocal(child, target, child.name, resolution, conflictSuffix, onProgress)
                 bytes += result.bytes
             }
             return CopyOutcome(success = true, changed = true, bytes = bytes)
@@ -423,16 +438,17 @@ class UsbFileRepository @Inject constructor(
         targetDirectory: File,
         sourceName: String,
         resolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, String) -> Unit,
     ): CopyOutcome {
-        val targetName = prepareLocalTarget(targetDirectory, sourceName, resolution)
+        val targetName = prepareLocalTarget(targetDirectory, sourceName, resolution, conflictSuffix)
             ?: return CopyOutcome(success = true, changed = false, bytes = documentSize(source))
         val target = File(targetDirectory, targetName)
         if (source.isDirectory) {
             if (!target.mkdirs() && !target.isDirectory) throw IOException("Unable to create local directory: $target")
             var bytes = 0L
             for (child in source.listFiles()) {
-                bytes += copyDocumentToLocal(child, target, child.name ?: "USB item", resolution, onProgress).bytes
+                bytes += copyDocumentToLocal(child, target, child.name ?: "USB item", resolution, conflictSuffix, onProgress).bytes
             }
             return CopyOutcome(success = true, changed = true, bytes = bytes)
         }
@@ -448,16 +464,17 @@ class UsbFileRepository @Inject constructor(
         targetDirectory: File,
         sourceName: String,
         resolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, String) -> Unit,
     ): CopyOutcome {
-        val targetName = prepareLocalTarget(targetDirectory, sourceName, resolution)
+        val targetName = prepareLocalTarget(targetDirectory, sourceName, resolution, conflictSuffix)
             ?: return CopyOutcome(success = true, changed = false, bytes = localSize(source))
         val target = File(targetDirectory, targetName)
         if (source.isDirectory) {
             if (!target.mkdirs() && !target.isDirectory) throw IOException("Unable to create local directory: $target")
             var bytes = 0L
             source.listFiles()?.forEach { child ->
-                bytes += copyLocalToLocal(child, target, child.name, resolution, onProgress).bytes
+                bytes += copyLocalToLocal(child, target, child.name, resolution, conflictSuffix, onProgress).bytes
             }
             return CopyOutcome(success = true, changed = true, bytes = bytes)
         }
@@ -473,6 +490,7 @@ class UsbFileRepository @Inject constructor(
         parent: DocumentFile,
         sourceName: String,
         resolution: ConflictResolution,
+        conflictSuffix: String?,
     ): String? {
         val existing = parent.findFile(sourceName)
         if (existing == null) return sourceName
@@ -483,7 +501,11 @@ class UsbFileRepository @Inject constructor(
             }
 
             ConflictResolution.SKIP -> null
-            ConflictResolution.RENAME, ConflictResolution.ASK -> uniqueName(parent, sourceName)
+            ConflictResolution.RENAME, ConflictResolution.ASK -> {
+                val deterministic = conflictSuffix?.let { ConflictNamePolicy.fileName(sourceName, it) }
+                deterministic?.takeIf { parent.findFile(it) == null }
+                    ?: uniqueName(parent, deterministic ?: sourceName)
+            }
         }
     }
 
@@ -491,6 +513,7 @@ class UsbFileRepository @Inject constructor(
         parent: File,
         sourceName: String,
         resolution: ConflictResolution,
+        conflictSuffix: String?,
     ): String? {
         val existing = File(parent, sourceName)
         if (!existing.exists()) return sourceName
@@ -500,7 +523,11 @@ class UsbFileRepository @Inject constructor(
                 sourceName
             }
             ConflictResolution.SKIP -> null
-            ConflictResolution.RENAME, ConflictResolution.ASK -> uniqueLocalName(parent, sourceName)
+            ConflictResolution.RENAME, ConflictResolution.ASK -> {
+                val deterministic = conflictSuffix?.let { ConflictNamePolicy.fileName(sourceName, it) }
+                deterministic?.takeIf { !File(parent, it).exists() }
+                    ?: uniqueLocalName(parent, deterministic ?: sourceName)
+            }
         }
     }
 

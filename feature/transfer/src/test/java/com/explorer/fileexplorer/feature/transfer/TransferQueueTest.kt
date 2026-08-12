@@ -33,6 +33,9 @@ class TransferQueueTest {
             destinationPath = "/existing/readme.txt",
             isText = true,
             diffPreview = "- old\n+new",
+            sourceSize = 12L,
+            destinationSize = 18L,
+            plannedKeepBothPath = "/existing/readme (copy-abc123).txt",
         )
         val task = task(state = TransferQueueState.WAITING_CONFLICT, conflict = conflict)
 
@@ -43,6 +46,8 @@ class TransferQueueTest {
             TransferConflictAction.KEEP_BOTH,
         ))
         assertEquals("- old\n+new", task.conflict?.diffPreview)
+        assertEquals(12L, task.conflict?.sourceSize)
+        assertEquals("/existing/readme (copy-abc123).txt", task.conflict?.plannedKeepBothPath)
         assertFalse(task.isTerminal)
     }
 

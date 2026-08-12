@@ -21,6 +21,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added a certificate-bound plugin trust boundary with visible Settings consent and revocation, declared-capability enforcement, fail-closed protocol negotiation, bounded isolated IPC, binder-death recovery, and path-free audit events.
 
 ### Added
+- Added source/destination metadata conflict previews, per-source persisted conflict decisions, deterministic keep-both names, idempotent retry detection, cancellation results, and automation `keep-both`/`idempotency_key` controls.
 - Added bounded, versioned, transactional portable backup import/export for bookmarks and non-secret settings, with deterministic duplicate handling and preview/summary confirmation.
 - Added executable localization and accessibility gates for resource placeholders, inline UI strings, Compose semantics, RTL, large text, and minimum touch targets.
 - Added migration, archive-format, disconnected-provider, and DocumentsProvider contract coverage for debug/API 37 verification.

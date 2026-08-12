@@ -72,4 +72,42 @@ class AutomationContractTest {
         assertTrue(interactive.isFailure)
         assertTrue(runCatching { AutomationContract.parseArchiveFormat("rar") }.isFailure)
     }
+
+    @Test
+    fun keepBothCarriesAStablePolicyKey() {
+        val first = AutomationContract.parse(
+            action = AutomationContract.ACTION_COPY,
+            sourcePaths = listOf("/sdcard/source.txt"),
+            destination = "/sdcard/destination",
+            conflict = "keep-both",
+            idempotencyKey = "workflow-42",
+        ).getOrThrow()
+        val second = AutomationContract.parse(
+            action = AutomationContract.ACTION_COPY,
+            sourcePaths = listOf("/sdcard/source.txt"),
+            destination = "/sdcard/destination",
+            conflict = "keep-both",
+            idempotencyKey = "workflow-42",
+        ).getOrThrow()
+
+        assertEquals(ConflictResolution.RENAME, first.conflictResolution)
+        assertEquals(true, first.deterministicKeepBoth)
+        assertEquals(first.idempotencyKey, second.idempotencyKey)
+    }
+
+    @Test
+    fun derivesAnIdempotencyKeyWhenAutomationOmitsOne() {
+        val first = AutomationContract.parse(
+            action = AutomationContract.ACTION_COPY,
+            sourcePaths = listOf("/sdcard/source.txt"),
+            destination = "/sdcard/destination",
+        ).getOrThrow()
+        val second = AutomationContract.parse(
+            action = AutomationContract.ACTION_COPY,
+            sourcePaths = listOf("/sdcard/source.txt"),
+            destination = "/sdcard/destination",
+        ).getOrThrow()
+
+        assertEquals(first.idempotencyKey, second.idempotencyKey)
+    }
 }

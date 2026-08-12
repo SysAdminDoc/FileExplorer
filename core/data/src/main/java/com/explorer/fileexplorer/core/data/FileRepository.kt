@@ -52,6 +52,7 @@ interface FileRepository {
         sources: List<String>,
         destination: String,
         conflictResolution: ConflictResolution = ConflictResolution.ASK,
+        conflictSuffix: String? = null,
         onProgress: (Long, Long, String) -> Unit = { _, _, _ -> },
     ): Result<Int>
 
@@ -60,6 +61,7 @@ interface FileRepository {
         sources: List<String>,
         destination: String,
         conflictResolution: ConflictResolution = ConflictResolution.ASK,
+        conflictSuffix: String? = null,
         onProgress: (Long, Long, String) -> Unit = { _, _, _ -> },
     ): Result<Int>
 

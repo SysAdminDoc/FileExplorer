@@ -39,6 +39,15 @@ class TransferPersistenceTest {
                 destinationPath = "/destination/a.txt",
                 isText = true,
                 diffPreview = "- old\n+ new",
+                sourceSize = 12L,
+                destinationSize = 18L,
+                sourceModified = 100L,
+                destinationModified = 200L,
+                plannedKeepBothPath = "/destination/a (copy-abc123).txt",
+            ),
+            conflictDecisions = mapOf(
+                "/source/a.txt" to TransferConflictAction.KEEP_BOTH,
+                "/source/b.txt" to TransferConflictAction.SKIP,
             ),
             intendedEntries = listOf(
                 TransferJournalEntry("/source/a.txt", "/destination/a.txt"),
@@ -55,6 +64,7 @@ class TransferPersistenceTest {
         assertEquals("transfer-42", restored.idempotencyKey)
         assertEquals(original.intendedEntries, restored.intendedEntries)
         assertEquals(original.committedEntries, restored.committedEntries)
+        assertEquals(original.conflictDecisions, restored.conflictDecisions)
     }
 
     @Test
@@ -111,6 +121,7 @@ class TransferPersistenceTest {
         conflictAction: TransferConflictAction? = null,
         applyConflictToAll: Boolean = false,
         conflict: TransferConflict? = null,
+        conflictDecisions: Map<String, TransferConflictAction> = emptyMap(),
         intendedEntries: List<TransferJournalEntry> = emptyList(),
         committedEntries: List<TransferJournalEntry> = emptyList(),
     ) = TransferQueueTask(
@@ -130,6 +141,7 @@ class TransferPersistenceTest {
         currentFile = "/source/a.txt",
         error = null,
         conflict = conflict,
+        conflictDecisions = conflictDecisions,
         intendedEntries = intendedEntries,
         committedEntries = committedEntries,
     )

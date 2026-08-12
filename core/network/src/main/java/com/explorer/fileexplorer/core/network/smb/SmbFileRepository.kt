@@ -1,6 +1,7 @@
 package com.explorer.fileexplorer.core.network.smb
 
 import android.webkit.MimeTypeMap
+import com.explorer.fileexplorer.core.model.ConflictNamePolicy
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.model.RepositoryCapabilities
@@ -151,6 +152,7 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
     override suspend fun copyFiles(
         sources: List<String>, destination: String,
         conflictResolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
         // SMB copy: read from source, write to destination on same share
@@ -161,7 +163,12 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
             )
             for (src in sources) {
                 val name = src.trimEnd('/').substringAfterLast('/')
-                val destPath = "${normalizePath(destination)}\\$name"
+                val targetName = resolveSmbTarget(s, destination, name, conflictResolution, conflictSuffix)
+                if (targetName == null) {
+                    count++
+                    continue
+                }
+                val destPath = "${normalizePath(destination)}\\$targetName"
                 onProgress(0, 0, name)
 
                 val sourcePath = normalizePath(src)
@@ -213,6 +220,7 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
     override suspend fun moveFiles(
         sources: List<String>, destination: String,
         conflictResolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
         val s = share ?: return@withContext Result.failure(
@@ -222,7 +230,12 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
         try {
             for (src in sources) {
                 val name = src.trimEnd('/').substringAfterLast('/')
-                val destPath = "${normalizePath(destination)}\\$name"
+                val targetName = resolveSmbTarget(s, destination, name, conflictResolution, conflictSuffix)
+                if (targetName == null) {
+                    count++
+                    continue
+                }
+                val destPath = "${normalizePath(destination)}\\$targetName"
                 val sourceSize = smbSize(s, src, NetworkTraversalBudget())
                 onProgress(0, sourceSize, name)
                 s.openFile(normalizePath(src),
@@ -493,6 +506,43 @@ class SmbFileRepository @Inject constructor() : NetworkFileRepository {
 
     private fun smbChildPath(parent: String, name: String): String =
         if (parent.endsWith("/")) "$parent$name" else "$parent/$name"
+
+    private fun resolveSmbTarget(
+        share: DiskShare,
+        destination: String,
+        sourceName: String,
+        resolution: ConflictResolution,
+        conflictSuffix: String?,
+    ): String? {
+        fun exists(name: String): Boolean {
+            val path = "${normalizePath(destination)}\\$name"
+            return share.fileExists(path) || share.folderExists(path)
+        }
+        if (!exists(sourceName)) return sourceName
+        return when (resolution) {
+            ConflictResolution.SKIP -> null
+            ConflictResolution.OVERWRITE -> sourceName
+            ConflictResolution.RENAME,
+            ConflictResolution.ASK,
+            -> {
+                val deterministic = conflictSuffix?.let { ConflictNamePolicy.fileName(sourceName, it) }
+                var candidate = deterministic ?: numberedName(sourceName, 1)
+                var index = 1
+                while (exists(candidate)) {
+                    index++
+                    candidate = numberedName(deterministic ?: sourceName, index)
+                }
+                candidate
+            }
+        }
+    }
+
+    private fun numberedName(name: String, number: Int): String {
+        val dot = name.lastIndexOf('.')
+        val base = if (dot > 0) name.substring(0, dot) else name
+        val extension = if (dot > 0) name.substring(dot) else ""
+        return "$base ($number)$extension"
+    }
 
     private fun smbEntryToFileItem(entry: FileIdBothDirectoryInformation, parentPath: String): FileItem {
         val name = entry.fileName

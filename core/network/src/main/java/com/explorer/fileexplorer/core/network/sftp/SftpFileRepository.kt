@@ -2,6 +2,7 @@ package com.explorer.fileexplorer.core.network.sftp
 
 import android.webkit.MimeTypeMap
 import com.explorer.fileexplorer.core.model.ConflictResolution
+import com.explorer.fileexplorer.core.model.ConflictNamePolicy
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.model.RepositoryCapabilities
 import com.explorer.fileexplorer.core.model.RepositoryErrorKind
@@ -149,6 +150,7 @@ class SftpFileRepository @Inject constructor(
     override suspend fun copyFiles(
         sources: List<String>, destination: String,
         conflictResolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
         val s = sftp ?: return@withContext Result.failure(
@@ -178,6 +180,7 @@ class SftpFileRepository @Inject constructor(
                     source = src,
                     target = destPath,
                     conflictResolution = conflictResolution,
+                    conflictSuffix = conflictSuffix,
                     localTempRoot = tempRoot,
                     onBytesTransferred = { bytes, itemName ->
                         transferred += bytes
@@ -201,6 +204,7 @@ class SftpFileRepository @Inject constructor(
     override suspend fun moveFiles(
         sources: List<String>, destination: String,
         conflictResolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
         val s = sftp ?: return@withContext Result.failure(
@@ -223,7 +227,7 @@ class SftpFileRepository @Inject constructor(
                 val sourceAttributes = s.lstat(src)
                 rejectUnsupportedSource(src, sourceAttributes)
                 val sourceSize = remoteSize(s, src)
-                val target = resolveConflictTarget(s, requestedTarget, sourceAttributes.type, conflictResolution)
+                val target = resolveConflictTarget(s, requestedTarget, sourceAttributes.type, conflictResolution, conflictSuffix)
                 if (target == null) {
                     transferred += sourceSize
                     onProgress(transferred, totalSize, name)
@@ -347,11 +351,19 @@ class SftpFileRepository @Inject constructor(
         requestedTarget: String,
         sourceType: FileMode.Type,
         conflictResolution: ConflictResolution,
+        conflictSuffix: String? = null,
     ): String? {
         val existing = lstatIfExists(sftp, requestedTarget) ?: return requestedTarget
         return when (conflictResolution) {
             ConflictResolution.SKIP -> null
-            ConflictResolution.RENAME -> uniqueConflictTarget(sftp, requestedTarget)
+            ConflictResolution.RENAME -> conflictSuffix?.let {
+                val deterministic = SftpRemotePath.child(
+                    SftpRemotePath.parent(requestedTarget),
+                    ConflictNamePolicy.fileName(SftpRemotePath.fileName(requestedTarget), it),
+                )
+                if (lstatIfExists(sftp, deterministic) == null) deterministic
+                else uniqueConflictTarget(sftp, deterministic)
+            } ?: uniqueConflictTarget(sftp, requestedTarget)
             ConflictResolution.ASK -> throw IOException("SFTP target already exists: $requestedTarget")
             ConflictResolution.OVERWRITE -> {
                 if (existing.type == FileMode.Type.SYMLINK) {
@@ -380,13 +392,14 @@ class SftpFileRepository @Inject constructor(
         source: String,
         target: String,
         conflictResolution: ConflictResolution,
+        conflictSuffix: String?,
         localTempRoot: File,
         onBytesTransferred: (Long, String) -> Unit,
     ): Long {
         coroutineContext.ensureActive()
         val sourceAttributes = sftp.lstat(source)
         rejectUnsupportedSource(source, sourceAttributes)
-        val resolvedTarget = resolveConflictTarget(sftp, target, sourceAttributes.type, conflictResolution)
+        val resolvedTarget = resolveConflictTarget(sftp, target, sourceAttributes.type, conflictResolution, conflictSuffix)
         if (resolvedTarget == null) {
             val skippedSize = remoteSize(sftp, source)
             onBytesTransferred(skippedSize, SftpRemotePath.fileName(source))
@@ -465,6 +478,7 @@ class SftpFileRepository @Inject constructor(
                         source = SftpRemotePath.child(source, entry.name),
                         target = SftpRemotePath.child(remoteStagingDirectory, entry.name),
                         conflictResolution = ConflictResolution.OVERWRITE,
+                        conflictSuffix = null,
                         localTempRoot = localTempRoot,
                         onBytesTransferred = onBytesTransferred,
                     ),

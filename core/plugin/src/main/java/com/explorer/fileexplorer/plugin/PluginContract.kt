@@ -27,6 +27,7 @@ object PluginContract {
     const val KEY_INCLUDE_HIDDEN = "include_hidden"
     const val KEY_ALGORITHM = "algorithm"
     const val KEY_CONFLICT = "conflict"
+    const val KEY_CONFLICT_SUFFIX = "conflict_suffix"
     const val KEY_OK = "ok"
     const val KEY_ERROR = "error"
     const val KEY_COUNT = "count"
@@ -158,17 +159,20 @@ object PluginRequests {
         sources: List<String>,
         destination: String,
         conflictResolution: ConflictResolution,
+        conflictSuffix: String? = null,
     ) = request(PluginContract.OP_COPY).apply {
         putStringArrayList(PluginContract.KEY_PATHS, ArrayList(sources))
         putString(PluginContract.KEY_DESTINATION, destination)
         putString(PluginContract.KEY_CONFLICT, conflictResolution.name)
+        conflictSuffix?.let { putString(PluginContract.KEY_CONFLICT_SUFFIX, it) }
     }
 
     fun move(
         sources: List<String>,
         destination: String,
         conflictResolution: ConflictResolution,
-    ) = copy(sources, destination, conflictResolution).apply {
+        conflictSuffix: String? = null,
+    ) = copy(sources, destination, conflictResolution, conflictSuffix).apply {
         putString(PluginContract.KEY_OPERATION, PluginContract.OP_MOVE)
     }
 

@@ -2,6 +2,7 @@ package com.explorer.fileexplorer.core.data
 
 import android.content.Context
 import android.webkit.MimeTypeMap
+import com.explorer.fileexplorer.core.model.ConflictNamePolicy
 import com.explorer.fileexplorer.core.model.ConflictResolution
 import com.explorer.fileexplorer.core.model.FileItem
 import com.explorer.fileexplorer.core.model.RepositoryCapabilities
@@ -29,6 +30,39 @@ class RootFileRepository @Inject constructor(
     override val capabilities: RepositoryCapabilities = RepositoryCapabilities.local("root")
 
     private fun esc(s: String): String = "'" + s.replace("'", "'\\''") + "'"
+
+    private suspend fun resolveRootTarget(
+        destination: String,
+        sourceName: String,
+        resolution: ConflictResolution,
+        conflictSuffix: String?,
+    ): String? {
+        val requested = destination.trimEnd('/') + "/" + sourceName
+        if (!exists(requested)) return sourceName
+        return when (resolution) {
+            ConflictResolution.SKIP -> null
+            ConflictResolution.OVERWRITE -> sourceName
+            ConflictResolution.RENAME,
+            ConflictResolution.ASK,
+            -> {
+                val deterministic = conflictSuffix?.let { ConflictNamePolicy.fileName(sourceName, it) }
+                var candidate = deterministic ?: numberedName(sourceName, 1)
+                var index = 1
+                while (exists(destination.trimEnd('/') + "/" + candidate)) {
+                    index++
+                    candidate = numberedName(deterministic ?: sourceName, index)
+                }
+                candidate
+            }
+        }
+    }
+
+    private fun numberedName(name: String, number: Int): String {
+        val dot = name.lastIndexOf('.')
+        val base = if (dot > 0) name.substring(0, dot) else name
+        val extension = if (dot > 0) name.substring(dot) else ""
+        return "$base ($number)$extension"
+    }
 
     override fun listFiles(path: String): Flow<List<FileItem>> = flow {
         val p = esc(path)
@@ -67,20 +101,21 @@ class RootFileRepository @Inject constructor(
         sources: List<String>,
         destination: String,
         conflictResolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
         var count = 0
         try {
-            val dest = esc(destination)
             for (src in sources) {
                 val name = src.substringAfterLast('/')
                 onProgress(0, 0, name)
-                val flags = when (conflictResolution) {
-                    ConflictResolution.OVERWRITE -> "-rf"
-                    ConflictResolution.SKIP -> "-n"
-                    else -> "-rf"
+                val targetName = resolveRootTarget(destination, name, conflictResolution, conflictSuffix)
+                if (targetName == null) {
+                    count++
+                    continue
                 }
-                val result = rootHelper.exec("cp $flags ${esc(src)} $dest/")
+                val flags = if (conflictResolution == ConflictResolution.OVERWRITE) "-rf" else "-r"
+                val result = rootHelper.exec("cp $flags ${esc(src)} ${esc(destination.trimEnd('/') + "/" + targetName)}")
                 if (!result.isSuccess) {
                     return@withContext Result.failure(commandFailure(RepositoryOperation.COPY, result.err.joinToString()))
                 }
@@ -96,16 +131,21 @@ class RootFileRepository @Inject constructor(
         sources: List<String>,
         destination: String,
         conflictResolution: ConflictResolution,
+        conflictSuffix: String?,
         onProgress: (Long, Long, String) -> Unit,
     ): Result<Int> = withContext(Dispatchers.IO) {
         var count = 0
         try {
-            val dest = esc(destination)
             for (src in sources) {
                 val name = src.substringAfterLast('/')
                 onProgress(0, 0, name)
+                val targetName = resolveRootTarget(destination, name, conflictResolution, conflictSuffix)
+                if (targetName == null) {
+                    count++
+                    continue
+                }
                 val flags = if (conflictResolution == ConflictResolution.OVERWRITE) "-f" else ""
-                val result = rootHelper.exec("mv $flags ${esc(src)} $dest/")
+                val result = rootHelper.exec("mv $flags ${esc(src)} ${esc(destination.trimEnd('/') + "/" + targetName)}")
                 if (!result.isSuccess) {
                     return@withContext Result.failure(commandFailure(RepositoryOperation.MOVE, result.err.joinToString()))
                 }
