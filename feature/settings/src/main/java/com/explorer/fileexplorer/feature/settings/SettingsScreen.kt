@@ -25,17 +25,28 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.explorer.fileexplorer.core.data.BackupManager
+import com.explorer.fileexplorer.core.data.BackupPreview
 import com.explorer.fileexplorer.core.data.LocalTrashManager
+import com.explorer.fileexplorer.core.data.PortableSettings
+import com.explorer.fileexplorer.core.data.PortableSettingsPolicy
+import com.explorer.fileexplorer.core.data.PortableSettingsStore
 import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import com.explorer.fileexplorer.core.designsystem.ThemeMode
 import com.explorer.fileexplorer.plugin.PluginDescriptor
 import com.explorer.fileexplorer.plugin.PluginManager
 import com.explorer.fileexplorer.plugin.PluginTrustState
+import dagger.Binds
+import dagger.Module
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -86,13 +97,12 @@ object ThumbnailCacheSettings {
         return size to ThumbnailCacheLocation.fromKey(prefs.getString(PREF_LOCATION, ThumbnailCacheLocation.INTERNAL.key))
     }
 
-    fun write(context: android.content.Context, sizeMb: Int, location: ThumbnailCacheLocation) {
+    fun write(context: android.content.Context, sizeMb: Int, location: ThumbnailCacheLocation): Boolean =
         context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
             .edit()
             .putInt(PREF_SIZE_MB, normalizeSize(sizeMb))
             .putString(PREF_LOCATION, location.key)
-            .apply()
-    }
+            .commit()
 }
 
 enum class SwipeAction(@androidx.annotation.StringRes val labelRes: Int, @androidx.annotation.StringRes val descriptionRes: Int) {
@@ -129,8 +139,9 @@ data class SettingsState(
 @Singleton
 class SettingsRepository @Inject constructor(
     @ApplicationContext private val context: android.content.Context,
-) {
+) : PortableSettingsStore {
     private val ds = context.settingsDataStore
+    private val writeMutex = Mutex()
 
     val settings: Flow<SettingsState> = ds.data.map { prefs ->
         SettingsState(
@@ -155,23 +166,116 @@ class SettingsRepository @Inject constructor(
     }
 
     suspend fun <T> update(key: Preferences.Key<T>, value: T) {
-        ds.edit { it[key] = value }
+        writeMutex.withLock { ds.edit { it[key] = value } }
     }
 
     suspend fun updateThumbnailCache(sizeMb: Int, location: ThumbnailCacheLocation) {
-        val normalizedSize = ThumbnailCacheSettings.normalizeSize(sizeMb)
-        ds.edit {
-            it[SettingsKeys.THUMBNAIL_CACHE_SIZE_MB] = normalizedSize
-            it[SettingsKeys.THUMBNAIL_CACHE_LOCATION] = location.key
-        }
-        ThumbnailCacheSettings.write(context, normalizedSize, location)
+        replacePortableSettings(
+            readPortableSettings().copy(
+                thumbnailCacheSizeMb = ThumbnailCacheSettings.normalizeSize(sizeMb),
+                thumbnailCacheLocation = location.key,
+            ),
+        )
     }
+
+    override suspend fun readPortableSettings(): PortableSettings = PortableSettingsPolicy.normalized(
+        settings.first().let { current ->
+            PortableSettings(
+                showHidden = current.showHidden,
+                foldersFirst = current.foldersFirst,
+                confirmDelete = current.confirmDelete,
+                defaultView = current.defaultView,
+                sortField = current.sortField,
+                sortDirection = current.sortDirection,
+                thumbnailSize = current.thumbnailSize,
+                thumbnailCacheSizeMb = current.thumbnailCacheSizeMb,
+                thumbnailCacheLocation = current.thumbnailCacheLocation.key,
+                themeMode = current.themeMode.name,
+                trashTtlDays = current.trashTtlDays,
+                compactDensity = current.compactDensity,
+                showDirectorySizes = current.showDirectorySizes,
+                swipeLeftAction = current.swipeLeftAction.name,
+                swipeRightAction = current.swipeRightAction.name,
+            )
+        },
+    )
+
+    override suspend fun replacePortableSettings(settings: PortableSettings) {
+        PortableSettingsPolicy.validate(settings)
+        writeMutex.withLock {
+            val previous = readPortableSettings()
+            try {
+                ds.edit { preferences ->
+                    preferences[SettingsKeys.SHOW_HIDDEN] = settings.showHidden
+                    preferences[SettingsKeys.FOLDERS_FIRST] = settings.foldersFirst
+                    preferences[SettingsKeys.CONFIRM_DELETE] = settings.confirmDelete
+                    preferences[SettingsKeys.DEFAULT_VIEW] = settings.defaultView
+                    preferences[SettingsKeys.SORT_FIELD] = settings.sortField
+                    preferences[SettingsKeys.SORT_DIRECTION] = settings.sortDirection
+                    preferences[SettingsKeys.THUMBNAIL_SIZE] = settings.thumbnailSize
+                    preferences[SettingsKeys.THUMBNAIL_CACHE_SIZE_MB] = settings.thumbnailCacheSizeMb
+                    preferences[SettingsKeys.THUMBNAIL_CACHE_LOCATION] = settings.thumbnailCacheLocation
+                    preferences[SettingsKeys.THEME_MODE] = settings.themeMode
+                    preferences[SettingsKeys.TRASH_TTL_DAYS] = settings.trashTtlDays
+                    preferences[SettingsKeys.COMPACT_DENSITY] = settings.compactDensity
+                    preferences[SettingsKeys.SHOW_DIRECTORY_SIZES] = settings.showDirectorySizes
+                    preferences[SettingsKeys.SWIPE_LEFT_ACTION] = settings.swipeLeftAction
+                    preferences[SettingsKeys.SWIPE_RIGHT_ACTION] = settings.swipeRightAction
+                }
+                check(
+                    ThumbnailCacheSettings.write(
+                        context,
+                        settings.thumbnailCacheSizeMb,
+                        ThumbnailCacheLocation.fromKey(settings.thumbnailCacheLocation),
+                    ),
+                ) { "Unable to persist thumbnail cache settings" }
+            } catch (error: Exception) {
+                runCatching {
+                    ds.edit { preferences ->
+                        preferences[SettingsKeys.SHOW_HIDDEN] = previous.showHidden
+                        preferences[SettingsKeys.FOLDERS_FIRST] = previous.foldersFirst
+                        preferences[SettingsKeys.CONFIRM_DELETE] = previous.confirmDelete
+                        preferences[SettingsKeys.DEFAULT_VIEW] = previous.defaultView
+                        preferences[SettingsKeys.SORT_FIELD] = previous.sortField
+                        preferences[SettingsKeys.SORT_DIRECTION] = previous.sortDirection
+                        preferences[SettingsKeys.THUMBNAIL_SIZE] = previous.thumbnailSize
+                        preferences[SettingsKeys.THUMBNAIL_CACHE_SIZE_MB] = previous.thumbnailCacheSizeMb
+                        preferences[SettingsKeys.THUMBNAIL_CACHE_LOCATION] = previous.thumbnailCacheLocation
+                        preferences[SettingsKeys.THEME_MODE] = previous.themeMode
+                        preferences[SettingsKeys.TRASH_TTL_DAYS] = previous.trashTtlDays
+                        preferences[SettingsKeys.COMPACT_DENSITY] = previous.compactDensity
+                        preferences[SettingsKeys.SHOW_DIRECTORY_SIZES] = previous.showDirectorySizes
+                        preferences[SettingsKeys.SWIPE_LEFT_ACTION] = previous.swipeLeftAction
+                        preferences[SettingsKeys.SWIPE_RIGHT_ACTION] = previous.swipeRightAction
+                    }
+                }.onFailure(error::addSuppressed)
+                runCatching {
+                    check(
+                        ThumbnailCacheSettings.write(
+                            context,
+                            previous.thumbnailCacheSizeMb,
+                            ThumbnailCacheLocation.fromKey(previous.thumbnailCacheLocation),
+                        ),
+                    ) { "Unable to restore thumbnail cache settings" }
+                }.onFailure(error::addSuppressed)
+                throw error
+            }
+        }
+    }
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class SettingsBackupModule {
+    @Binds
+    @Singleton
+    abstract fun bindPortableSettingsStore(impl: SettingsRepository): PortableSettingsStore
 }
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val repo: SettingsRepository,
-    private val backupManager: com.explorer.fileexplorer.core.data.BackupManager,
+    private val backupManager: BackupManager,
     private val diagnosticLog: com.explorer.fileexplorer.core.data.DiagnosticLog,
     private val pluginManager: PluginManager,
     @ApplicationContext private val context: android.content.Context,
@@ -182,6 +286,9 @@ class SettingsViewModel @Inject constructor(
 
     private val _toasts = kotlinx.coroutines.flow.MutableSharedFlow<String>()
     val toasts: kotlinx.coroutines.flow.SharedFlow<String> = _toasts.asSharedFlow()
+    private val _importPreview = MutableStateFlow<BackupPreview?>(null)
+    val importPreview: StateFlow<BackupPreview?> = _importPreview.asStateFlow()
+    private var preparedBackup: com.explorer.fileexplorer.core.data.PreparedBackup? = null
 
     init { refreshPlugins() }
 
@@ -225,23 +332,54 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun exportBackup(out: java.io.OutputStream) {
-        viewModelScope.launch {
-            backupManager.exportToStream(out)
-            _toasts.emit(context.getString(DesignSystemR.string.backup_exported))
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                out.use { backupManager.exportToStream(it) }
+                _toasts.emit(context.getString(DesignSystemR.string.backup_exported))
+            } catch (_: Exception) {
+                _toasts.emit(context.getString(DesignSystemR.string.backup_import_failed))
+            }
         }
     }
 
-    fun importBackup(input: java.io.InputStream) {
-        viewModelScope.launch {
-            backupManager.importFromStream(input)
-                .onSuccess { s ->
+    fun previewBackup(input: java.io.InputStream) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = try {
+                input.use { backupManager.prepareImport(it) }
+            } catch (error: Exception) {
+                Result.failure(error)
+            }
+            result
+                .onSuccess { prepared ->
+                    preparedBackup = prepared
+                    _importPreview.value = prepared.preview
+                }
+                .onFailure {
+                    _toasts.emit(context.getString(DesignSystemR.string.backup_import_failed))
+                }
+        }
+    }
+
+    fun cancelImport() {
+        preparedBackup = null
+        _importPreview.value = null
+    }
+
+    fun confirmImport() {
+        val prepared = preparedBackup ?: return
+        preparedBackup = null
+        _importPreview.value = null
+        viewModelScope.launch(Dispatchers.IO) {
+            backupManager.importPrepared(prepared)
+                .onSuccess { summary ->
                     _toasts.emit(
                         context.getString(
                             DesignSystemR.string.backup_import_summary,
-                            s.bookmarks,
-                            s.connections,
-                            s.skippedBookmarks,
-                            s.skippedConnections,
+                            summary.bookmarks,
+                            summary.connections,
+                            summary.settings,
+                            summary.skippedBookmarks,
+                            summary.skippedConnections,
                         ),
                     )
                 }
@@ -274,6 +412,7 @@ fun SettingsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val plugins by viewModel.plugins.collectAsStateWithLifecycle()
+    val importPreview by viewModel.importPreview.collectAsStateWithLifecycle()
     val appContext = LocalContext.current
 
     LaunchedEffect(Unit) { viewModel.toasts.collect { Toast.makeText(appContext, it, Toast.LENGTH_SHORT).show() } }
@@ -409,13 +548,13 @@ fun SettingsScreen(
             val exportLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.CreateDocument("application/json"),
             ) { uri ->
-                uri?.let { cr.openOutputStream(it)?.use { out -> viewModel.exportBackup(out) } }
+                uri?.let { cr.openOutputStream(it)?.let(viewModel::exportBackup) }
             }
 
             val importLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.OpenDocument(),
             ) { uri ->
-                uri?.let { cr.openInputStream(it)?.use { input -> viewModel.importBackup(input) } }
+                uri?.let { cr.openInputStream(it)?.let(viewModel::previewBackup) }
             }
 
             ListItem(
@@ -461,6 +600,35 @@ fun SettingsScreen(
                 supportingContent = { Text(stringResource(DesignSystemR.string.version_value)) },
             )
         }
+    }
+
+    importPreview?.let { preview ->
+        AlertDialog(
+            onDismissRequest = viewModel::cancelImport,
+            title = { Text(stringResource(DesignSystemR.string.backup_import_preview_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        DesignSystemR.string.backup_import_preview,
+                        preview.bookmarks,
+                        preview.connections,
+                        preview.settings,
+                        preview.skippedBookmarks,
+                        preview.skippedConnections,
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmImport) {
+                    Text(stringResource(DesignSystemR.string.backup_import_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::cancelImport) {
+                    Text(stringResource(DesignSystemR.string.cancel))
+                }
+            },
+        )
     }
 }
 

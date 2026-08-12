@@ -15,6 +15,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added a certificate-bound plugin trust boundary with visible Settings consent and revocation, declared-capability enforcement, fail-closed protocol negotiation, bounded isolated IPC, binder-death recovery, and path-free audit events.
 
 ### Added
+- Added bounded, versioned, transactional portable backup import/export for bookmarks and non-secret settings, with deterministic duplicate handling and preview/summary confirmation.
 - Added an independent dual-pane browser layout with per-pane navigation, refresh, sorting, hidden-file filtering, and selection.
 - Added long-press drag-and-drop transfers between panes with self/descendant path protection and explicit Copy or Move confirmation.
 - Added per-pane tabs with independent selection, close, long-press reorder, and swipe-to-close behavior.

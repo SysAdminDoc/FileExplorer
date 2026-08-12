@@ -156,11 +156,14 @@
     <string name="swipe_left">Swipe left</string>
     <string name="swipe_right">Swipe right</string>
     <string name="export_bookmarks">Export bookmarks</string>
-    <string name="save_bookmarks_settings">Save bookmarks to a JSON file; credentials are never included</string>
+    <string name="save_bookmarks_settings">Save bookmarks and portable settings to a JSON file; credentials are never included</string>
     <string name="import_bookmarks">Import bookmarks</string>
     <string name="restore_backup">Restore a backup; credentials are never imported</string>
     <string name="backup_exported">Backup exported</string>
-    <string name="backup_import_summary">Imported %1$d bookmarks and %2$d connections; skipped %3$d bookmarks and %4$d connections</string>
+    <string name="backup_import_summary">Imported %1$d bookmarks, %2$d connections, and %3$d settings; skipped %4$d bookmarks and %5$d connections</string>
+    <string name="backup_import_preview_title">Review backup before importing</string>
+    <string name="backup_import_preview">This backup contains %1$d new bookmarks, %2$d new connections, and %3$d portable settings. %4$d duplicate bookmarks and %5$d duplicate connections will be skipped. Portable settings replace current portable settings. Credentials, vault data, and share-server settings are never included.</string>
+    <string name="backup_import_confirm">Import backup</string>
     <string name="backup_import_failed">Backup import failed</string>
     <string name="export_diagnostic_log">Export diagnostic log</string>
     <string name="share_error_logs">Share error logs for troubleshooting</string>

@@ -50,6 +50,51 @@ class BackupImportPolicyTest {
     }
 
     @Test
+    fun parsesPortableSettingsAndKeepsThemInTheImportPlan() {
+        val payload = parse(
+            """{
+                "version":2,
+                "app":"FileExplorer",
+                "settings":{
+                    "showHidden":true,
+                    "foldersFirst":false,
+                    "confirmDelete":true,
+                    "defaultView":"GRID",
+                    "sortField":"SIZE",
+                    "sortDirection":"DESCENDING",
+                    "thumbnailSize":96,
+                    "thumbnailCacheSizeMb":512,
+                    "thumbnailCacheLocation":"external",
+                    "themeMode":"OLED",
+                    "trashTtlDays":60,
+                    "compactDensity":true,
+                    "showDirectorySizes":true,
+                    "swipeLeftAction":"DELETE",
+                    "swipeRightAction":"MOVE"
+                }
+            }""".replace("\n", "").replace(" ", ""),
+        )
+
+        val settings = payload.settings
+        assertEquals("GRID", settings?.defaultView)
+        assertEquals(60, settings?.trashTtlDays)
+        assertEquals("external", settings?.thumbnailCacheLocation)
+        assertEquals(settings, buildBackupImportPlan(payload, emptyList(), emptyList()).settingsToApply)
+    }
+
+    @Test
+    fun rejectsUnknownPortableSettingValuesAndForbiddenStores() {
+        assertFailsWith<BackupFormatException> {
+            parse(
+                """{"version":2,"app":"FileExplorer","settings":{"showHidden":false,"foldersFirst":true,"confirmDelete":false,"defaultView":"LIST","sortField":"NAME","sortDirection":"ASCENDING","thumbnailSize":48,"thumbnailCacheSizeMb":256,"thumbnailCacheLocation":"internal","themeMode":"SYSTEM","trashTtlDays":30,"compactDensity":false,"showDirectorySizes":false,"swipeLeftAction":"FUTURE","swipeRightAction":"NONE"}}""",
+            )
+        }
+        assertFailsWith<BackupFormatException> {
+            parse("""{"version":2,"app":"FileExplorer","vault":{}}""")
+        }
+    }
+
+    @Test
     fun duplicatePolicyKeepsFirstPayloadRecordAndSkipsExistingRows() {
         val payload = BackupPayload(
             bookmarks = listOf(

@@ -11,6 +11,7 @@ import java.io.InputStream
 internal data class BackupPayload(
     val bookmarks: List<BackupBookmark>,
     val connections: List<BackupConnection>,
+    val settings: PortableSettings? = null,
 )
 
 internal data class BackupBookmark(
@@ -79,6 +80,7 @@ internal data class BackupImportPlan(
     val connectionsToInsert: List<BackupConnection>,
     val skippedBookmarks: Int,
     val skippedConnections: Int,
+    val settingsToApply: PortableSettings? = null,
 )
 
 class BackupFormatException(message: String) : IllegalArgumentException(message)
@@ -107,19 +109,21 @@ internal object BackupImportPolicy {
 
         return try {
             val version = requiredInt(root, "version", 0, Int.MAX_VALUE)
-            if (version != BackupSchema.VERSION) {
+            if (version !in BackupSchema.SUPPORTED_VERSIONS) {
                 throw BackupFormatException("Unsupported backup version")
             }
             if (requiredString(root, "app", MAX_APP_CHARS, allowBlank = false) != "FileExplorer") {
                 throw BackupFormatException("Backup belongs to an unsupported application")
             }
+            rejectForbiddenFields(root)
 
             val bookmarks = parseBookmarks(root)
             val connections = parseConnections(root)
+            val settings = parseSettings(root)
             if (bookmarks.size + connections.size > MAX_RECORDS) {
                 throw BackupFormatException("Backup contains too many records")
             }
-            BackupPayload(bookmarks = bookmarks, connections = connections)
+            BackupPayload(bookmarks = bookmarks, connections = connections, settings = settings)
         } catch (error: BackupFormatException) {
             throw error
         } catch (_: Exception) {
@@ -169,16 +173,84 @@ internal object BackupImportPolicy {
         }
     }
 
-    private fun rejectSecretFields(connection: JSONObject) {
-        if (connection.has("password") || connection.has("privateKeyPath")) {
-            throw BackupFormatException("Credential fields are not supported in portable backups")
+    private fun parseSettings(root: JSONObject): PortableSettings? {
+        val value = readValue(root, "settings")
+        if (value === MissingJsonValue) return null
+        if (value === JSONObject.NULL) throw BackupFormatException("Backup field 'settings' cannot be null")
+        val settings = value as? JSONObject
+            ?: throw BackupFormatException("Backup field 'settings' is not an object")
+        rejectForbiddenFields(settings)
+        return PortableSettings(
+            showHidden = requiredBoolean(settings, "showHidden"),
+            foldersFirst = requiredBoolean(settings, "foldersFirst"),
+            confirmDelete = requiredBoolean(settings, "confirmDelete"),
+            defaultView = requiredString(settings, "defaultView", PortableSettingsPolicy.MAX_ENUM_CHARS, allowBlank = false),
+            sortField = requiredString(settings, "sortField", PortableSettingsPolicy.MAX_ENUM_CHARS, allowBlank = false),
+            sortDirection = requiredString(settings, "sortDirection", PortableSettingsPolicy.MAX_ENUM_CHARS, allowBlank = false),
+            thumbnailSize = requiredInt(
+                settings,
+                "thumbnailSize",
+                PortableSettingsPolicy.MIN_THUMBNAIL_SIZE,
+                PortableSettingsPolicy.MAX_THUMBNAIL_SIZE,
+            ),
+            thumbnailCacheSizeMb = requiredInt(
+                settings,
+                "thumbnailCacheSizeMb",
+                PortableSettingsPolicy.MIN_CACHE_SIZE_MB,
+                PortableSettingsPolicy.MAX_CACHE_SIZE_MB,
+            ),
+            thumbnailCacheLocation = requiredString(
+                settings,
+                "thumbnailCacheLocation",
+                PortableSettingsPolicy.MAX_ENUM_CHARS,
+                allowBlank = false,
+            ),
+            themeMode = requiredString(settings, "themeMode", PortableSettingsPolicy.MAX_ENUM_CHARS, allowBlank = false),
+            trashTtlDays = requiredInt(settings, "trashTtlDays", 1, 365),
+            compactDensity = requiredBoolean(settings, "compactDensity"),
+            showDirectorySizes = requiredBoolean(settings, "showDirectorySizes"),
+            swipeLeftAction = requiredString(
+                settings,
+                "swipeLeftAction",
+                PortableSettingsPolicy.MAX_ENUM_CHARS,
+                allowBlank = false,
+            ),
+            swipeRightAction = requiredString(
+                settings,
+                "swipeRightAction",
+                PortableSettingsPolicy.MAX_ENUM_CHARS,
+                allowBlank = false,
+            ),
+        ).also(PortableSettingsPolicy::validate)
+    }
+
+    private fun rejectForbiddenFields(objectValue: JSONObject) {
+        val forbidden = listOf(
+            "credentials",
+            "password",
+            "privateKeyPath",
+            "security",
+            "securitySettings",
+            "shareServer",
+            "share_server",
+            "token",
+            "tokens",
+            "vault",
+        )
+        if (forbidden.any { key -> runCatching { objectValue.get(key) }.isSuccess }) {
+            throw BackupFormatException("Credential, security, vault, and share-server data are not portable")
         }
     }
 
+    private fun rejectSecretFields(connection: JSONObject) {
+        rejectForbiddenFields(connection)
+    }
+
     private fun optionalArray(root: JSONObject, key: String): JSONArray? {
-        if (!root.has(key)) return null
-        if (root.isNull(key)) throw BackupFormatException("Backup field '$key' cannot be null")
-        return root.get(key) as? JSONArray
+        val value = readValue(root, key)
+        if (value === MissingJsonValue) return null
+        if (value === JSONObject.NULL) throw BackupFormatException("Backup field '$key' cannot be null")
+        return value as? JSONArray
             ?: throw BackupFormatException("Backup field '$key' is not an array")
     }
 
@@ -194,10 +266,7 @@ internal object BackupImportPolicy {
         maxChars: Int,
         allowBlank: Boolean,
     ): String {
-        if (!objectValue.has(key) || objectValue.isNull(key)) {
-            throw BackupFormatException("Backup field '$key' is required")
-        }
-        val value = objectValue.get(key) as? String
+        val value = requiredValue(objectValue, key) as? String
             ?: throw BackupFormatException("Backup field '$key' is not a string")
         if (value.length > maxChars) {
             throw BackupFormatException("Backup field '$key' is too long")
@@ -214,15 +283,12 @@ internal object BackupImportPolicy {
         defaultValue: String,
         maxChars: Int,
     ): String {
-        if (!objectValue.has(key)) return defaultValue
+        if (readValue(objectValue, key) === MissingJsonValue) return defaultValue
         return requiredString(objectValue, key, maxChars, allowBlank = true)
     }
 
     private fun requiredInt(objectValue: JSONObject, key: String, min: Int, max: Int): Int {
-        if (!objectValue.has(key) || objectValue.isNull(key)) {
-            throw BackupFormatException("Backup field '$key' is required")
-        }
-        return intValue(objectValue.get(key), key, min, max)
+        return intValue(requiredValue(objectValue, key), key, min, max)
     }
 
     private fun optionalInt(
@@ -232,8 +298,9 @@ internal object BackupImportPolicy {
         min: Int,
         max: Int,
     ): Int {
-        if (!objectValue.has(key)) return defaultValue
-        return intValue(objectValue.get(key), key, min, max)
+        val value = readValue(objectValue, key)
+        if (value === MissingJsonValue) return defaultValue
+        return intValue(value, key, min, max)
     }
 
     private fun intValue(value: Any?, key: String, min: Int, max: Int): Int {
@@ -247,10 +314,32 @@ internal object BackupImportPolicy {
     }
 
     private fun optionalBoolean(objectValue: JSONObject, key: String, defaultValue: Boolean): Boolean {
-        if (!objectValue.has(key)) return defaultValue
-        return objectValue.get(key) as? Boolean
+        val value = readValue(objectValue, key)
+        if (value === MissingJsonValue) return defaultValue
+        return value as? Boolean
             ?: throw BackupFormatException("Backup field '$key' is not a boolean")
     }
+
+    private fun requiredBoolean(objectValue: JSONObject, key: String): Boolean {
+        return requiredValue(objectValue, key) as? Boolean
+            ?: throw BackupFormatException("Backup field '$key' is not a boolean")
+    }
+
+    private fun requiredValue(objectValue: JSONObject, key: String): Any {
+        val value = readValue(objectValue, key)
+        if (value === MissingJsonValue || value === JSONObject.NULL) {
+            throw BackupFormatException("Backup field '$key' is required")
+        }
+        return value
+    }
+
+    private fun readValue(objectValue: JSONObject, key: String): Any {
+        if (!objectValue.has(key)) return MissingJsonValue
+        if (objectValue.isNull(key)) return JSONObject.NULL
+        return objectValue.get(key)
+    }
+
+    private object MissingJsonValue
 
     private fun InputStream.readUtf8Bounded(maxBytes: Int): String {
         val bytes = ByteArrayOutputStream(minOf(maxBytes, 8 * 1024))
@@ -313,5 +402,6 @@ internal fun buildBackupImportPlan(
         connectionsToInsert = connectionsToInsert,
         skippedBookmarks = payload.bookmarks.size - bookmarksToInsert.size,
         skippedConnections = payload.connections.size - connectionsToInsert.size,
+        settingsToApply = payload.settings,
     )
 }
