@@ -290,6 +290,13 @@ Unsupported operations return typed provider errors. Network transfers and mutat
 operations report progress and verify completion rather than presenting an empty or
 zero-valued success as a completed operation.
 
+Local multi-file copies, moves, deletes, archive extraction, and archive creation use
+an atomic manifest under `.fileexplorer-staging/`. The manifest records planned,
+staged, committed, and backup entries; interrupted journals are rolled back or
+cleaned before the next operation. The transfer queue persists its intended and
+committed entries in Room, so cancellation and process death show partial completion
+instead of silently retrying an unknown filesystem state.
+
 ## Permissions
 
 The following matrix is the release-readiness record for every privileged permission

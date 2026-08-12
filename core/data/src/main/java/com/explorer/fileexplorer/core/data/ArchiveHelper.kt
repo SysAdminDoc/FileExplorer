@@ -1,6 +1,10 @@
 package com.explorer.fileexplorer.core.data
 
 import android.webkit.MimeTypeMap
+import com.explorer.fileexplorer.core.storage.FileOperationStaging
+import com.explorer.fileexplorer.core.storage.StagedEntry
+import com.explorer.fileexplorer.core.storage.StagingManifest
+import com.explorer.fileexplorer.core.storage.StagingRecoveryPolicy
 import com.explorer.fileexplorer.core.model.FileItem
 import com.github.junrar.Archive
 import com.github.junrar.rarfile.FileHeader
@@ -21,9 +25,7 @@ import org.apache.commons.compress.archivers.sevenz.SevenZFile
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.CompressorStreamFactory
 import java.io.*
-import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
 import javax.inject.Inject
@@ -97,7 +99,14 @@ class ArchiveHelper @Inject constructor() {
         try {
             val ext = archivePath.substringAfterLast('.').lowercase()
             val destinationRoot = prepareDestination(destination)
-            val stagingRoot = Files.createTempDirectory(destinationRoot.toPath(), ".fileexplorer-extract-").toFile()
+            FileOperationStaging.recoverOrphaned(destinationRoot)
+            val operationRoot = FileOperationStaging.createOperation(
+                baseDirectory = destinationRoot,
+                operation = "extract",
+                recoveryPolicy = StagingRecoveryPolicy.ROLLBACK,
+            )
+            val stagingRoot = operationRoot.resolve("payload").apply { mkdirs() }
+            var committed = false
             val count = try {
                 val extractedCount = when {
                     ext == "zip" || ext == "jar" -> extractZip(
@@ -113,10 +122,15 @@ class ArchiveHelper @Inject constructor() {
                         extractTar(archivePath, stagingRoot, entriesToExtract, onProgress)
                     else -> 0
                 }
-                commitStagedExtraction(stagingRoot, destinationRoot)
+                commitStagedExtraction(stagingRoot, destinationRoot, operationRoot)
+                committed = true
                 extractedCount
             } finally {
-                stagingRoot.deleteRecursively()
+                if (committed) {
+                    FileOperationStaging.deleteRecursively(operationRoot)
+                } else {
+                    FileOperationStaging.recoverOrphaned(destinationRoot)
+                }
             }
             Result.success(count)
         } catch (e: CancellationException) {
@@ -135,14 +149,33 @@ class ArchiveHelper @Inject constructor() {
         compressionLevel: Int = 5,
         onProgress: (Long, Long, String) -> Unit = { _, _, _ -> },
     ): Result<Unit> = withContext(Dispatchers.IO) {
+        val output = File(outputPath).canonicalFile
+        val outputParent = requireNotNull(output.parentFile)
+        val operationRoot = runCatching {
+            FileOperationStaging.recoverOrphaned(outputParent)
+            FileOperationStaging.createOperation(
+                baseDirectory = outputParent,
+                operation = "compress",
+                recoveryPolicy = StagingRecoveryPolicy.ROLLBACK,
+            )
+        }.getOrElse { return@withContext Result.failure(it) }
+        val stagedOutput = operationRoot.resolve("payload").resolve("${output.name}.part")
+        requireNotNull(stagedOutput.parentFile).mkdirs()
         try {
             when (format) {
-                ArchiveFormat.ZIP -> createZip(outputPath, sourcePaths, password, compressionLevel, onProgress)
-                ArchiveFormat.SEVEN_Z -> create7z(outputPath, sourcePaths, compressionLevel, onProgress)
-                ArchiveFormat.TAR_GZ -> createTarGz(outputPath, sourcePaths, onProgress)
+                ArchiveFormat.ZIP -> createZip(stagedOutput.path, sourcePaths, password, compressionLevel, onProgress)
+                ArchiveFormat.SEVEN_Z -> create7z(stagedOutput.path, sourcePaths, compressionLevel, onProgress)
+                ArchiveFormat.TAR_GZ -> createTarGz(stagedOutput.path, sourcePaths, onProgress)
             }
+            FileOperationStaging.forceFile(stagedOutput)
+            commitStagedFile(stagedOutput, output, operationRoot)
+            FileOperationStaging.deleteRecursively(operationRoot)
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            FileOperationStaging.recoverOrphaned(outputParent)
+            throw e
         } catch (e: Exception) {
+            FileOperationStaging.recoverOrphaned(outputParent)
             Result.failure(e)
         }
     }
@@ -222,13 +255,44 @@ class ArchiveHelper @Inject constructor() {
         }
     }
 
-    private fun commitStagedExtraction(stagingRoot: File, destinationRoot: File) {
+    private fun commitStagedExtraction(stagingRoot: File, destinationRoot: File, operationRoot: File) {
         val stagedEntries = stagingRoot.walkTopDown()
-            .filter { it != stagingRoot }
+            .filter { it != stagingRoot && it.isFile }
             .toList()
-            .sortedWith(compareBy<File> { it.toPath().nameCount }.thenBy { if (it.isDirectory) 0 else 1 })
+            .sortedBy { it.toPath().nameCount }
+        val journalEntries = stagedEntries.map { source ->
+            val relativeName = stagingRoot.toPath().relativize(source.toPath()).toString()
+            val target = ArchiveEntryPathPolicy.safeDestination(destinationRoot.path, relativeName)
+                ?: throw ArchiveExtractionException("Unsafe archive entry path: $relativeName")
+            StagedEntry(originalPath = "", stagedPath = source.path, committedPath = target.path)
+        }.toMutableList()
+        val primaryIndices = stagedEntries.indices.toMutableList()
+        fun manifest() = StagingManifest(
+            operation = "extract",
+            recoveryPolicy = StagingRecoveryPolicy.ROLLBACK,
+            entries = journalEntries.toList(),
+        )
+        FileOperationStaging.writeManifest(operationRoot, manifest())
 
-        for (source in stagedEntries) {
+        stagingRoot.walkTopDown()
+            .filter { it != stagingRoot && it.isDirectory }
+            .sortedBy { it.toPath().nameCount }
+            .forEach { source ->
+                if (Files.isSymbolicLink(source.toPath())) {
+                    throw ArchiveExtractionException("Staged symbolic links are not supported: ${source.name}")
+                }
+                val relativeName = stagingRoot.toPath().relativize(source.toPath()).toString()
+                val target = ArchiveEntryPathPolicy.safeDestination(destinationRoot.path, relativeName)
+                    ?: throw ArchiveExtractionException("Unsafe archive entry path: $relativeName")
+                if (target.exists() && !target.isDirectory) {
+                    throw ArchiveExtractionException("Extraction target is not a directory: ${target.path}")
+                }
+                if (!target.exists() && !target.mkdirs() && !target.isDirectory) {
+                    throw ArchiveExtractionException("Unable to create extraction directory: ${target.path}")
+                }
+            }
+
+        for ((index, source) in stagedEntries.withIndex()) {
             if (Files.isSymbolicLink(source.toPath())) {
                 throw ArchiveExtractionException("Staged symbolic links are not supported: ${source.name}")
             }
@@ -252,18 +316,72 @@ class ArchiveHelper @Inject constructor() {
                         throw ArchiveExtractionException("Unable to create extraction directory: ${parent.path}")
                     }
                 }
-                try {
-                    Files.move(
-                        source.toPath(),
-                        target.toPath(),
-                        StandardCopyOption.REPLACE_EXISTING,
-                        StandardCopyOption.ATOMIC_MOVE,
+                if (target.exists() && target.isDirectory) {
+                    throw ArchiveExtractionException("Extraction target is a directory: ${target.path}")
+                }
+                val backupEntryIndex = if (target.exists()) {
+                    val backup = operationRoot.resolve("backup").resolve(index.toString())
+                    journalEntries += StagedEntry(
+                        originalPath = target.path,
+                        stagedPath = backup.path,
+                        state = FileOperationStaging.STATE_BACKUP_MOVED,
                     )
-                } catch (_: AtomicMoveNotSupportedException) {
-                    Files.move(source.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                    FileOperationStaging.writeManifest(operationRoot, manifest())
+                    backup.parentFile?.mkdirs()
+                    FileOperationStaging.atomicMove(target.toPath(), backup.toPath(), replaceExisting = false)
+                    journalEntries.lastIndex
+                } else {
+                    null
+                }
+                val primaryIndex = primaryIndices[index]
+                journalEntries[primaryIndex] = journalEntries[primaryIndex].copy(state = FileOperationStaging.STATE_TARGET_COMMITTED)
+                FileOperationStaging.writeManifest(operationRoot, manifest())
+                FileOperationStaging.atomicMove(source.toPath(), target.toPath(), replaceExisting = false)
+                journalEntries[primaryIndex] = journalEntries[primaryIndex].copy(state = FileOperationStaging.STATE_COMMITTED)
+                backupEntryIndex?.let { backupIndex ->
+                    journalEntries[backupIndex] = journalEntries[backupIndex].copy(state = FileOperationStaging.STATE_COMMITTED)
+                }
+                FileOperationStaging.writeManifest(operationRoot, manifest())
+                backupEntryIndex?.let { backupIndex ->
+                    FileOperationStaging.deleteRecursively(File(journalEntries[backupIndex].stagedPath))
                 }
             }
         }
+    }
+
+    private fun commitStagedFile(staged: File, target: File, operationRoot: File) {
+        val entries = mutableListOf(
+            StagedEntry(
+                originalPath = "",
+                stagedPath = staged.path,
+                committedPath = target.path,
+                state = FileOperationStaging.STATE_STAGED,
+            ),
+        )
+        fun manifest() = StagingManifest(
+            operation = "compress",
+            recoveryPolicy = StagingRecoveryPolicy.ROLLBACK,
+            entries = entries.toList(),
+        )
+        FileOperationStaging.writeManifest(operationRoot, manifest())
+        if (target.exists()) {
+            val backup = operationRoot.resolve("backup").resolve("archive")
+            entries += StagedEntry(
+                originalPath = target.path,
+                stagedPath = backup.path,
+                state = FileOperationStaging.STATE_BACKUP_MOVED,
+            )
+            FileOperationStaging.writeManifest(operationRoot, manifest())
+            backup.parentFile?.mkdirs()
+            FileOperationStaging.atomicMove(target.toPath(), backup.toPath(), replaceExisting = false)
+        }
+        entries[0] = entries[0].copy(state = FileOperationStaging.STATE_TARGET_COMMITTED)
+        FileOperationStaging.writeManifest(operationRoot, manifest())
+        FileOperationStaging.atomicMove(staged.toPath(), target.toPath(), replaceExisting = false)
+        entries[0] = entries[0].copy(state = FileOperationStaging.STATE_COMMITTED)
+        entries.indices.drop(1).forEach { index -> entries[index] = entries[index].copy(state = FileOperationStaging.STATE_COMMITTED) }
+        FileOperationStaging.writeManifest(operationRoot, manifest())
+        entries.drop(1).forEach { entry -> FileOperationStaging.deleteRecursively(File(entry.stagedPath)) }
     }
 
     private class BoundedArchiveOutputStream(

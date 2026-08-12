@@ -142,5 +142,8 @@ data class TransferTaskEntity(
     @ColumnInfo(name = "conflict_destination_path") val conflictDestinationPath: String?,
     @ColumnInfo(name = "conflict_is_text") val conflictIsText: Boolean,
     @ColumnInfo(name = "conflict_diff_preview") val conflictDiffPreview: String,
+    @ColumnInfo(name = "intended_entries") val intendedEntries: String,
+    @ColumnInfo(name = "committed_entries") val committedEntries: String,
+    @ColumnInfo(name = "recovery_policy") val recoveryPolicy: String,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
 )

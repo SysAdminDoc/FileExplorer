@@ -10,6 +10,7 @@ All notable changes to FileExplorer will be documented in this file.
 - Added a permission and distribution readiness matrix, a limited app-scoped storage mode when All Files Access is denied, and a launcher-only package visibility fallback for App Manager.
 - Hardened the optional Cast control so unsupported or theme-incompatible media-router widgets degrade to an inert control instead of crashing the browser.
 - Added provider-specific network capability semantics, bounded cancellable recursive size/search/checksum operations, streamed progress verification, and typed unsupported-operation failures for SMB, SFTP, FTP/FTPS, and WebDAV.
+- Added atomic filesystem staging manifests for local multi-file operations and archive writes, deterministic orphan recovery, and Room-backed transfer journals that expose intended, committed, and partial entries after cancellation or process death.
 - Hardened ZIP, 7z, TAR, and RAR extraction with shared path containment, depth and resource limits, symlink/hard-link rejection, cancellation checks, and staged commits.
 - Replaced SFTP shell-based copy with SSHJ-native staged transfers and verified rename/move operations, including remote-path safety, timeout, cancellation, and partial-output handling.
 - Made permanent deletion capability-aware: local overwrite is explicitly best effort, unsupported providers cannot claim secure deletion, and the browser reports partial outcomes with an irreversible-action confirmation.

@@ -19,6 +19,23 @@ enum class TransferConflictAction {
     KEEP_BOTH,
 }
 
+enum class TransferJournalState {
+    PLANNED,
+    COMMITTED,
+    SKIPPED,
+}
+
+enum class TransferRecoveryPolicy {
+    ROLLBACK,
+    KEEP_PARTIAL,
+}
+
+data class TransferJournalEntry(
+    val sourcePath: String,
+    val destinationPath: String,
+    val state: TransferJournalState = TransferJournalState.PLANNED,
+)
+
 data class TransferConflict(
     val sourcePath: String,
     val destinationPath: String,
@@ -43,6 +60,9 @@ data class TransferQueueTask(
     val conflict: TransferConflict? = null,
     val idempotencyKey: String = "transfer-$id",
     val retryCount: Int = 0,
+    val intendedEntries: List<TransferJournalEntry> = emptyList(),
+    val committedEntries: List<TransferJournalEntry> = emptyList(),
+    val recoveryPolicy: TransferRecoveryPolicy = TransferRecoveryPolicy.ROLLBACK,
 ) {
     val progress: Float
         get() = if (totalBytes > 0) (transferredBytes.toFloat() / totalBytes).coerceIn(0f, 1f) else 0f

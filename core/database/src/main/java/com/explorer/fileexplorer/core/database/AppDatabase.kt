@@ -27,7 +27,7 @@ import javax.inject.Singleton
         FileTagEntity::class,
         TransferTaskEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -61,6 +61,7 @@ object DatabaseModule {
             MIGRATION_5_6,
             MIGRATION_6_7,
             MIGRATION_7_8,
+            MIGRATION_8_9,
         ).build()
     }
 
@@ -207,5 +208,13 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
             )
             """.trimIndent(),
         )
+    }
+}
+
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `transfer_tasks` ADD COLUMN `intended_entries` TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE `transfer_tasks` ADD COLUMN `committed_entries` TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE `transfer_tasks` ADD COLUMN `recovery_policy` TEXT NOT NULL DEFAULT 'ROLLBACK'")
     }
 }

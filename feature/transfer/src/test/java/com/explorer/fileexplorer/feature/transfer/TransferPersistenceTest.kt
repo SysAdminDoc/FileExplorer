@@ -40,12 +40,21 @@ class TransferPersistenceTest {
                 isText = true,
                 diffPreview = "- old\n+ new",
             ),
+            intendedEntries = listOf(
+                TransferJournalEntry("/source/a.txt", "/destination/a.txt"),
+                TransferJournalEntry("/source/b.txt", "/destination/b.txt"),
+            ),
+            committedEntries = listOf(
+                TransferJournalEntry("/source/a.txt", "/destination/a.txt", TransferJournalState.COMMITTED),
+            ),
         )
 
         val restored = original.toEntity(queueOrder = 3).toTask()
 
         assertEquals(original, restored)
         assertEquals("transfer-42", restored.idempotencyKey)
+        assertEquals(original.intendedEntries, restored.intendedEntries)
+        assertEquals(original.committedEntries, restored.committedEntries)
     }
 
     @Test
@@ -66,6 +75,9 @@ class TransferPersistenceTest {
         }
         assertFailsWith<IllegalArgumentException> {
             valid.copy(retryCount = -1).toTask()
+        }
+        assertFailsWith<IllegalArgumentException> {
+            valid.copy(recoveryPolicy = "UNKNOWN").toTask()
         }
         assertFailsWith<IllegalArgumentException> {
             valid.copy(conflictSourcePath = "/source/a.txt").toTask()
@@ -99,6 +111,8 @@ class TransferPersistenceTest {
         conflictAction: TransferConflictAction? = null,
         applyConflictToAll: Boolean = false,
         conflict: TransferConflict? = null,
+        intendedEntries: List<TransferJournalEntry> = emptyList(),
+        committedEntries: List<TransferJournalEntry> = emptyList(),
     ) = TransferQueueTask(
         id = id,
         idempotencyKey = "transfer-$id",
@@ -116,5 +130,7 @@ class TransferPersistenceTest {
         currentFile = "/source/a.txt",
         error = null,
         conflict = conflict,
+        intendedEntries = intendedEntries,
+        committedEntries = committedEntries,
     )
 }

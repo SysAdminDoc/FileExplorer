@@ -62,6 +62,7 @@ class TransferQueueManager @Inject constructor(
         sourcePaths: List<String>,
         destination: String,
         bandwidthLimitBytesPerSecond: Long = 0L,
+        recoveryPolicy: TransferRecoveryPolicy = TransferRecoveryPolicy.ROLLBACK,
     ): Long {
         require(sourcePaths.isNotEmpty()) { "At least one source is required" }
         val id = nextId.incrementAndGet()
@@ -72,6 +73,7 @@ class TransferQueueManager @Inject constructor(
             sourcePaths = sourcePaths.distinct(),
             destination = destination,
             bandwidthLimitBytesPerSecond = bandwidthLimitBytesPerSecond.coerceAtLeast(0L),
+            recoveryPolicy = recoveryPolicy,
         )
         _tasks.update {
             it + task
@@ -301,7 +303,26 @@ class TransferQueueManager @Inject constructor(
                 repositoryFactory.getTransferRepository(initial.sourcePaths, initial.destination)
             }
             val totalBytes = if (initial.operation == FileOperation.DELETE) 0L else repository.calculateSize(initial.sourcePaths)
-            updateTask(taskId) { it.copy(totalBytes = totalBytes) }
+            val intendedEntries = initial.intendedEntries.ifEmpty {
+                initial.sourcePaths.map { source ->
+                    TransferJournalEntry(
+                        sourcePath = source,
+                        destinationPath = if (initial.operationNeedsDestination()) {
+                            targetPath(initial.destination, source)
+                        } else {
+                            source
+                        },
+                    )
+                }
+            }
+            updateTask(taskId) {
+                it.copy(
+                    totalBytes = totalBytes,
+                    intendedEntries = intendedEntries,
+                    recoveryPolicy = initial.recoveryPolicy,
+                )
+            }
+            persistTaskNow(taskId)
             val completedBefore = initial.completedSources.coerceIn(0, initial.sourcePaths.size)
             initial.sourcePaths.drop(completedBefore).forEachIndexed { offset, source ->
                 val index = completedBefore + offset
@@ -318,7 +339,14 @@ class TransferQueueManager @Inject constructor(
                 }
                 if (action != null && tasks.value.first { it.id == taskId }.applyConflictToAll) sharedAction = action
                 if (action == TransferConflictAction.SKIP) {
-                    updateTask(taskId) { it.copy(completedSources = index + 1, currentFile = source) }
+                    updateTask(taskId) {
+                        it.copy(
+                            completedSources = index + 1,
+                            currentFile = source,
+                            committedEntries = it.committedEntries.recordJournal(source, TransferJournalState.SKIPPED),
+                        )
+                    }
+                    persistTaskNow(taskId)
                     return@forEachIndexed
                 }
 
@@ -358,14 +386,28 @@ class TransferQueueManager @Inject constructor(
                     else -> Result.failure(UnsupportedOperationException("Unsupported transfer operation"))
                 }
                 ensureNotCancelled(taskId)
-                result.getOrThrow()
+                val resultCount = result.getOrThrow()
+                require(resultCount > 0) { "Transfer provider committed no entries for $source" }
                 transferredBefore += sourceSize
-                updateTask(taskId) { it.copy(transferredBytes = transferredBefore, completedSources = index + 1) }
+                updateTask(taskId) {
+                    it.copy(
+                        transferredBytes = transferredBefore,
+                        completedSources = index + 1,
+                        committedEntries = it.committedEntries.recordJournal(source, TransferJournalState.COMMITTED),
+                    )
+                }
+                persistTaskNow(taskId)
             }
             updateTask(taskId) { it.copy(state = TransferQueueState.COMPLETED, conflict = null) }
         } catch (cancelled: CancellationException) {
             if (isCancelled(taskId)) {
-                updateTask(taskId) { it.copy(state = TransferQueueState.CANCELLED, conflict = null) }
+                updateTask(taskId) {
+                    it.copy(
+                        state = TransferQueueState.CANCELLED,
+                        conflict = null,
+                        error = it.partialJournalMessage(),
+                    )
+                }
             } else {
                 throw cancelled
             }
@@ -373,7 +415,7 @@ class TransferQueueManager @Inject constructor(
             updateTask(taskId) {
                 it.copy(
                     state = TransferQueueState.FAILED,
-                    error = error.message ?: error::class.simpleName,
+                    error = it.partialJournalMessage(error.message ?: error::class.simpleName),
                     retryCount = it.retryCount + 1,
                     conflict = null,
                 )
@@ -418,6 +460,15 @@ class TransferQueueManager @Inject constructor(
         updated?.let { persistTask(it) }
     }
 
+    private suspend fun persistTaskNow(id: Long) {
+        ready.await()
+        persistenceMutex.withLock {
+            val latest = tasks.value.firstOrNull { it.id == id } ?: return
+            val order = tasks.value.indexOfFirst { it.id == latest.id }.coerceAtLeast(0)
+            transferTaskDao.upsert(latest.toEntity(order))
+        }
+    }
+
     private fun ensureNotCancelled(id: Long) {
         if (isCancelled(id)) throw CancellationException("Transfer cancelled")
     }
@@ -426,6 +477,22 @@ class TransferQueueManager @Inject constructor(
 
     private fun TransferQueueTask.operationNeedsDestination(): Boolean =
         operation == FileOperation.COPY || operation == FileOperation.MOVE
+
+    private fun List<TransferJournalEntry>.recordJournal(
+        sourcePath: String,
+        state: TransferJournalState,
+    ): List<TransferJournalEntry> {
+        val intended = firstOrNull { it.sourcePath == sourcePath } ?: return this
+        return filterNot { it.sourcePath == sourcePath } + intended.copy(state = state)
+    }
+
+    private fun TransferQueueTask.partialJournalMessage(detail: String? = null): String? {
+        val committed = committedEntries.size
+        val intended = intendedEntries.size
+        if (committed == 0 && detail.isNullOrBlank()) return null
+        val prefix = if (intended > committed) "Partial completion ($committed/$intended committed)" else "Operation interrupted"
+        return listOfNotNull(prefix, detail).joinToString(": ")
+    }
 
     private fun targetPath(destination: String, source: String): String {
         val name = if (UsbPathCodec.isUsbPath(source)) {
