@@ -2,7 +2,7 @@
 
 All notable changes to FileExplorer will be documented in this file.
 
-## [v1.5.0] - 2026-08-03
+## [v1.6.0] - 2026-08-12
 
 ### Security
 - Added explicit Google/Maven Central/JitPack dependency provenance policy, fixed-version checks, release-graph reporting, and an OSV advisory scan task.
