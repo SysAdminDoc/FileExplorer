@@ -68,4 +68,11 @@ class PermissionHelper @Inject constructor(
             ) == PackageManager.PERMISSION_GRANTED
         } else true
     }
+
+    /**
+     * Returns a path that remains readable and writable when all-files access is denied.
+     * This is deliberately app-scoped; it never implies access to shared storage.
+     */
+    fun scopedStorageRootPath(): String =
+        context.getExternalFilesDir(null)?.absolutePath ?: context.filesDir.absolutePath
 }

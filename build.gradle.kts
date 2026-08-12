@@ -247,6 +247,21 @@ val verifyAndroidUpgradeReadiness = tasks.register("verifyAndroidUpgradeReadines
             ) {
                 failures += "app manifest must declare backup and data-extraction rules"
             }
+
+            val queries = elements(mainManifest, "queries").firstOrNull()
+            val queryActions = queries?.getElementsByTagName("action")
+                ?.let { nodes -> (0 until nodes.length).mapNotNull { nodes.item(it) as? Element } }
+                ?.map { androidAttribute(it, "name") }
+                .orEmpty()
+            val queryCategories = queries?.getElementsByTagName("category")
+                ?.let { nodes -> (0 until nodes.length).mapNotNull { nodes.item(it) as? Element } }
+                ?.map { androidAttribute(it, "name") }
+                .orEmpty()
+            if ("android.intent.action.MAIN" !in queryActions ||
+                "android.intent.category.LAUNCHER" !in queryCategories
+            ) {
+                failures += "app manifest must declare a launcher <queries> fallback for App Manager"
+            }
         }
 
         listOf(
@@ -263,6 +278,28 @@ val verifyAndroidUpgradeReadiness = tasks.register("verifyAndroidUpgradeReadines
             !permissionHelper.contains("WRITE_EXTERNAL_STORAGE")
         ) {
             failures += "PermissionHelper must retain all-files and legacy storage fallbacks"
+        }
+
+        val appManagerSource = rootProject.file(
+            "feature/apps/src/main/java/com/explorer/fileexplorer/feature/apps/AppsScreen.kt",
+        ).readText()
+        if (!appManagerSource.contains("QUERY_ALL_PACKAGES") ||
+            !appManagerSource.contains("queryIntentActivities")
+        ) {
+            failures += "App Manager must provide a least-privilege package visibility fallback"
+        }
+
+        val permissionsMatrix = rootProject.file("README.md").readText()
+        listOf(
+            "Permission or component",
+            "API range",
+            "Backup implication",
+            "Owner review",
+            "FileDocumentsProvider",
+        ).forEach { requiredText ->
+            if (requiredText !in permissionsMatrix) {
+                failures += "README.md permission matrix is missing '$requiredText'"
+            }
         }
 
         listOf(

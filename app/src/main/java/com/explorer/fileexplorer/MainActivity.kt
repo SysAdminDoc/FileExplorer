@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
     // returns from the system settings page — Compose will recompose any
     // collector when this MutableState changes.
     private val hasPermissionState = mutableStateOf(false)
+    private val limitedStorageState = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,12 +53,19 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    if (hasPermissionState.value) {
-                        AppNavigation()
+                    if (hasPermissionState.value || limitedStorageState.value) {
+                        AppNavigation(
+                            initialPath = if (limitedStorageState.value) {
+                                permissionHelper.scopedStorageRootPath()
+                            } else null,
+                        )
                     } else {
                         PermissionScreen(
                             onGrantPermission = {
                                 startActivity(permissionHelper.getManageStorageIntent())
+                            },
+                            onContinueWithLimitedAccess = {
+                                limitedStorageState.value = true
                             },
                         )
                     }
@@ -73,7 +81,10 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun PermissionScreen(onGrantPermission: () -> Unit) {
+private fun PermissionScreen(
+    onGrantPermission: () -> Unit,
+    onContinueWithLimitedAccess: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -106,6 +117,19 @@ private fun PermissionScreen(onGrantPermission: () -> Unit) {
         ) {
             Text(stringResource(DesignSystemR.string.grant_storage_access))
         }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = onContinueWithLimitedAccess,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(stringResource(DesignSystemR.string.continue_limited_storage))
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = stringResource(DesignSystemR.string.storage_access_limited_message),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Spacer(Modifier.height(8.dp))
         Text(
             text = stringResource(DesignSystemR.string.storage_access_settings),

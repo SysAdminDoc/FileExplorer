@@ -1,5 +1,6 @@
 package com.explorer.fileexplorer.feature.apps
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -29,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import androidx.core.content.FileProvider
+import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -94,7 +96,7 @@ class AppsViewModel @Inject constructor(
             _state.update { it.copy(isLoading = true) }
             val apps = withContext(Dispatchers.IO) {
                 val pm = context.packageManager
-                pm.getInstalledPackages(0).mapNotNull { pkg -> packageToAppInfo(pm, pkg) }
+                visiblePackages(pm).mapNotNull { pkg -> packageToAppInfo(pm, pkg) }
             }
             _state.update { it.copy(apps = apps, isLoading = false) }
             applyFilterAndSort()
@@ -214,6 +216,29 @@ class AppsViewModel @Inject constructor(
                 minSdk = appInfo.minSdkVersion,
             )
         } catch (_: Exception) { null }
+    }
+
+    /**
+     * Use the broad package inventory only when the manifest capability is available.
+     * Without it, package visibility is intentionally limited to launcher apps declared
+     * by the <queries> section in the app manifest.
+     */
+    private fun visiblePackages(pm: PackageManager): List<PackageInfo> {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.QUERY_ALL_PACKAGES) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            runCatching { pm.getInstalledPackages(0) }.getOrNull()?.let { return it }
+        }
+
+        val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        return runCatching {
+            pm.queryIntentActivities(launcherIntent, PackageManager.MATCH_ALL)
+                .asSequence()
+                .mapNotNull { it.activityInfo?.applicationInfo?.packageName }
+                .distinct()
+                .mapNotNull { packageName -> runCatching { pm.getPackageInfo(packageName, 0) }.getOrNull() }
+                .toList()
+        }.getOrDefault(emptyList())
     }
 }
 

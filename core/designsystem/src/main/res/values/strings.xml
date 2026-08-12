@@ -5,6 +5,8 @@
     <string name="storage_access_message">File Explorer needs access to all files on your device to browse, manage, and organize your storage.</string>
     <string name="grant_storage_access">Grant Storage Access</string>
     <string name="storage_access_settings">This will open Android Settings where you can allow file access.</string>
+    <string name="continue_limited_storage">Continue with limited access</string>
+    <string name="storage_access_limited_message">Limited mode opens this app’s private storage. Shared folders and app-manager results may be unavailable until All Files Access is enabled.</string>
 
     <string name="back">Back</string>
     <string name="cancel">Cancel</string>

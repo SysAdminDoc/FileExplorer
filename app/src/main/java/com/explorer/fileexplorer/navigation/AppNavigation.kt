@@ -59,10 +59,12 @@ object Routes {
 @Composable
 fun AppNavigation(
     navController: NavHostController = rememberNavController(),
+    initialPath: String? = null,
 ) {
     NavHost(navController = navController, startDestination = Routes.BROWSER) {
         composable(Routes.BROWSER) {
             BrowserScreen(
+                initialPath = initialPath,
                 onOpenSearch = { navController.navigate(Routes.SEARCH) },
                 onOpenSavedSearch = { search ->
                     navController.navigate(Routes.savedSearchRoute(search.query, search.scopePath, search.useRegex))

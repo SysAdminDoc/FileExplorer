@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
+import android.view.View
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -672,11 +673,11 @@ private fun SelectionTopBar(
 private fun CastRouteButton() {
     AndroidView(
         factory = { viewContext ->
-            MediaRouteButton(viewContext).also { button ->
-                runCatching {
+            runCatching {
+                MediaRouteButton(viewContext).also { button ->
                     CastButtonFactory.setUpMediaRouteButton(viewContext.applicationContext, button)
                 }
-            }
+            }.getOrElse { View(viewContext) }
         },
         modifier = Modifier.size(48.dp),
     )

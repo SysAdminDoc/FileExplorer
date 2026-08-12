@@ -275,21 +275,33 @@ triaged release decision.
 
 ## Permissions
 
-| Permission | Why |
-|-----------|-----|
-| `MANAGE_EXTERNAL_STORAGE` | Browse files outside app-private directories — core function of a file manager |
-| `QUERY_ALL_PACKAGES` | App Manager: list, search, sort, and share APKs for all installed apps |
-| `INTERNET` + `ACCESS_NETWORK_STATE` | SMB/SFTP/FTP/WebDAV and cloud provider connectivity |
-| `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC` | Long-running file operations and local share server notification |
-| `POST_NOTIFICATIONS` | Transfer progress and completion notifications |
-| `READ_MEDIA_*` | Android 13+ granular media access |
+The following matrix is the release-readiness record for every privileged permission
+and exported or system-facing component. “Owner review” means the build is ready for
+an operator to make the distribution decision; this repository does not submit a
+store listing or request restricted-policy approval.
+
+| Permission or component | Purpose | API range | Denial or fallback | User explanation | Backup implication | Distribution status |
+|---|---|---|---|---|---|---|
+| `MANAGE_EXTERNAL_STORAGE` | Browse and mutate shared storage, including folders outside the app sandbox | Android 11+ (API 30+) | App opens Android’s All Files Access settings; limited mode opens app-scoped external files | “Needed to browse and organize shared storage.” | Permission state is not backed up; excluded data remains excluded | Restricted permission; owner review required before Play submission |
+| `READ_EXTERNAL_STORAGE` / `WRITE_EXTERNAL_STORAGE` | Legacy shared-storage access for older devices | Read API 26–32; write API 26–29 | App-scoped storage and the system picker remain available | “Allows file access on older Android versions.” | Permission state is not backed up | Legacy compatibility only; no new runtime request on modern Android |
+| `READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO` / `READ_MEDIA_AUDIO` | Granular media fallback for Android 13+ integrations | Android 13+ (API 33+) | Media actions use app-scoped files or a system picker when not granted | “Allow only the media types you want File Explorer to open.” | Permission state is not backed up; media content is never copied by backup rules | Runtime, optional, least-privilege fallback |
+| `QUERY_ALL_PACKAGES` | Complete App Manager inventory for search, sort, APK analysis, and sharing | Android 11+ package visibility | App Manager falls back to launcher-visible packages through a declared `<queries>` intent | “Used only by App Manager to show installed applications.” | Installed-package metadata and APKs are not included in app backup rules | Restricted permission; owner review required before Play submission |
+| `INTERNET` / `ACCESS_NETWORK_STATE` | Remote repositories, cloud status, and local share-server connectivity checks | All supported API levels | Offline locations remain usable; network failures are surfaced as provider errors | “Network access is used only when a remote feature is selected.” | Credentials and network state are excluded from cloud backup | Normal permissions; release-ready |
+| `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DATA_SYNC` | Long-running transfers and the local share server | All supported API levels; Android 14+ type declaration | Work can be cancelled; Android 15 timeout calls stop the service cleanly | “Keeps an active transfer or share server visible while it runs.” | Queue metadata follows app backup policy; credentials remain excluded | Normal/type permissions; release-ready with timeout gate |
+| `POST_NOTIFICATIONS` | Transfer progress, completion, and share-server status notifications | Android 13+ (API 33+) | Operations continue without notifications and remain visible in the app | “Allow notifications to see transfer progress.” | Permission state is not backed up | Runtime, optional; release-ready |
+| `MainActivity` (`exported=true`, launcher) | Normal launcher entry point | All supported API levels | None; the activity validates storage state before opening the browser | “Start File Explorer.” | No activity state or permission grant is backed up | Required launcher surface; release-ready |
+| `TransferService` / `ShareServerService` (`exported=false`) | Internal transfer and share-server workers | All supported API levels | Explicit start failures are reported; services stop on cancellation and timeout | Described by the active transfer/share action | Service state is not restored from backup | Internal-only; release-ready |
+| `ShareServerTileService` (`exported=true`, `BIND_QUICK_SETTINGS_TILE`) | Optional Quick Settings control for the local share server | Android 7+ (API 24+) | Share server remains controllable from the app | “Quick Settings can start or stop local sharing.” | Share-server settings and credentials are excluded | System-bound export; release-ready |
+| `FileProvider` (`exported=false`, URI grants) | Temporary APK/file sharing through Android’s chooser | All supported API levels | Share action reports a recoverable error; no public provider access | “The selected file is shared through a temporary Android URI.” | Shared files are not backup data | Internal provider; release-ready |
+| `FileDocumentsProvider` (`exported=true`, `MANAGE_DOCUMENTS`, URI grants) | Android Storage Access Framework browsing, creation, and editing | Android 4.4+ (API 19+; app min API 26) | Contract errors are returned for inaccessible, removed, or invalid roots | “Android’s file picker can use File Explorer as a document source.” | Provider roots and grants are not restored by cloud backup | Required SAF integration; release-ready; external submission remains owner-gated |
+| Application backup rules (`allowBackup`, `backup_rules.xml`, `data_extraction_rules.xml`) | Preserve safe portable settings while excluding secrets and private vault data | Android 6+ cloud backup; Android 12+ data extraction rules | Restore omits database, security preferences, credentials, and vault files | “Safe settings can be backed up; secrets and vault data stay on-device.” | Room database, security preferences, and `.vault/` are explicitly excluded | Release gate required; policy is checked in |
 
 Backup rules exclude the Room database (contains Keystore-encrypted network credentials), security preferences, and vault files from Android cloud backup.
 
 ## FAQ
 
 **Q: Why does it need All Files Access?**
-A: Android requires `MANAGE_EXTERNAL_STORAGE` to browse outside app-specific directories. Without it, you can only see your own app's files.
+A: Android requires `MANAGE_EXTERNAL_STORAGE` to browse outside app-specific directories. If it is denied, File Explorer stays usable in limited mode and opens its app-scoped storage instead of crashing.
 
 **Q: Is root required?**
 A: No. Root features are optional and auto-detected. The app works as a standard file manager without root.
