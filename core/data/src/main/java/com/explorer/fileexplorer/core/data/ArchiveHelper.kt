@@ -192,6 +192,7 @@ class ArchiveHelper @Inject constructor() {
         declaredSize: Long,
         budget: ArchiveExtractionBudget,
         onProgress: (Long, Long, String) -> Unit,
+        closeInput: Boolean = true,
     ) {
         outputFile.parentFile?.let { parent ->
             if (!parent.exists() && !parent.mkdirs()) {
@@ -208,14 +209,15 @@ class ArchiveHelper @Inject constructor() {
                 onProgress = onProgress,
             )
             val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-            input.use { source ->
+            val copy: suspend () -> Unit = {
                 while (true) {
                     coroutineContext.ensureActive()
-                    val length = source.read(buffer)
+                    val length = input.read(buffer)
                     if (length == -1) break
                     boundedOutput.write(buffer, 0, length)
                 }
             }
+            if (closeInput) input.use { copy() } else copy()
             boundedOutput.finish()
         }
     }
@@ -313,7 +315,7 @@ class ArchiveHelper @Inject constructor() {
             val name = header.fileName.trimEnd('/')
             val ext = name.substringAfterLast('.', "")
             val mime = if (header.isDirectory) "inode/directory"
-            else MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext.lowercase()) ?: "application/octet-stream"
+            else mimeTypeForExtension(ext)
             FileItem(
                 name = name.substringAfterLast('/'),
                 path = header.fileName.trimEnd('/'),
@@ -406,7 +408,7 @@ class ArchiveHelper @Inject constructor() {
                 val name = e.name.trimEnd('/')
                 val ext = name.substringAfterLast('.', "")
                 val mime = if (e.isDirectory) "inode/directory"
-                else MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext.lowercase()) ?: "application/octet-stream"
+                else mimeTypeForExtension(ext)
                 entries.add(
                     FileItem(
                         name = name.substringAfterLast('/'),
@@ -452,6 +454,7 @@ class ArchiveHelper @Inject constructor() {
                         declaredSize = e.size,
                         budget = budget,
                         onProgress = onProgress,
+                        closeInput = false,
                     )
                 }
                 count++
@@ -566,8 +569,7 @@ class ArchiveHelper @Inject constructor() {
         val name = fileName.trimEnd('/')
         val extension = name.substringAfterLast('.', "")
         val mime = if (isDirectory) "inode/directory"
-        else MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.lowercase())
-            ?: "application/octet-stream"
+        else mimeTypeForExtension(extension)
         return FileItem(
             name = name.substringAfterLast('/'),
             path = name,
@@ -610,7 +612,7 @@ class ArchiveHelper @Inject constructor() {
                 if (name.isEmpty()) continue
                 val ext = name.substringAfterLast('.', "")
                 val mime = if (e.isDirectory) "inode/directory"
-                else MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext.lowercase()) ?: "application/octet-stream"
+                else mimeTypeForExtension(ext)
                 entries.add(
                     FileItem(
                         name = name.substringAfterLast('/'),
@@ -663,6 +665,7 @@ class ArchiveHelper @Inject constructor() {
                         declaredSize = e.size,
                         budget = budget,
                         onProgress = onProgress,
+                        closeInput = false,
                     )
                 }
                 count++
@@ -688,6 +691,10 @@ class ArchiveHelper @Inject constructor() {
             }
         }
     }
+
+    private fun mimeTypeForExtension(extension: String): String = runCatching {
+        MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.lowercase())
+    }.getOrNull() ?: "application/octet-stream"
 
     private fun addToTar(
         out: org.apache.commons.compress.archivers.tar.TarArchiveOutputStream,

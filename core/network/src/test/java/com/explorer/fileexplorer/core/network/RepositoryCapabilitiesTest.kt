@@ -1,13 +1,18 @@
 package com.explorer.fileexplorer.core.network
 
 import com.explorer.fileexplorer.core.data.DiagnosticLog
+import com.explorer.fileexplorer.core.model.RepositoryErrorKind
+import com.explorer.fileexplorer.core.model.RepositoryException
 import com.explorer.fileexplorer.core.model.RepositoryOperation
 import com.explorer.fileexplorer.core.network.ftp.FtpFileRepository
 import com.explorer.fileexplorer.core.network.sftp.SftpFileRepository
 import com.explorer.fileexplorer.core.network.sftp.SftpKnownHostsStore
 import com.explorer.fileexplorer.core.network.smb.SmbFileRepository
 import com.explorer.fileexplorer.core.network.webdav.WebDavFileRepository
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
+import kotlin.test.assertFailsWith
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -33,6 +38,27 @@ class RepositoryCapabilitiesTest {
             assertFalse(repository.capabilities.supports(RepositoryOperation.SIZE))
             assertFalse(repository.capabilities.supports(RepositoryOperation.SEARCH))
             assertFalse(repository.capabilities.supports(RepositoryOperation.CHECKSUM))
+        }
+    }
+
+    @Test
+    fun disconnectedAdaptersUseTheSameTypedListFailureContract() = runBlocking {
+        val knownHosts = Files.createTempDirectory("fileexplorer-disconnected").resolve("known_hosts").toFile()
+        val repositories = listOf(
+            SmbFileRepository(),
+            SftpFileRepository(SftpKnownHostsStore(knownHosts, testOnly = true), DiagnosticLog()),
+            FtpFileRepository(),
+            WebDavFileRepository(),
+        )
+
+        repositories.forEach { repository ->
+            val error = assertFailsWith<RepositoryException> {
+                repository.listFiles("/").first()
+            }
+            assertEquals(repository.capabilities.provider, error.error.provider)
+            assertEquals(RepositoryOperation.LIST, error.error.operation)
+            assertEquals(RepositoryErrorKind.TRANSPORT, error.error.kind)
+            assertTrue(error.error.retryable)
         }
     }
 }

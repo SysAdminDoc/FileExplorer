@@ -137,6 +137,35 @@ class ArchiveHelperExtractionTest {
         }
     }
 
+    @Test
+    fun writableFormatsRoundTripThroughListAndExtract() = runBlocking {
+        val root = tempRoot()
+        val source = root.resolve("source.txt").toFile().apply { writeText("archive payload") }
+
+        ArchiveFormat.entries.forEach { format ->
+            val archive = root.resolve("bundle.${format.extension}").toFile()
+            assertTrue(ArchiveHelper().createArchive(archive.path, listOf(source.path), format).isSuccess)
+
+            val listed = ArchiveHelper().listArchive(archive.path)
+            assertEquals(listOf("source.txt"), listed.map { it.name })
+
+            val destination = root.resolve("extract-${format.extension.replace('.', '-')}").toFile()
+            assertEquals(1, ArchiveHelper().extract(archive.path, destination.path).getOrThrow())
+            assertEquals("archive payload", destination.resolve("source.txt").readText())
+        }
+    }
+
+    @Test
+    fun supportedArchiveExtensionsIncludeReadOnlyRarAndRejectMalformedRar() = runBlocking {
+        val root = tempRoot()
+        val malformedRar = root.resolve("broken.rar").toFile().apply {
+            writeBytes("not a rar archive".toByteArray())
+        }
+
+        assertTrue(ArchiveHelper().isArchive(malformedRar.path))
+        assertTrue(ArchiveHelper().extract(malformedRar.path, root.resolve("rar-output").toString()).isFailure)
+    }
+
     private fun tempRoot(): Path = Files.createTempDirectory("fileexplorer-archive-test").also(tempRoots::add)
 
     private fun createZip(file: File, vararg entries: Pair<String, String>) {

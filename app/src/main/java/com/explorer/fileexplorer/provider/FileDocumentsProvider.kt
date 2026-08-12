@@ -14,6 +14,7 @@ import com.explorer.fileexplorer.core.designsystem.R as DesignSystemR
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
+import java.io.UncheckedIOException
 import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -25,7 +26,9 @@ import java.nio.file.attribute.BasicFileAttributes
 import java.util.Locale
 
 /** Exposes the user-visible local storage root through Android's Storage Access Framework. */
-class FileDocumentsProvider : DocumentsProvider() {
+class FileDocumentsProvider @JvmOverloads internal constructor(
+    private val rootOverride: File? = null,
+) : DocumentsProvider() {
 
     override fun onCreate(): Boolean = appContext() != null
 
@@ -328,6 +331,8 @@ class FileDocumentsProvider : DocumentsProvider() {
             }
         } catch (_: IOException) {
             // SAF queries should return the accessible subset of a storage root.
+        } catch (_: UncheckedIOException) {
+            // Scoped storage can surface inaccessible descendants from the stream iterator.
         } catch (_: SecurityException) {
             // SAF queries should return the accessible subset of a storage root.
         }
@@ -379,7 +384,7 @@ class FileDocumentsProvider : DocumentsProvider() {
 
     private fun roots(): List<ProviderRoot> {
         @Suppress("DEPRECATION")
-        val external = Environment.getExternalStorageDirectory()
+        val external = rootOverride ?: Environment.getExternalStorageDirectory()
         if (!external.exists() || !external.isDirectory) return emptyList()
         val canonical = runCatching { external.canonicalFile }.getOrNull() ?: return emptyList()
         val title = appContext()?.getString(DesignSystemR.string.local_storage) ?: return emptyList()
