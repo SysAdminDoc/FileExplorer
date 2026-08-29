@@ -2,6 +2,7 @@ package com.explorer.fileexplorer.provider
 
 import java.nio.file.Paths
 import java.nio.file.Files
+import java.nio.file.FileSystemException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -46,6 +47,11 @@ class DocumentIdCodecTest {
                 return
             } catch (_: SecurityException) {
                 return
+            } catch (exception: FileSystemException) {
+                if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) {
+                    return
+                }
+                throw exception
             }
 
             assertTrue(DocumentPathPolicy.containsSymlink(link, root))

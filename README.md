@@ -1,6 +1,6 @@
 # FileExplorer
 
-![Version](https://img.shields.io/badge/version-1.6.0-blue)
+![Version](https://img.shields.io/badge/version-1.6.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Android%208.0+-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.2-7F52FF?logo=kotlin&logoColor=white)
@@ -51,7 +51,7 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 | Quick Share | Selection menu action backed by the Android Sharesheet for nearby-device delivery | Requires Quick Share or another compatible receiver |
 | Media casting | Cast a selected local or SAF-backed photo, video, or audio file through Chromecast's Cast dialog | Requires Chromecast / Google Cast services |
 | Localization | Shared Android string resources with English plus Spanish, Brazilian Portuguese, German, French, Japanese, Korean, Simplified Chinese, Russian, and Arabic locale variants | Core visible surfaces localized |
-| Thumbnail cache | Configurable 32–1024 MB Coil disk-cache cap, internal or external app-cache location, and one-tap purge controls in Settings | Complete |
+| Thumbnail cache | Configurable 32 to 1024 MB Coil disk-cache cap, internal or external app-cache location, and one-tap purge controls in Settings | Complete |
 | Directory sizes | Optional coroutine-backed recursive folder sizes in list view with a bounded per-directory LRU cache | Complete |
 | Saved searches | Named regex and path filters persisted in Room and pinned to the navigation drawer | Complete |
 | Share Server | Authenticated HTTP web access and passive FTP sharing with Keystore-encrypted credentials, loopback default, explicit plaintext-LAN opt-in, and bounded client/upload/request resources | Complete |
@@ -322,7 +322,7 @@ store listing or request restricted-policy approval.
 | Permission or component | Purpose | API range | Denial or fallback | User explanation | Backup implication | Distribution status |
 |---|---|---|---|---|---|---|
 | `MANAGE_EXTERNAL_STORAGE` | Browse and mutate shared storage, including folders outside the app sandbox | Android 11+ (API 30+) | App opens Android’s All Files Access settings; limited mode opens app-scoped external files | “Needed to browse and organize shared storage.” | Permission state is not backed up; excluded data remains excluded | Restricted permission; owner review required before Play submission |
-| `READ_EXTERNAL_STORAGE` / `WRITE_EXTERNAL_STORAGE` | Legacy shared-storage access for older devices | Read API 26–32; write API 26–29 | App-scoped storage and the system picker remain available | “Allows file access on older Android versions.” | Permission state is not backed up | Legacy compatibility only; no new runtime request on modern Android |
+| `READ_EXTERNAL_STORAGE` / `WRITE_EXTERNAL_STORAGE` | Legacy shared-storage access for older devices | Read API 26 to 32; write API 26 to 29 | App-scoped storage and the system picker remain available | “Allows file access on older Android versions.” | Permission state is not backed up | Legacy compatibility only; no new runtime request on modern Android |
 | `READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO` / `READ_MEDIA_AUDIO` | Granular media fallback for Android 13+ integrations | Android 13+ (API 33+) | Media actions use app-scoped files or a system picker when not granted | “Allow only the media types you want File Explorer to open.” | Permission state is not backed up; media content is never copied by backup rules | Runtime, optional, least-privilege fallback |
 | `QUERY_ALL_PACKAGES` | Complete App Manager inventory for search, sort, APK analysis, and sharing | Android 11+ package visibility | App Manager falls back to launcher-visible packages through a declared `<queries>` intent | “Used only by App Manager to show installed applications.” | Installed-package metadata and APKs are not included in app backup rules | Restricted permission; owner review required before Play submission |
 | `INTERNET` / `ACCESS_NETWORK_STATE` | Remote repositories, cloud status, and local share-server connectivity checks | All supported API levels | Offline locations remain usable; network failures are surfaced as provider errors | “Network access is used only when a remote feature is selected.” | Credentials and network state are excluded from cloud backup | Normal permissions; release-ready |
@@ -353,7 +353,7 @@ A: Network passwords are encrypted before database storage with Android Keystore
 
 ## Contributing
 
-Issues and PRs welcome. This project follows the "maximum feature density" philosophy — if it belongs in a file manager, it should be here.
+Issues and PRs welcome. This project follows the "maximum feature density" philosophy. If it belongs in a file manager, it should be here.
 
 ## License
 
