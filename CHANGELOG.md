@@ -7,6 +7,7 @@ All notable changes to FileExplorer will be documented in this file.
 ### Changed
 - New app icon: adaptive, themed (monochrome) and legacy variants regenerated from the 2026-08 icon set.
 - Made the symbolic-link policy test skip cleanly when Windows denies symbolic-link creation.
+- Archived the completed roadmap entries so the roadmap contains only work that remains actionable.
 
 ## [v1.6.0], 2026-08-12
 
