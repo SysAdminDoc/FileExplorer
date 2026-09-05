@@ -17,11 +17,13 @@ fileexplorer.jks
 signing.properties
 *.apk
 
-# Markdown files local-only (except README)
+# Markdown files are local unless explicitly published
 *.md
 !README.md
+!SECURITY.md
+!docs/*.md
 
-# AI config
+# Local working files
 CODEX_CHANGELOG.md
 AGENTS.md
 .claude/

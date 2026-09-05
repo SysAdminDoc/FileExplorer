@@ -1,4 +1,4 @@
-// FileExplorer v1.5.0 — All Phases + Advanced Features
+// FileExplorer v1.6.2
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import org.gradle.api.Project

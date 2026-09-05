@@ -30,7 +30,7 @@ The recommended sequence is therefore:
 3. Add accessibility/localization, migration, DocumentsProvider, dependency, and Android policy quality gates.
 4. Only then invest in optional offline indexing, multi-user semantics, local discovery, duplicate analysis, and broader provider breadth.
 
-The harvest produced 112 candidate ideas across 11 themes. After deduplication against the live roadmap and `Roadmap_Blocked.md`, they reduce to 0 Now/P0 items, 11 Next/P1 items, 7 Later/P2 items, 4 P3 discovery items, 8 under-consideration ideas, and 8 rejected ideas. Existing completed work—URI routing, search streaming, predictive back, FGS timeout handling, signing-secret externalization, explicit Room migrations, secure credential storage, host-key verification, cloud streaming, diagnostics export, compact density, and settings/bookmarks import/export—is not re-added as unfinished work.
+The harvest produced 112 candidate ideas across 11 themes. After deduplication against the live roadmap and `Roadmap_Blocked.md`, they reduce to 0 Now/P0 items, 11 Next/P1 items, 7 Later/P2 items, 4 P3 discovery items, 8 under-consideration ideas, and 8 rejected ideas. Existing completed work includes URI routing, search streaming, predictive back, FGS timeout handling, signing-secret externalization, explicit Room migrations, secure credential storage, host-key verification, cloud streaming, diagnostics export, compact density, and settings/bookmarks import/export. It is not re-added as unfinished work.
 
 ## Product Map
 
@@ -174,7 +174,7 @@ The quality gate should compare resource keys across locales, exercise RTL, font
 |---|---|---|
 | Modular boundaries | 19 Gradle modules split core contracts, storage, database, network, cloud, UI, and features | Good substrate for incremental hardening; avoid a broad rewrite |
 | Modern Android shell | Compose, Material 3, theme flow, large-screen layouts, predictive-back and FGS timeout work already landed | Strong platform trajectory |
-| Data durability foundation | Room v7, `exportSchema = true`, explicit migrations 2→3→4→5→6→7, schema JSONs 2–7 | Migration tests are the missing confidence layer, not migration design |
+| Data durability foundation | Room v7, `exportSchema = true`, explicit migrations 2→3→4→5→6→7, schema JSONs 2 through 7 | Migration tests are the missing confidence layer, not migration design |
 | Credential protection | Keystore AES-GCM cipher, legacy migration, SFTP host-key fingerprint checks, ignored release signing properties | Keep the same primitives and extend them to share/vault/backup boundaries |
 | Repository routing | Scheme resolver handles local/root/SAF, Shizuku, USB, network, and plugin paths; app registers adapters | Correct place to add capabilities, typed errors, and URI-grant validation |
 | Extensibility | Cloud provider abstraction, plugin AIDL/Bundle protocol, network adapter registration | Needs readiness/trust semantics before more providers are added |
@@ -413,5 +413,5 @@ These questions are intentionally left for product or operator decisions rather 
 8. Which distribution lanes are targets for v1.7.0: sideload/GitHub, F-Droid, Play, or multiple flavors? The F-Droid and Play entries in `Roadmap_Blocked.md` require owner access and product decisions.
 9. Should the minimum Android API remain 26 while the app targets 35/compiles 36, and which Android 15/16 behaviors must be release-blocking rather than informational?
 10. Is JitPack required for a current dependency, or can all production dependencies move to verified Maven repositories with centralized versions and dependency locking?
-11. What is the supported semantic level for remote `search`, `calculateSize`, checksums, and create operations when a protocol cannot offer them efficiently? “Unsupported” is preferable to a false empty or zero result, but the UI wording needs agreement.
+11. What is the supported semantic level for remote `search`, `calculateSize`, checksums, and create operations when a protocol cannot offer them efficiently? `Unsupported` is preferable to a false empty or zero result, but the UI wording needs agreement.
 12. What device matrix is available for SAF providers, root/Shizuku, removable USB, large screens, TalkBack, RTL, flash storage, and network failure injection? The answer determines which checks can be automated in CI and which need a documented device lane.

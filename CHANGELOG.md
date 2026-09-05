@@ -2,6 +2,14 @@
 
 All notable changes to FileExplorer will be documented in this file.
 
+## [v1.6.2], 2026-09-05
+
+### Changed
+- Reworked the project page around the jobs FileExplorer handles, with a direct signed download, honest setup boundaries, and shorter paths to technical details.
+- Added verified emulator screenshots, a new product hero, and store-ready marketing artwork based on the real interface.
+- Split detailed capability, security, development, plugin, automation, and cloud notes into focused reference pages.
+- Updated the GitHub description and topics so people can find the project by its supported storage and transfer workflows.
+
 ## [v1.6.1], 2026-08-29
 
 ### Changed

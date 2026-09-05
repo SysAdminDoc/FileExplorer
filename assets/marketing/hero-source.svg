@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#050708"/>
+      <stop offset="0.62" stop-color="#0b1215"/>
+      <stop offset="1" stop-color="#101114"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.76" cy="0.42" r="0.7">
+      <stop offset="0" stop-color="#00bcd4" stop-opacity="0.26"/>
+      <stop offset="0.52" stop-color="#00bcd4" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#00bcd4" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#27e5f5"/>
+      <stop offset="1" stop-color="#00a8c4"/>
+    </linearGradient>
+    <filter id="shadow" x="-40%" y="-30%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="20" stdDeviation="24" flood-color="#000000" flood-opacity="0.7"/>
+    </filter>
+    <clipPath id="phoneOne"><rect x="757" y="50" width="244" height="542" rx="28"/></clipPath>
+    <clipPath id="phoneTwo"><rect x="988" y="85" width="219" height="487" rx="26"/></clipPath>
+  </defs>
+
+  <rect width="1280" height="640" rx="28" fill="url(#background)"/>
+  <rect width="1280" height="640" rx="28" fill="url(#glow)"/>
+  <path d="M0 548 C280 470 470 660 760 552 C970 474 1110 500 1280 442 V640 H0Z" fill="#00bcd4" opacity="0.035"/>
+
+  <g transform="translate(64 50)">
+    <rect width="92" height="92" rx="24" fill="#0a0d0f" stroke="#00bcd4" stroke-width="2"/>
+    <image href="../../app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png" x="-8" y="-8" width="108" height="108"/>
+  </g>
+  <text x="176" y="88" fill="#f7fafb" font-family="Segoe UI, Arial, sans-serif" font-size="27" font-weight="700">FileExplorer</text>
+  <text x="176" y="118" fill="#74dce7" font-family="Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" letter-spacing="2.4">ANDROID FILE WORKSPACE</text>
+
+  <text x="64" y="232" fill="#f7fafb" font-family="Segoe UI, Arial, sans-serif" font-size="64" font-weight="750">Every file.</text>
+  <text x="64" y="302" fill="url(#accent)" font-family="Segoe UI, Arial, sans-serif" font-size="64" font-weight="750">One workspace.</text>
+  <text x="66" y="358" fill="#aeb8bd" font-family="Segoe UI, Arial, sans-serif" font-size="22">Browse, analyze, transfer, and protect files</text>
+  <text x="66" y="390" fill="#aeb8bd" font-family="Segoe UI, Arial, sans-serif" font-size="22">without hopping between apps.</text>
+
+  <g font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" letter-spacing="1.3">
+    <rect x="64" y="438" width="88" height="36" rx="18" fill="#0e2024" stroke="#15525c"/>
+    <text x="88" y="462" fill="#79e6ef">LOCAL</text>
+    <rect x="164" y="438" width="78" height="36" rx="18" fill="#0e2024" stroke="#15525c"/>
+    <text x="187" y="462" fill="#79e6ef">ROOT</text>
+    <rect x="254" y="438" width="112" height="36" rx="18" fill="#0e2024" stroke="#15525c"/>
+    <text x="276" y="462" fill="#79e6ef">NETWORK</text>
+    <rect x="378" y="438" width="92" height="36" rx="18" fill="#0e2024" stroke="#15525c"/>
+    <text x="400" y="462" fill="#79e6ef">CLOUD</text>
+  </g>
+
+  <g transform="translate(64 526)">
+    <circle cx="10" cy="10" r="10" fill="#00bcd4"/>
+    <path d="M5 10.5 L8.5 14 L15.5 6.5" fill="none" stroke="#041013" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="32" y="16" fill="#dce5e8" font-family="Segoe UI, Arial, sans-serif" font-size="17">Signed APK</text>
+    <circle cx="163" cy="10" r="10" fill="#00bcd4"/>
+    <path d="M158 10.5 L161.5 14 L168.5 6.5" fill="none" stroke="#041013" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="185" y="16" fill="#dce5e8" font-family="Segoe UI, Arial, sans-serif" font-size="17">Open source</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="745" y="38" width="268" height="566" rx="38" fill="#050607" stroke="#31e2f0" stroke-opacity="0.55" stroke-width="2"/>
+    <image href="../screenshots/storage-analyzer.png" x="757" y="50" width="244" height="542" preserveAspectRatio="xMidYMid slice" clip-path="url(#phoneOne)"/>
+  </g>
+  <g filter="url(#shadow)" opacity="0.96">
+    <rect x="976" y="73" width="243" height="511" rx="36" fill="#050607" stroke="#536167" stroke-width="2"/>
+    <image href="../screenshots/network-connections.png" x="988" y="85" width="219" height="487" preserveAspectRatio="xMidYMid slice" clip-path="url(#phoneTwo)"/>
+  </g>
+
+  <rect x="731" y="58" width="6" height="136" rx="3" fill="#00bcd4"/>
+  <text x="1226" y="615" text-anchor="end" fill="#65747a" font-family="Segoe UI, Arial, sans-serif" font-size="13" letter-spacing="1.5">v1.6.2</text>
+</svg>
