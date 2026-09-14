@@ -5,6 +5,16 @@
 [![License](https://img.shields.io/badge/license-MIT-2ea44f)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/SysAdminDoc/FileExplorer?logo=github)](https://github.com/SysAdminDoc/FileExplorer/stargazers)
 
+<p align="center">
+  <a href="https://ko-fi.com/X8K126YVER">
+    <img height="42" src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" alt="Buy me a coffee on Ko-fi" />
+  </a>
+</p>
+
+<p align="center">
+  <sub><em>If FileExplorer earns a place on your phone, a coffee helps me keep it tested and maintained.</em></sub>
+</p>
+
 ![FileExplorer brings local, root, network, and cloud files into one Android workspace](assets/marketing/hero.png)
 
 FileExplorer is an open-source Android file manager for people who need more than a basic document picker. It brings local storage, root folders, archives, remote shares, and optional cloud accounts into one workspace. A built-in editor, storage analyzer, app manager, encrypted vault, and recoverable transfer queue handle the jobs that usually require several apps.
