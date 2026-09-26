@@ -20,6 +20,6 @@ Open GitHub issues checked against this list on 2026-09-26. Neither was on the l
 - [ ] P3: Android TV support, the remote does not work (issue #2)
   Reported: alabotski, 2026-08-30, enhancement.
   Why: the app installs on Android TV but nothing is focusable from the remote, so it cannot be used there.
-  Next: decide whether TV is a target. If yes: D-pad focus order on the file list and toolbar, a leanback launcher intent, and a check on a TV emulator image. If no: say so on the issue and close.
+  Next: decide whether TV is a target. If yes: D-pad focus order on the file list and toolbar, a leanback launcher intent, and a check on a TV emulator image. If no: say so on the issue and leave the closing to Matt.
   Evidence: https://github.com/SysAdminDoc/FileExplorer/issues/2
   Complexity: M
