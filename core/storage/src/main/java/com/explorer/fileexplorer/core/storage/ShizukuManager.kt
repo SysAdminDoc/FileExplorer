@@ -5,9 +5,15 @@ import android.content.Context
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
+import android.os.RemoteException
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import rikka.shizuku.Shizuku
@@ -52,6 +58,8 @@ class ShizukuManager @Inject constructor(
         .version(USER_SERVICE_VERSION)
         .tag(USER_SERVICE_TAG)
         .processNameSuffix("shizuku-files")
+
+    private val callScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private var remoteService: IShizukuShellService? = null
     private var binding: CompletableDeferred<IShizukuShellService>? = null
@@ -116,12 +124,28 @@ class ShizukuManager @Inject constructor(
         }
     }
 
-    suspend fun execute(command: String): ShizukuCommandResult = withContext(Dispatchers.IO) {
+    /**
+     * Runs [command] in the Shizuku UserService. [timeoutMs] bounds the command itself; 0 or less
+     * means no limit. A bounded call also stops waiting on the app side, so a binder call that never
+     * returns surfaces as an error instead of leaving the caller loading forever.
+     */
+    suspend fun execute(
+        command: String,
+        timeoutMs: Long = DEFAULT_COMMAND_TIMEOUT_MS,
+    ): ShizukuCommandResult = withContext(Dispatchers.IO) {
         if (!status.value.isReady) {
             return@withContext ShizukuCommandResult(1, "Shizuku permission is not ready")
         }
         try {
-            val response = service().execute(command)
+            val remote = service()
+            // Binder calls are not cancellable, so run the call outside this coroutine and only
+            // bound how long we wait for it.
+            val call = callScope.async { remote.execute(command, timeoutMs) }
+            val response = if (timeoutMs > 0) {
+                withTimeout(timeoutMs + CLIENT_TIMEOUT_GRACE_MS) { call.await() }
+            } else {
+                call.await()
+            }
             val separator = response.indexOf('\n')
             if (separator <= 0) {
                 ShizukuCommandResult(1, response)
@@ -131,7 +155,14 @@ class ShizukuManager @Inject constructor(
                     response.substring(separator + 1),
                 )
             }
+        } catch (error: TimeoutCancellationException) {
+            ShizukuCommandResult(ShizukuShellService.TIMEOUT_EXIT_CODE, "Shizuku did not respond in time")
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Throwable) {
+            if (error is RemoteException) {
+                synchronized(lock) { remoteService = null }
+            }
             refresh()
             ShizukuCommandResult(1, error.message ?: "Shizuku command failed")
         }
@@ -157,13 +188,25 @@ class ShizukuManager @Inject constructor(
                 deferred.completeExceptionally(error)
             }
         }
-        return withTimeout(BIND_TIMEOUT_MS) { deferred.await() }
+        try {
+            return withTimeout(BIND_TIMEOUT_MS) { deferred.await() }
+        } catch (error: TimeoutCancellationException) {
+            // Drop the pending bind so the next call binds again instead of awaiting a
+            // connection that is never coming.
+            synchronized(lock) {
+                if (binding === deferred) binding = null
+            }
+            throw error
+        }
     }
 
     companion object {
         private const val PERMISSION_REQUEST_CODE = 7401
-        private const val USER_SERVICE_VERSION = 1
+        private const val USER_SERVICE_VERSION = 2
         private const val USER_SERVICE_TAG = "file-explorer-shizuku-files"
         private const val BIND_TIMEOUT_MS = 10_000L
+        private const val CLIENT_TIMEOUT_GRACE_MS = 5_000L
+        const val DEFAULT_COMMAND_TIMEOUT_MS = 30_000L
+        const val NO_TIMEOUT = 0L
     }
 }

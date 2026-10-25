@@ -53,7 +53,7 @@ class ShizukuFileRepository @Inject constructor(
             throw commandFailure(RepositoryOperation.INFO, result.output)
         }
         result.output.lineSequence().mapNotNull { line ->
-            parseLsLine(line, path.substringBeforeLast('/', ""))
+            parseLsLine(line, path.substringBeforeLast('/', ""), nameIsPath = true)
         }.firstOrNull()
     }
 
@@ -87,6 +87,7 @@ class ShizukuFileRepository @Inject constructor(
             val targetPath = requireNotNull(ShizukuPaths.child(destination, targetName))
             val result = shizukuManager.execute(
                     "cp $flags -- ${ShizukuPaths.shellQuote(source)} ${ShizukuPaths.shellQuote(targetPath)}",
+                    ShizukuManager.NO_TIMEOUT,
                 )
             if (!result.isSuccess) return@withContext Result.failure(commandFailure(RepositoryOperation.COPY, result.output))
             count++
@@ -117,6 +118,7 @@ class ShizukuFileRepository @Inject constructor(
             val targetPath = requireNotNull(ShizukuPaths.child(destination, targetName))
             val result = shizukuManager.execute(
                     "mv $flags -- ${ShizukuPaths.shellQuote(source)} ${ShizukuPaths.shellQuote(targetPath)}",
+                    ShizukuManager.NO_TIMEOUT,
                 )
             if (!result.isSuccess) return@withContext Result.failure(commandFailure(RepositoryOperation.MOVE, result.output))
             count++
@@ -168,7 +170,10 @@ class ShizukuFileRepository @Inject constructor(
         var count = 0
         for (path in paths) {
             onProgress(path.substringAfterLast('/'))
-            val result = shizukuManager.execute("rm -rf -- ${ShizukuPaths.shellQuote(path)}")
+            val result = shizukuManager.execute(
+                "rm -rf -- ${ShizukuPaths.shellQuote(path)}",
+                ShizukuManager.NO_TIMEOUT,
+            )
             if (!result.isSuccess) return@withContext Result.failure(commandFailure(RepositoryOperation.DELETE, result.output))
             count++
         }
@@ -216,7 +221,10 @@ class ShizukuFileRepository @Inject constructor(
             throw unsupportedRepositoryOperation(capabilities.provider, RepositoryOperation.SIZE)
         }
         paths.sumOf { path ->
-            val result = shizukuManager.execute("du -sk -- ${ShizukuPaths.shellQuote(path)}")
+            val result = shizukuManager.execute(
+                "du -sk -- ${ShizukuPaths.shellQuote(path)}",
+                ShizukuManager.NO_TIMEOUT,
+            )
             if (!result.isSuccess) throw commandFailure(RepositoryOperation.SIZE, result.output)
             result.output.lineSequence().firstOrNull()?.trim()?.substringBefore(' ')?.toLongOrNull()?.times(1024)
                 ?: throw repositoryException(
@@ -242,7 +250,7 @@ class ShizukuFileRepository @Inject constructor(
         val hiddenFilter = if (!includeHidden) "! -name ${ShizukuPaths.shellQuote(".*")}" else ""
         val command = "find ${ShizukuPaths.shellQuote(rootPath)} -maxdepth 5 " +
             "${if (regex) "-regex" else "-iname"} ${ShizukuPaths.shellQuote(pattern)} $hiddenFilter -print"
-        val result = shizukuManager.execute(command)
+        val result = shizukuManager.execute(command, ShizukuManager.NO_TIMEOUT)
         if (!result.isSuccess) throw commandFailure(RepositoryOperation.SEARCH, result.output)
         result.output.lineSequence().filter { it.isNotBlank() }.forEach { path ->
             getFileInfo(path.trim())?.let { emit(it) }
@@ -260,7 +268,10 @@ class ShizukuFileRepository @Inject constructor(
             "SHA-512", "SHA512" -> "sha512sum"
             else -> "sha256sum"
         }
-        val result = shizukuManager.execute("$command ${ShizukuPaths.shellQuote(path)}")
+        val result = shizukuManager.execute(
+            "$command ${ShizukuPaths.shellQuote(path)}",
+            ShizukuManager.NO_TIMEOUT,
+        )
         if (!result.isSuccess) throw commandFailure(RepositoryOperation.CHECKSUM, result.output)
         result.output.lineSequence().firstOrNull()?.substringBefore(' ')
             ?.takeIf { it.isNotBlank() }
@@ -273,38 +284,28 @@ class ShizukuFileRepository @Inject constructor(
             )
     }
 
-    private fun parseLsLine(line: String, parentPath: String): FileItem? {
-        val parts = line.trim().split("\\s+".toRegex(), limit = 9)
-        if (parts.size < 8 || parts[0].length < 10) return null
-        val permissions = parts[0]
-        val isDirectory = permissions[0] == 'd'
-        val isLink = permissions[0] == 'l'
-        val owner = parts[2]
-        val group = parts[3]
-        val size = parts[4].toLongOrNull() ?: 0L
-        val rawName = parts.getOrNull(8) ?: parts.getOrNull(7) ?: return null
-        val linkParts = if (isLink) rawName.split(" -> ", limit = 2) else emptyList()
-        val name = (linkParts.firstOrNull() ?: rawName).trimEnd('/')
-        if (name.isEmpty() || name == "." || name == ".." || !ShizukuPaths.isAllowed(ShizukuPaths.child(parentPath, name) ?: "")) {
-            return null
-        }
+    private fun parseLsLine(line: String, parentPath: String, nameIsPath: Boolean = false): FileItem? {
+        val entry = ShizukuLsParser.parse(line, nameIsPath) ?: return null
+        val path = ShizukuPaths.child(parentPath, entry.name) ?: return null
+        if (!ShizukuPaths.isAllowed(path)) return null
+        val name = entry.name
         val extension = name.substringAfterLast('.', "")
-        val mimeType = if (isDirectory) "inode/directory"
+        val mimeType = if (entry.isDirectory) "inode/directory"
         else MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.lowercase())
             ?: "application/octet-stream"
         return FileItem(
             name = name,
-            path = ShizukuPaths.child(parentPath, name) ?: return null,
-            size = size,
-            isDirectory = isDirectory,
+            path = path,
+            size = entry.size,
+            isDirectory = entry.isDirectory,
             isHidden = name.startsWith('.'),
-            isSymlink = isLink,
+            isSymlink = entry.isSymlink,
             mimeType = mimeType,
             extension = extension,
-            permissions = parsePermissions(permissions),
-            ownerName = owner,
-            groupName = group,
-            symlinkTarget = linkParts.getOrNull(1),
+            permissions = parsePermissions(entry.permissions),
+            ownerName = entry.owner,
+            groupName = entry.group,
+            symlinkTarget = entry.symlinkTarget,
         )
     }
 
